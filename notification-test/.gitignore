@@ -3,3 +3,4 @@ artifacts/
 .sites-runtime/
 .env*
 !.env.example
+worker/today-assets.mjs

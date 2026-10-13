@@ -6,7 +6,8 @@ const env={VAPID_PRIVATE_KEY_JWK:JSON.stringify(await crypto.subtle.exportKey('j
 const endpoint='https://web.push.apple.com/fixture-not-a-real-subscription';
 function request(data,extra={}){return new Request('https://test.example/api/test',{method:'POST',headers:{'Origin':'https://test.example','Content-Type':'application/json','oai-authenticated-user-id':'fixture',...extra},body:JSON.stringify(data)});}
 test('PWA assets, manifest, PNG, and service worker are valid',async()=>{
- const page=await worker.fetch(new Request('https://test.example/'),env,{});assert.equal(page.status,200);assert.match(await page.text(),/Send in 15 seconds/);
+ const page=await worker.fetch(new Request('https://test.example/'),env,{});assert.equal(page.status,200);assert.match(await page.text(),/Midnight → now/);
+ const notifications=await worker.fetch(new Request('https://test.example/notifications'),env,{});assert.match(await notifications.text(),/Send in 15 seconds/);
  const manifest=await (await worker.fetch(new Request('https://test.example/manifest.webmanifest'),env,{})).json();assert.equal(manifest.display,'standalone');assert.equal(manifest.start_url,'/');
  const icon=await worker.fetch(new Request('https://test.example/icon.png'),env,{});assert.deepEqual([...new Uint8Array(await icon.arrayBuffer()).slice(0,8)],[137,80,78,71,13,10,26,10]);
  const sw=await worker.fetch(new Request('https://test.example/sw.js'),env,{});assert.equal(sw.headers.get('Service-Worker-Allowed'),'/');const swText=await sw.text();new Function(swText);assert.match(swText,/showNotification/);

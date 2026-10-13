@@ -1,10 +1,15 @@
-import {mkdir,copyFile,readFile} from 'node:fs/promises';
+import {mkdir,copyFile,readFile,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 process.chdir(fileURLToPath(new URL('..',import.meta.url)));
 await mkdir('dist/server',{recursive:true});
 await mkdir('dist/.openai',{recursive:true});
-await copyFile('worker/index.js','dist/server/index.js');
+const page=await readFile('web/index.html','utf8'),assets={};
+for(const file of ['app.mjs','timeline.mjs','google.mjs','config.mjs'])assets['/today/'+file]=await readFile('web/'+file,'utf8');
+const embedded='export const page='+JSON.stringify(page)+';\nexport const assets='+JSON.stringify(assets)+';\n';
+await writeFile('worker/today-assets.mjs',embedded);
+const entry=await readFile('worker/index.js','utf8');
+await writeFile('dist/server/index.js',entry.replace("import {page as todayPage,assets as todayAssets} from './today-assets.mjs';",'const todayPage='+JSON.stringify(page)+';\nconst todayAssets='+JSON.stringify(assets)+';'));
 await copyFile('.openai/hosting.json','dist/.openai/hosting.json');
 const manifest=JSON.parse(await readFile('dist/.openai/hosting.json','utf8'));
 assert.equal(manifest.project_id,'appgprj_6acd1578782c81919c201533c55d02b9');

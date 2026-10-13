@@ -1,33 +1,55 @@
-# PWA notification test
+# Time Ledger — today
 
-This minimal iPhone-first test replaces the first deployment scope. The Calendar
-implementation remains in `../time-ledger` and is paused.
+The active, owner-private app is hosted at
+https://time-ledger.mistymint8.chatgpt.site. The `notification-test` directory name
+is retained because it is the existing Sites source subtree.
 
-## Test on an iPhone
+## Use
 
-1. Open the published private URL in Safari and sign in to ChatGPT if prompted.
-2. Share → Add to Home Screen. Open Notify Test from the Home Screen.
-3. Enable notifications and allow them in the iPhone permission prompt.
-4. Send test now. Check Notification Center.
-5. Send in 15 seconds and lock the phone. A server-originated Web Push should
-   wake the service worker and display the notification.
+Connect Google Calendar to see today's elapsed time, from midnight to the last
+refresh, in the phone's timezone. Google is read directly using the existing
+public OAuth client ID. Choose calendars with **Calendars**; the initial selection
+follows the calendars displayed in Google, including the primary calendar.
+Future appointments do not appear. Ongoing events only account for elapsed time.
 
-Notification permission and push-service acceptance do not prove device display.
-Check Focus and notification settings if a notification does not appear.
+Tap a gap, describe the activity, optionally shorten the interval, and explicitly
+save it to a writable Google Calendar. Google requests event-write permission on
+the first save. Remaining portions stay as gaps. Overlaps count once. All-day
+labels appear separately because they cannot establish hours spent. Cancelled
+and self-declined events do not record time.
 
-## Implementation
+All selected calendars must load successfully before the app offers gaps. It
+refreshes before each save to catch newly added events. Unconfirmed saves retain
+their IDs and can be checked rather than creating another event. Recovery details
+stay in session storage; calendar-selection preferences stay in device storage,
+both scoped to the Google account. Tokens stay only in memory, so reconnect after
+reopening or session expiry. Activities themselves are stored at Google.
 
-- Single dependency-free Worker, installable manifest, PNG icon, service worker.
-- VAPID keypair is stored in Sites runtime configuration. The private key is a
-  secret and is absent from source, client code, and build artifacts.
-- No Calendar reads or writes are needed. No subscription is persisted server-side.
-- Immediate sends require an authenticated visitor and a same-origin explicit
-  POST. Push endpoints are restricted to supported browser push services.
-- Empty Web Push messages trigger a visible notification in the service worker.
-- The 15-second test uses a bounded Worker background task. Long production
-  focus timers will require a durable scheduler; this does not implement one.
-- The app remains owner-private through Sites access controls.
+Google Cloud must have Calendar API enabled, this HTTPS origin authorized, and
+the account included as a test user if OAuth consent is in testing mode.
+Google sign-in on the installed iPhone PWA still needs an on-device check; if the
+popup fails, try the same app address in Safari.
 
-Run `npm test` and `npm run build`. No package installation is required.
-The tests use synthetic subscriptions and mocked push services; they never send
-notifications to real devices. Actual iPhone delivery must be checked on-device.
+## Notifications
+
+The successful notification test remains at `/notifications`. The existing
+manifest ID `/notification-test`, service-worker scope, VAPID keys, and private
+audience are preserved. The installed icon may retain its old label. No production
+timer or scheduled notification has been added.
+
+The VAPID private key remains in Sites secret configuration. Immediate push
+requests require the Sites authenticated identity and same-origin POST; push
+endpoints are allowlisted. The bounded 15-second background test remains a demo,
+not a durable scheduler for long timers.
+
+## Development
+
+Run `npm test`; it builds and runs 21 tests for time accounting, Google API
+requests, simulated UI save/recovery flows, and the notification Worker. Fixtures
+are synthetic, with no real Calendar writes or device pushes. Browser preview
+is unverified because Chromium was blocked by the execution sandbox.
+
+`npm run build` embeds `web/` into a dependency-free Worker at
+`dist/server/index.js`. `worker/today-assets.mjs` is a generated, ignored adapter
+for source Worker tests. The hosting manifest retains the existing project ID.
+The broader earlier dashboard in `../time-ledger` is archived.
