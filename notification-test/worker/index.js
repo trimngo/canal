@@ -108,7 +108,8 @@ export async function sendPush(endpoint,env){
  const unsigned=b64url(JSON.stringify({typ:'JWT',alg:'ES256'}))+'.'+b64url(JSON.stringify({aud:url.origin,exp:Math.floor(Date.now()/1000)+3600,sub:env.VAPID_SUBJECT}));
  const signature=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,new TextEncoder().encode(unsigned));
  // An empty Web Push wakes the service worker, which always shows a visible notification.
- const response=await fetch(url.href,{method:'POST',headers:{Authorization:'vapid t='+unsigned+'.'+b64url(signature)+', k='+env.VAPID_PUBLIC_KEY,TTL:'300',Urgency:'high'},body:new Uint8Array(0),redirect:'error',signal:AbortSignal.timeout(8000)});
+ const response=await fetch(url.href,{method:'POST',headers:{Authorization:'vapid t='+unsigned+'.'+b64url(signature)+', k='+env.VAPID_PUBLIC_KEY,TTL:'300',Urgency:'high'},body:new Uint8Array(0),redirect:'manual',signal:AbortSignal.timeout(8000)});
+ if(response.status>=300&&response.status<400)throw new Error('The push service redirected the request. Reset the subscription and try again.');
  if(response.status===404||response.status===410)throw new Error('This subscription expired. Reset it and enable notifications again.');
  if(response.status!==201&&response.status!==202)throw new Error('The push service rejected the test (HTTP '+response.status+').');
  return response.status;

@@ -19,7 +19,7 @@ test('push endpoint allowlist prevents arbitrary outbound requests',()=>{
 });
 test('sender signs correct VAPID JWT, uses empty push, and reports only acceptance',async()=>{
  const original=globalThis.fetch;try{globalThis.fetch=async(url,options)=>{
-  assert.equal(url,endpoint);assert.equal(options.method,'POST');assert.equal(options.body.length,0);assert.equal(options.redirect,'error');assert.equal(options.headers.TTL,'300');
+  assert.equal(url,endpoint);assert.equal(options.method,'POST');assert.equal(options.body.length,0);assert.equal(options.redirect,'manual');assert.equal(options.headers.TTL,'300');
   const jwt=options.headers.Authorization.match(/vapid t=([^,]+), k=/)[1],parts=jwt.split('.');
   const payload=JSON.parse(Buffer.from(parts[1],'base64url'));assert.equal(payload.aud,'https://web.push.apple.com');assert.equal(payload.sub,'https://test.example');
   assert.ok(payload.exp>Date.now()/1000&&payload.exp<Date.now()/1000+86400);
@@ -44,4 +44,15 @@ test('delayed test queues a bounded server task after the response',async()=>{
 });
 test('expired subscriptions and provider failures are actionable',async()=>{
  const original=globalThis.fetch;try{globalThis.fetch=async()=>new Response(null,{status:410});const response=await worker.fetch(request({endpoint,delay:0}),env,{});assert.equal(response.status,502);assert.match((await response.json()).error,/expired/);globalThis.fetch=async()=>new Response(null,{status:500});await assert.rejects(()=>sendPush(endpoint,env),/500/);}finally{globalThis.fetch=original;}
+});
+test('edge-compatible manual redirects never forward push credentials',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ try{globalThis.fetch=async(url,options)=>{
+  calls++;if(options.redirect==='error')throw new TypeError('Invalid redirect value');
+  assert.equal(options.redirect,'manual');
+  return new Response(null,{status:302,headers:{Location:'https://unrelated.example/push'}});
+ };
+ const response=await worker.fetch(request({endpoint,delay:0}),env,{});
+ assert.equal(response.status,502);assert.match((await response.json()).error,/redirected/);assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
 });
