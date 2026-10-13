@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calendarRequest,listCalendars,listEvents,createEvent} from '../web/google.mjs';
+import {calendarRequest,listCalendars,listEvents,createEvent,deleteEvent} from '../web/google.mjs';
 test('reads use fixed Google API origin, bearer authorization, and pagination',async()=>{
  const original=globalThis.fetch,calls=[];
  try{
@@ -19,4 +19,20 @@ test('writes occur once and unknown completion is never represented as saved',as
 });
 test('only confirmed provider event IDs yield write success',async()=>{
  const original=globalThis.fetch;try{globalThis.fetch=async(url,options)=>{assert.equal(options.method,'POST');assert.equal(JSON.parse(options.body).id,'tl123');return Response.json({id:'tl123',status:'confirmed'});};assert.equal((await createEvent('test-only','primary',{id:'tl123'})).id,'tl123');}finally{globalThis.fetch=original;}
+});
+test('delete uses the exact occurrence ID, conditional version, no guest updates, and accepts an empty 204',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ try{globalThis.fetch=async(url,options)=>{
+  calls++;const parsed=new URL(url);assert.match(parsed.pathname,/cal%40example.com\/events\/series_20261013T070000Z$/);
+  assert.equal(parsed.searchParams.get('sendUpdates'),'none');assert.equal(options.method,'DELETE');assert.equal(options.headers['If-Match'],'"version-one"');assert.equal(options.body,undefined);
+  return new Response(null,{status:204});
+ };await deleteEvent('test-only','cal@example.com','series_20261013T070000Z','"version-one"');assert.equal(calls,1);}finally{globalThis.fetch=original;}
+});
+test('offline or server-failed deletion stays uncertain; version conflicts require review',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ try{
+  globalThis.fetch=async()=>{calls++;throw new TypeError('Offline');};await assert.rejects(()=>deleteEvent('test-only','primary','one'),e=>e.uncertain===true);assert.equal(calls,1);
+  globalThis.fetch=async()=>Response.json({error:{message:'Temporary failure'}},{status:503});await assert.rejects(()=>deleteEvent('test-only','primary','one'),e=>e.status===503&&e.uncertain);
+  globalThis.fetch=async()=>Response.json({error:{message:'Changed'}},{status:412});await assert.rejects(()=>deleteEvent('test-only','primary','one'),e=>e.status===412&&!e.uncertain&&/changed/.test(e.message));
+ }finally{globalThis.fetch=original;}
 });

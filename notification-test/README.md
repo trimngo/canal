@@ -30,6 +30,12 @@ the account included as a test user if OAuth consent is in testing mode.
 Google sign-in on the installed iPhone PWA still needs an on-device check; if the
 popup fails, try the same app address in Safari.
 
+Tap **Delete** on an event and confirm to remove it from Google Calendar. Only
+the displayed occurrence of a recurring event is removed. Read-only calendars
+cannot be changed. The app rechecks permissions and the event version before
+deletion, requests no guest updates, and checks uncertain deletions before
+allowing another attempt. Uncovered time becomes a gap after refresh.
+
 ## Notifications
 
 The successful notification test remains at `/notifications`. The existing
@@ -44,7 +50,7 @@ not a durable scheduler for long timers.
 
 ## Development
 
-Run `npm test`; it builds and runs 21 tests for time accounting, Google API
+Run `npm test`; it builds and runs 27 tests for time accounting, Google API
 requests, simulated UI save/recovery flows, and the notification Worker. Fixtures
 are synthetic, with no real Calendar writes or device pushes. Browser preview
 is unverified because Chromium was blocked by the execution sandbox.

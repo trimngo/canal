@@ -26,7 +26,7 @@ export function duration(ms) {
 }
 export function normalize(raw,calendar) {
   if(raw.status==='cancelled'||raw.attendees?.some(a=>a.self&&a.responseStatus==='declined'))return null;
-  const base={id:raw.id,calendarId:calendar.id,calendarName:calendar.summary||calendar.id,title:raw.summary?.trim()||'Untitled event',url:raw.htmlLink||null,updated:Date.parse(raw.updated||'')||0};
+  const base={id:raw.id,calendarId:calendar.id,calendarName:calendar.summary||calendar.id,title:raw.summary?.trim()||'Untitled event',url:raw.htmlLink||null,updated:Date.parse(raw.updated||'')||0,etag:typeof raw.etag==='string'?raw.etag:null,recurring:!!raw.recurringEventId,hasGuests:!!raw.attendees?.some(a=>!a.self)};
   if(raw.start?.date&&raw.end?.date)return {...base,allDay:true,startDate:raw.start.date,endDate:raw.end.date,key:JSON.stringify([raw.iCalUID||calendar.id+':'+raw.id,raw.start.date])};
   const start=Date.parse(raw.start?.dateTime),end=Date.parse(raw.end?.dateTime);
   if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;
