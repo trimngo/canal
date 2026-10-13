@@ -5,7 +5,7 @@ process.chdir(fileURLToPath(new URL('..',import.meta.url)));
 await mkdir('dist/server',{recursive:true});
 await mkdir('dist/.openai',{recursive:true});
 const page=await readFile('web/index.html','utf8'),assets={};
-for(const file of ['app.mjs','timeline.mjs','google.mjs','config.mjs'])assets['/today/'+file]=await readFile('web/'+file,'utf8');
+for(const file of ['app.mjs','timeline.mjs','google.mjs','config.mjs','categories.mjs'])assets['/today/'+file]=await readFile('web/'+file,'utf8');
 const embedded='export const page='+JSON.stringify(page)+';\nexport const assets='+JSON.stringify(assets)+';\n';
 await writeFile('worker/today-assets.mjs',embedded);
 const entry=await readFile('worker/index.js','utf8');

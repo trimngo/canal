@@ -19,6 +19,10 @@ export function todayBounds(now,tz) {
   const date=localStamp(now,tz).slice(0,10);
   return {date,start:localToMs(date+'T00:00',tz),end:Math.floor(now/1000)*1000};
 }
+export function formatTime(ms,tz,format='24',dateOptions={}) {
+  const twelve=format==='12';
+  return new Intl.DateTimeFormat(twelve?'en-US':'en-GB',{...dateOptions,timeZone:tz,hour:twelve?'numeric':'2-digit',minute:'2-digit',hour12:twelve}).format(ms);
+}
 export function duration(ms) {
   if(ms>0&&ms<60000)return '<1m';
   const m=Math.floor(Math.max(0,ms)/60000);
@@ -26,7 +30,7 @@ export function duration(ms) {
 }
 export function normalize(raw,calendar) {
   if(raw.status==='cancelled'||raw.attendees?.some(a=>a.self&&a.responseStatus==='declined'))return null;
-  const base={id:raw.id,calendarId:calendar.id,calendarName:calendar.summary||calendar.id,title:raw.summary?.trim()||'Untitled event',url:raw.htmlLink||null,updated:Date.parse(raw.updated||'')||0,etag:typeof raw.etag==='string'?raw.etag:null,recurring:!!raw.recurringEventId,hasGuests:!!raw.attendees?.some(a=>!a.self)};
+  const base={id:raw.id,calendarId:calendar.id,calendarName:calendar.summary||calendar.id,title:raw.summary?.trim()||'Untitled event',url:raw.htmlLink||null,updated:Date.parse(raw.updated||'')||0,etag:typeof raw.etag==='string'?raw.etag:null,recurring:!!raw.recurringEventId,hasGuests:!!raw.attendees?.some(a=>!a.self),categoryId:raw.extendedProperties?.private?.timeLedgerCategoryId||null,categoryName:raw.extendedProperties?.private?.timeLedgerCategoryName||null};
   if(raw.start?.date&&raw.end?.date)return {...base,allDay:true,startDate:raw.start.date,endDate:raw.end.date,key:JSON.stringify([raw.iCalUID||calendar.id+':'+raw.id,raw.start.date])};
   const start=Date.parse(raw.start?.dateTime),end=Date.parse(raw.end?.dateTime);
   if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;

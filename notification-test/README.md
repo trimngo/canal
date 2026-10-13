@@ -8,7 +8,7 @@ is retained because it is the existing Sites source subtree.
 
 Connect Google Calendar to see today's elapsed time, from midnight to the last
 refresh, in the phone's timezone. Google is read directly using the existing
-public OAuth client ID. Choose calendars with **Calendars**; the initial selection
+public OAuth client ID. Choose calendars with **Settings**; the initial selection
 follows the calendars displayed in Google, including the primary calendar.
 Future appointments do not appear. Ongoing events only account for elapsed time.
 
@@ -30,11 +30,47 @@ the account included as a test user if OAuth consent is in testing mode.
 Google sign-in on the installed iPhone PWA still needs an on-device check; if the
 popup fails, try the same app address in Safari.
 
-Tap **Delete** on an event and confirm to remove it from Google Calendar. Only
+Tap an event, then **Delete from Google Calendar**, and confirm to remove it from Google Calendar. Only
 the displayed occurrence of a recurring event is removed. Read-only calendars
 cannot be changed. The app rechecks permissions and the event version before
 deletion, requests no guest updates, and checks uncertain deletions before
 allowing another attempt. Uncovered time becomes a gap after refresh.
+
+## Grid, time format, and categories
+
+The elapsed day uses an hourly grid at 75 pixels per hour. Every interval's height
+is proportional to its duration; overlap segments share the same time interval.
+Short intervals retain their true height and can be hard to tap, so **Fill the
+first gap** also opens the next missing interval. A local-noon line appears only
+once noon is in the elapsed portion. Settings offers a persisted AM/PM display
+preference. Native date/time input controls follow the phone's locale.
+
+Tap an event, choose its category, and preview before confirming. Categories are
+stored as a readable trailing description line, `Time Ledger category: Work`,
+plus private metadata holding a stable category ID, name, and exact managed line.
+Existing description text and unrelated private/shared metadata are preserved.
+If the managed line was edited or moved externally, categorization is blocked.
+Only description and private properties are patched; titles, times, recurrence,
+and attendees are never submitted by category updates. No guest updates are
+requested. Recurring masters are blocked; individual occurrences are supported.
+
+Settings lets the user create and rename categories. Renaming queries calendars
+for that exact stable ID, includes only past tagged events (up to 100 per review),
+and lists every affected event with its original and proposed description. A
+read-only tagged calendar or incomplete scan blocks the rename. Future events
+are excluded. Category definitions are stored on the device; events carry their
+own readable labels at Google.
+
+Category updates save an account-scoped Undo journal to local storage **before**
+any PATCH. A missing/failed backup blocks writes. Every PATCH uses the previewed
+ETag with If-Match; conflicts stop the batch. Bulk updates run sequentially and
+are not atomic. Confirmed changes remain reversible if another update fails.
+Lost responses are checked against saved before/after states without replaying
+PATCH requests. **Undo last category edit** first verifies all event versions and
+states, then restores only their description and private category fields. Newer
+external edits block Undo instead of being overwritten. Undo history is limited
+to this device and can be downloaded from Settings; it is not a Google Calendar
+backup and does not undo event deletion or creation.
 
 ## Notifications
 
@@ -50,7 +86,7 @@ not a durable scheduler for long timers.
 
 ## Development
 
-Run `npm test`; it builds and runs 27 tests for time accounting, Google API
+Run `npm test`; it builds and runs 35 tests for time accounting, Google API
 requests, simulated UI save/recovery flows, and the notification Worker. Fixtures
 are synthetic, with no real Calendar writes or device pushes. Browser preview
 is unverified because Chromium was blocked by the execution sandbox.

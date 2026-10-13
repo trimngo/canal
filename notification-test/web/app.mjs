@@ -1,14 +1,21 @@
 import {GOOGLE_CLIENT_ID} from './config.mjs';
-import {todayBounds,localStamp,accountDay,normalize,duration,makeGapEvent} from './timeline.mjs';
+import {todayBounds,localStamp,localToMs,accountDay,normalize,duration,makeGapEvent,formatTime} from './timeline.mjs';
 import {READ_SCOPES,WRITE_SCOPE,listCalendars,listEvents,createEvent,deleteEvent,calendarRequest,eventPath} from './google.mjs';
+import {categoryName,categoryPlan,renamePlans,CategoryJournal,sameState} from './categories.mjs';
 
 const $=id=>document.getElementById(id);
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
 let token=null,expires=0,writeGranted=false,account=null,calendars=[],selected=[],events=[],lastRead=null,ready=false,busy=false,saving=false,gap=null,pending=null;
 let deletingEvent=null,pendingDelete=null;
+let categories=[],categoryPlans=[],categoryMeta={},renameCategoryId=null;
+const categoryDefsKey=()=>`time-ledger:today:categories:${account}`;
+const journal=()=>new CategoryJournal(localStorage,account);
+function persistCategories(){localStorage.setItem(categoryDefsKey(),JSON.stringify(categories));}
+const timeFormatKey='time-ledger:today:time-format';
+let timeFormat='24';try{if(localStorage.getItem(timeFormatKey)==='12')timeFormat='12';}catch{}
 const valid=()=>Boolean(token&&Date.now()<expires);
-const fmt=ms=>new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit'}).format(ms);
+const fmt=ms=>formatTime(ms,tz,timeFormat);
 const prefsKey=()=>`time-ledger:today:calendars:${account}`;
 const pendingKey=()=>`time-ledger:today:pending:${account}`;
 const deleteKey=()=>`time-ledger:today:pending-delete:${account}`;
@@ -22,6 +29,8 @@ function loadPrefs(){
   selected=Array.isArray(stored)?stored.filter(id=>calendars.some(c=>c.id===id)):calendars.filter(c=>c.selected!==false||c.primary).map(c=>c.id);
   pending=null;try{const p=JSON.parse(sessionStorage.getItem(pendingKey()));if(p&&typeof p.calendarId==='string'&&/^tl[0-9a-f]{32}$/.test(p.event?.id)&&calendars.some(c=>c.id===p.calendarId)&&typeof p.event.summary==='string'&&p.event.start?.dateTime&&p.event.end?.dateTime)pending=p;}catch{}
   pendingDelete=null;deletingEvent=null;try{const p=JSON.parse(sessionStorage.getItem(deleteKey()));if(p&&typeof p.id==='string'&&p.id.length<=1024&&typeof p.title==='string'&&calendars.some(c=>c.id===p.calendarId))pendingDelete=p;}catch{}
+  categories=[{id:'work',name:'Work'},{id:'personal',name:'Personal'},{id:'sleep',name:'Sleep'}];
+  try{const c=JSON.parse(localStorage.getItem(categoryDefsKey()));if(Array.isArray(c)&&c.every(x=>typeof x.id==='string'&&typeof x.name==='string'))categories=c;}catch{}
 }
 function authorization(scopes){
   return new Promise((resolve,reject)=>{
@@ -37,19 +46,44 @@ function authorization(scopes){
   });
 }
 function renderSettings(){
+  $('time-format').value=timeFormat;$('calendar-settings').hidden=!account;
   $('calendar-list').innerHTML=calendars.map(c=>`<label class="calendar-choice"><input type="checkbox" data-calendar="${escape(c.id)}" ${selected.includes(c.id)?'checked':''} ${busy||saving?'disabled':''}><span>${escape(c.summary||c.id)}${c.primary?' · Primary':''}</span></label>`).join('');
   $('connection-state').textContent=valid()?'Connected directly to Google Calendar.':account?'Your Google session expired. Reconnect to refresh or save.':'Connect Google Calendar to load your day.';
   $('reconnect').disabled=busy||saving;$('disconnect').disabled=busy||saving;
+  $('category-list').innerHTML=categories.map(c=>`<div class="category-setting"><span>${escape(c.name)}</span><button class="text-button" data-rename-category="${escape(c.id)}" ${busy||saving?'disabled':''}>Rename</button></div>`).join('');
+  $('category-add').disabled=busy||saving||!account;
+  try{const records=account?journal().read():[];$('undo-category').disabled=busy||saving||!records.some(b=>b.items.some(i=>i.status==='applied'));$('check-category').hidden=!records.some(b=>b.items.some(i=>['prepared','uncertain','undoing'].includes(i.status)));}catch(e){$('category-status').textContent=e.message;}
+  $('check-category').disabled=busy||saving;
 }
 function deleteControl(event){
   if(!writable().some(c=>c.id===event.calendarId))return '<span class="read-only">Read only</span>';
   return `<button class="event-delete" data-delete="${escape(JSON.stringify([event.calendarId,event.id]))}" aria-label="Delete event: ${escape(event.title)}" ${busy||saving||pending||pendingDelete||!valid()?'disabled':''}>Delete</button>`;
 }
+const pixelsPerMinute=1.25;
+const gridPosition=(at,bounds)=>(at-bounds.start)/60000*pixelsPerMinute;
+function ledgerGrid(data,bounds){
+  const noon=localToMs(bounds.date+'T12:00',tz),lines=[];
+  for(let at=bounds.start;at<=bounds.end;at+=3600000){
+    const isNoon=at===noon;
+    lines.push(`<div class="hour-line${isNoon?' noon-line':''}${at===bounds.start?' first-hour':''}" style="top:${gridPosition(at,bounds)}px" ${isNoon?'role="separator" aria-label="Noon"':'aria-hidden="true"'}><span class="hour-label">${fmt(at)}</span><span class="grid-rule"></span>${isNoon?'<span class="noon-label">Noon</span>':''}</div>`);
+  }
+  // In zones with a fractional-hour clock change, local noon may fall between grid ticks.
+  if(noon<=bounds.end&&!lines.some(line=>line.includes('noon-line')))lines.push(`<div class="hour-line noon-line" style="top:${gridPosition(noon,bounds)}px" role="separator" aria-label="Noon"><span class="hour-label">${fmt(noon)}</span><span class="grid-rule"></span><span class="noon-label">Noon</span></div>`);
+  const blocks=data.segments.map((s,i)=>{
+    const height=(s.end-s.start)/60000*pixelsPerMinute,size=height>=56?' tall':height>=32?' medium':' tiny';
+    const style=`top:${gridPosition(s.start,bounds)}px;height:${height}px`;
+    const label=`${fmt(s.start)}–${fmt(s.end)} · ${duration(s.end-s.start)}`;
+    if(s.kind==='gap')return `<button class="entry gap grid-block${size}" data-gap="${i}" style="${style}" aria-label="Unrecorded time: ${escape(label)}. Fill this gap." ${busy||saving||pending||pendingDelete||!valid()?'disabled':''}><h3>${height>=56?'What were you doing?':'Unrecorded'}</h3><p>${escape(label)}</p></button>`;
+    return `<div class="entry grid-block event-block${size}" style="${style}">${s.events.map(e=>`<button class="grid-event" data-review="${escape(JSON.stringify([e.calendarId,e.id]))}" aria-label="Review ${escape(e.title)}: ${escape(label)}" ${busy||saving?'disabled':''}><h3>${escape(e.title)}</h3><p class="grid-calendar">${escape(e.categoryName||e.calendarName)}${s.events.length>1?' · Overlap counted once':''}${!writable().some(c=>c.id===e.calendarId)?' · Read only':''}</p><p class="grid-duration">${escape(label)}</p></button>`).join('')}</div>`;
+  }).join('');
+  return lines.join('')+`<div class="grid-canvas">${blocks}</div>`;
+}
 function render(){
   const now=Date.now();
   $('date').textContent=new Intl.DateTimeFormat('en-GB',{timeZone:tz,weekday:'long',day:'numeric',month:'long'}).format(now);
   $('zone').textContent=tz.replaceAll('_',' ');
-  $('welcome').hidden=!!account;$('day').hidden=!account;$('settings').hidden=!account;
+  $('welcome').hidden=!!account;$('day').hidden=!account;$('settings').hidden=false;
+  $('timeline').classList.toggle('twelve-hour',timeFormat==='12');$('now').classList.toggle('twelve-hour',timeFormat==='12');
   $('connect').disabled=busy;$('connect').textContent=busy?'Connecting…':'Connect Google Calendar';
   $('loading').hidden=!busy;$('refresh').disabled=busy||saving;
   $('refresh').textContent=valid()?'Refresh':'Reconnect';
@@ -63,7 +97,8 @@ function render(){
   $('progress').style.width=(data.elapsed?data.recorded/data.elapsed*100:0)+'%';
   $('summary-note').textContent=data.missing?`${duration(data.elapsed)} since midnight · ${data.gaps.length} gap${data.gaps.length===1?'':'s'} to fill.`:'Every moment so far is recorded.';
   $('fill-first').hidden=!data.gaps.length;$('fill-first').disabled=busy||saving||!!pending||!!pendingDelete||!valid();
-  $('timeline').innerHTML=data.segments.map((s,i)=>`<div class="row"><div class="time">${fmt(s.start)}<span>${fmt(s.end)}</span></div>${s.kind==='gap'?`<button class="entry gap" data-gap="${i}" ${busy||saving||pending||pendingDelete||!valid()?'disabled':''}><span class="plus" aria-hidden="true">＋</span><h3>What were you doing?</h3><p>${escape(duration(s.end-s.start))} unrecorded · Tap to fill in</p></button>`:`<div class="entry">${s.events.map((e,j)=>`<div ${j?'class="overlap"':''}><div class="event-head"><h3>${escape(e.title)}</h3>${deleteControl(e)}</div><p>${escape(e.calendarName)}</p></div>`).join('')}<p>${escape(duration(s.end-s.start))}${s.events.length>1?' · Overlap counted once':''}</p></div>`}</div>`).join('');
+  $('timeline').style.height=(data.elapsed/60000*pixelsPerMinute)+'px';
+  $('timeline').innerHTML=ledgerGrid(data,bounds);
   $('now').hidden=false;$('now').textContent=`As of ${fmt(lastRead)}${valid()?'':' · Reconnect to update'}`;
   $('all-day').hidden=!data.allDay.length;$('all-day-label').textContent=`${data.allDay.length} all-day event${data.allDay.length===1?'':'s'}`;
   $('all-day-list').innerHTML=data.allDay.map(e=>`<li><div class="event-head"><span>${escape(e.title)} · ${escape(e.calendarName)}</span>${deleteControl(e)}</div></li>`).join('');
@@ -83,7 +118,7 @@ async function sync(){
   if(busy)return false;
   busy=true;ready=false;render();const captured=Date.now(),bounds=todayBounds(captured,tz),ids=[...selected];
   try{
-    if(!ids.length)throw new Error('Choose at least one calendar in Calendars.');
+    if(!ids.length)throw new Error('Choose at least one calendar in Settings.');
     const results=await Promise.allSettled(ids.map(async id=>({calendar:calendars.find(c=>c.id===id),rows:await listEvents(token,id,bounds.start,bounds.end)})));
     const failures=results.map((r,i)=>r.status==='rejected'?`${calendars.find(c=>c.id===ids[i])?.summary||'Calendar'}: ${r.reason.message}`:null).filter(Boolean);
     if(failures.length)throw new Error('Could not read all selected calendars. Refresh before filling gaps. '+failures.join(' '));
@@ -170,15 +205,24 @@ async function checkSave(){
 let retryDraft=null;
 function showDeleteEvent(event){
   deletingEvent=event;$('delete-name').textContent=event.title;
-  const dateTime=ms=>new Intl.DateTimeFormat('en-GB',{timeZone:tz,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(ms);
+  const dateTime=ms=>formatTime(ms,tz,timeFormat,{day:'numeric',month:'short'});
   $('delete-caption').textContent=event.calendarName+' · '+(event.allDay?'All day · '+event.startDate:dateTime(event.start)+' – '+dateTime(event.end));
   $('delete-recurring').hidden=!event.recurring;$('delete-guests').hidden=!event.hasGuests;
+  const choices=[...categories];if(event.categoryId&&!choices.some(c=>c.id===event.categoryId))choices.push({id:event.categoryId,name:event.categoryName||'Saved category'});
+  $('event-category').innerHTML='<option value="">Uncategorized</option>'+choices.map(c=>`<option value="${escape(c.id)}">${escape(c.name)}</option>`).join('');$('event-category').value=event.categoryId||'';
+  $('event-category-section').hidden=!writable().some(c=>c.id===event.calendarId);
+  $('category-preview-error').textContent='';
 }
-function openDelete(reference){
+function openDelete(reference,review=false){
   if(!ready||busy||saving||pending||pendingDelete||!valid())return;
   let ids;try{ids=JSON.parse(reference);}catch{return;}
   const event=events.find(e=>e.calendarId===ids[0]&&e.id===ids[1]);
-  if(!event||!writable().some(c=>c.id===event.calendarId))return;
+  if(!event||(!review&&!writable().some(c=>c.id===event.calendarId)))return;
+  const canDelete=writable().some(c=>c.id===event.calendarId);
+  $('delete-heading').textContent=review?'Event details':'Delete this event?';
+  $('delete-confirm').hidden=!canDelete;
+  $('delete-explanation').textContent=canDelete?'Delete this event from Google Calendar if you didn’t do it. Any time left uncovered will become a gap to fill in.':'This calendar is read only. This event can’t be deleted here.';
+  $('delete-cancel').textContent=review?'Close':'Keep event';
   showDeleteEvent(event);$('delete-error').textContent='';$('delete-check').hidden=true;lockDelete(false);$('delete-dialog').showModal();
 }
 function lockDelete(locked){
@@ -186,6 +230,65 @@ function lockDelete(locked){
   $('delete-confirm').textContent=locked?'Deleting…':'Delete from Google Calendar';
   $('delete-check').disabled=locked;$('delete-cancel').disabled=locked;
   $('delete-dialog').querySelector('[data-close]').disabled=locked;
+  $('preview-category').disabled=locked;$('event-category').disabled=locked;
+}
+function previewCategoryPlans(plans,meta){
+  categoryPlans=plans;categoryMeta=meta;
+  $('category-review-heading').textContent=meta.rename?'Preview category rename':'Preview category change';
+  $('category-review-summary').textContent=`${plans.length} event${plans.length===1?'':'s'} will change. Titles, times, guests, and existing notes are preserved.`;
+  $('category-review-list').innerHTML=plans.map(p=>`<details class="change-preview" ${plans.length===1?'open':''}><summary>${escape(p.title)}</summary><p class="form-note">${escape(p.calendarName||p.calendarId)} · ${escape(p.when.length>10?formatTime(Date.parse(p.when),tz,timeFormat,{day:'numeric',month:'short'}):p.when)}</p><h3>Current description</h3><pre>${escape(p.before.description||'(empty)')}</pre><h3>New description</h3><pre>${escape(p.after.description||'(empty)')}</pre></details>`).join('');
+  $('category-apply').textContent=plans.length?`Confirm ${plans.length} event update${plans.length===1?'':'s'}`:'Save category name';
+  $('category-review-error').textContent='';$('category-review-dialog').showModal();
+}
+async function previewEventCategory(){
+  if(!deletingEvent||busy||saving||!valid())return;
+  const target=deletingEvent,choice=$('event-category').value;
+  const category=choice?categories.find(c=>c.id===choice)||{id:target.categoryId,name:target.categoryName}:null;
+  busy=true;render();
+  try{
+    if(journal().unresolved())throw new Error('Check the interrupted category change in Settings first.');
+    const raw=await calendarRequest(token,eventPath(target.calendarId,target.id)),plan=categoryPlan(raw,target.calendarId,category);plan.calendarName=target.calendarName;
+    if(sameState(plan.before,plan.after))throw new Error('This event already has that category.');
+    previewCategoryPlans([plan],{});
+  }catch(e){$('category-preview-error').textContent=e.message;}finally{busy=false;render();}
+}
+function openRename(id){
+  if(busy||saving)return;const category=categories.find(c=>c.id===id);if(!category)return;
+  renameCategoryId=id;$('rename-name').value=category.name;$('rename-error').textContent='';$('rename-dialog').showModal();
+}
+async function previewRename(e){
+  e.preventDefault();if(busy||saving||!valid())return;const category=categories.find(c=>c.id===renameCategoryId);if(!category)return;
+  busy=true;render();
+  try{
+    const name=categoryName($('rename-name').value);
+    if(categories.some(c=>c.id!==category.id&&c.name.toLowerCase()===name.toLowerCase()))throw new Error('Choose a unique category name.');
+    if(journal().unresolved())throw new Error('Check the interrupted category change in Settings first.');
+    const now=Date.now(),plans=await renamePlans(token,calendars,category,name,now,todayBounds(now,tz).date);
+    previewCategoryPlans(plans,{rename:{id:category.id,from:category.name,to:name}});
+  }catch(err){$('rename-error').textContent=err.message;}finally{busy=false;render();}
+}
+async function applyCategoryPlans(){
+  if(saving||busy||pending||pendingDelete||!valid())return;
+  saving=true;$('category-apply').disabled=true;render();
+  try{
+    if(categoryPlans.length&&!writeGranted)await authorization(READ_SCOPES+' '+WRITE_SCOPE);
+    await confirmAccount();
+    if(categoryPlans.some(p=>!writable().some(c=>c.id===p.calendarId)))throw new Error('A calendar is no longer writable. No changes were made.');
+    const result=await journal().apply(token,categoryPlans,categoryMeta);
+    if(categoryMeta.rename){const rename=categoryMeta.rename;categories=categories.map(c=>c.id===rename.id?{...c,name:rename.to}:c);persistCategories();}
+    $('category-review-dialog').close();$('rename-dialog').close();$('delete-dialog').close();await sync();
+    message(`Saved ${result.changed} category update${result.changed===1?'':'s'} to Google Calendar. Undo is available in Settings.`);
+  }catch(e){$('category-review-error').textContent=e.message;}finally{saving=false;$('category-apply').disabled=false;render();}
+}
+async function categoryHistoryAction(undo){
+  if(busy||saving||!account)return;saving=true;render();
+  try{
+    if(!valid()||(undo&&!writeGranted))await authorization(READ_SCOPES+(undo?' '+WRITE_SCOPE:''));
+    await confirmAccount();
+    if(undo){const batch=await journal().undo(token);if(batch.meta.rename){const rename=batch.meta.rename;categories=categories.map(c=>c.id===rename.id?{...c,name:rename.from}:c);persistCategories();}$('category-status').textContent='Restored the previous category notes.';}
+    else{const count=await journal().recover(token);$('category-status').textContent=`Checked ${count} interrupted update${count===1?'':'s'}.`;}
+    await sync();
+  }catch(e){$('category-status').textContent=e.message;}finally{saving=false;render();}
 }
 async function deletionConfirmed(target){
   pendingDelete=null;persistDelete();deletingEvent=null;
@@ -237,9 +340,26 @@ async function checkDeletion(){
 const makeId=()=>retryDraft?.event.id||'tl'+crypto.randomUUID().replaceAll('-','');
 $('gap-form').onsubmit=saveGap;$('check').onclick=checkSave;$('recover').onclick=checkSave;
 $('delete-confirm').onclick=confirmDelete;$('delete-check').onclick=checkDeletion;$('recover-delete').onclick=checkDeletion;
+$('preview-category').onclick=previewEventCategory;$('category-apply').onclick=applyCategoryPlans;
+$('rename-form').onsubmit=previewRename;$('undo-category').onclick=()=>categoryHistoryAction(true);$('check-category').onclick=()=>categoryHistoryAction(false);
+$('category-form').onsubmit=e=>{
+  e.preventDefault();if(busy||saving||!account)return;
+  try{const name=categoryName($('category-name').value);if(categories.some(c=>c.name.toLowerCase()===name.toLowerCase()))throw new Error('That category already exists.');categories.push({id:crypto.randomUUID(),name});persistCategories();$('category-name').value='';$('category-status').textContent='Category added. Choose it when reviewing an event.';renderSettings();}catch(err){$('category-status').textContent=err.message;}
+};
+$('download-backup').onclick=()=>{
+  if(!account)return;
+  try{const backup=JSON.stringify(journal().read(),null,2),url=URL.createObjectURL(new Blob([backup],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='time-ledger-category-backup.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}catch(e){$('category-status').textContent=e.message;}
+};
 $('connect').onclick=connect;$('reconnect').onclick=async()=>{await connect();};
 $('refresh').onclick=()=>valid()?sync():connect();
 $('settings').onclick=()=>{renderSettings();$('settings-dialog').showModal();};
+$('time-format').onchange=()=>{
+  timeFormat=$('time-format').value==='12'?'12':'24';
+  try{localStorage.setItem(timeFormatKey,timeFormat);}catch{message('The time format changed, but could not be saved on this device.',true);}
+  render();
+  if($('gap-dialog').open&&gap)$('gap-caption').textContent=`${fmt(gap.start)}–${fmt(gap.end)} · ${duration(gap.end-gap.start)} unrecorded`;
+  if($('delete-dialog').open&&deletingEvent)showDeleteEvent(deletingEvent);
+};
 $('disconnect').onclick=()=>{
   const old=token;token=null;expires=0;account=null;writeGranted=false;calendars=[];events=[];selected=[];lastRead=null;ready=false;pending=null;retryDraft=null;pendingDelete=null;deletingEvent=null;
   $('settings-dialog').close();message('Disconnected. Loaded Calendar data has been cleared.');render();
@@ -249,16 +369,19 @@ $('calendar-list').onchange=async e=>{
   const id=e.target.dataset.calendar;if(!id||busy||saving)return;
   selected=e.target.checked?[...new Set([...selected,id])]:selected.filter(x=>x!==id);savePrefs();await sync();
 };
-$('fill-first').onclick=()=>{const data=accountDay(events,todayBounds(lastRead,tz));openGap(data.segments.findIndex(s=>s.kind==='gap'));};
+$('fill-first').onclick=()=>{const bounds=todayBounds(lastRead,tz),data=accountDay(events,bounds);openGap(data.segments.findIndex(s=>s.kind==='gap'));};
 document.addEventListener('click',e=>{
-  const close=e.target.closest('[data-close]');if(close){close.closest('dialog').close();return;}
+  const close=e.target.closest('[data-close]');if(close){if(saving)return;close.closest('dialog').close();return;}
   const remove=e.target.closest('[data-delete]');if(remove){openDelete(remove.dataset.delete);return;}
+  const review=e.target.closest('[data-review]');if(review){openDelete(review.dataset.review,true);return;}
+  const rename=e.target.closest('[data-rename-category]');if(rename){openRename(rename.dataset.renameCategory);return;}
   const button=e.target.closest('[data-gap]');if(button){retryDraft=null;openGap(Number(button.dataset.gap));}
 });
 $('gap-dialog').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
 $('gap-dialog').addEventListener('close',()=>{if(!pending)retryDraft=null;});
 $('delete-dialog').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
 $('delete-dialog').addEventListener('close',()=>{if(!pendingDelete)deletingEvent=null;});
+['category-review-dialog','rename-dialog'].forEach(id=>$(id).addEventListener('cancel',e=>{if(saving)e.preventDefault();}));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();if(valid()&&!busy&&!saving&&!$('gap-dialog').open&&!$('delete-dialog').open)sync();}});
 setInterval(()=>{if(!document.hidden&&!busy&&!saving&&!$('gap-dialog').open&&!$('delete-dialog').open){if(valid())sync();else render();}},60000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});

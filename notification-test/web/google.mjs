@@ -6,14 +6,14 @@ export class CalendarError extends Error{
 export async function calendarRequest(token,path,{method='GET',body,signal,ifMatch}={}){
   if(!token)throw new CalendarError('Connect Google Calendar first.',401);
   let response;
-  const mutation=method==='POST'||method==='DELETE';
+  const mutation=['POST','DELETE','PATCH'].includes(method);
   try{response=await fetch('https://www.googleapis.com/calendar/v3/'+path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{}),...(ifMatch?{'If-Match':ifMatch}:{})},...(body?{body:JSON.stringify(body)}:{}),signal,cache:'no-store'});}
   catch{throw new CalendarError(method==='DELETE'?'We could not confirm whether Google deleted this event. Check its status before trying again.':method==='POST'?'We could not confirm whether Google saved this block. Check its status before trying again.':'Could not reach Google Calendar. Check your connection and refresh.',0,mutation);}
   if(method==='DELETE'&&response.status===204)return null;
   let data;
   try{data=await response.json();}catch{throw new CalendarError('Google returned an unreadable response.',response.status,mutation);}
   if(!response.ok){
-    const message=response.status===401?'Your Google session expired. Reconnect to continue.':response.status===403?'Google denied access. Check that Calendar API is enabled and that you granted the requested permissions.':response.status===412?'This event changed in Google Calendar. Refresh and review it before deleting.':response.status===429?'Google is temporarily limiting requests. Wait a moment before refreshing.':data.error?.message||'Google Calendar could not complete the request.';
+    const message=response.status===401?'Your Google session expired. Reconnect to continue.':response.status===403?'Google denied access. Check that Calendar API is enabled and that you granted the requested permissions.':response.status===412?'This event changed in Google Calendar. Refresh and review it before making changes.':response.status===429?'Google is temporarily limiting requests. Wait a moment before refreshing.':data.error?.message||'Google Calendar could not complete the request.';
     throw new CalendarError(message,response.status,mutation&&response.status>=500);
   }
   return data;
@@ -48,4 +48,14 @@ export async function createEvent(token,calendarId,draft){
 export async function deleteEvent(token,calendarId,id,etag){
   const result=await calendarRequest(token,eventPath(calendarId,id)+'?sendUpdates=none',{method:'DELETE',ifMatch:etag});
   if(result!==null)throw new CalendarError('Google did not confirm deletion. Check its status before trying again.',0,true);
+}
+export async function listTaggedEvents(token,calendarId,categoryId,now){
+  let pageToken;const rows=[];
+  for(let page=0;page<20;page++){
+    const query=new URLSearchParams({privateExtendedProperty:'timeLedgerCategoryId='+categoryId,timeMax:new Date(now).toISOString(),showDeleted:'false',singleEvents:'false',maxResults:'250'});
+    if(pageToken)query.set('pageToken',pageToken);
+    const data=await calendarRequest(token,`calendars/${encodeURIComponent(calendarId)}/events?${query}`);
+    rows.push(...(data.items||[]));pageToken=data.nextPageToken;if(!pageToken)return rows;
+  }
+  throw new CalendarError('There are too many tagged events to preview safely. No changes were made.');
 }
