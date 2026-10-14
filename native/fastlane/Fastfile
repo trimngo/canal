@@ -1,0 +1,48 @@
+require "base64"
+require "tmpdir"
+require "securerandom"
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Validate, sign, and upload the iPhone + Watch app to TestFlight"
+  lane :beta do
+    required = %w[APPLE_TEAM_ID APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_P8 APPLE_DISTRIBUTION_P12_BASE64 APPLE_DISTRIBUTION_P12_PASSWORD]
+    missing = required.select { |name| ENV[name].to_s.empty? }
+    UI.user_error!("Missing GitHub signing configuration: #{missing.join(', ')}") unless missing.empty?
+    UI.user_error!("Invalid Apple team ID") unless ENV.fetch("APPLE_TEAM_ID").match?(/\A[A-Z0-9]{10}\z/)
+    UI.user_error!("Invalid build number") unless ENV.fetch("BUILD_NUMBER", "1").match?(/\A[0-9]+\z/)
+    UI.user_error!("Invalid iCloud flag") unless %w[YES NO].include?(ENV.fetch("LEDGER_CLOUD_ENABLED", "NO"))
+    UI.user_error!("Invalid iCloud container") unless ENV.fetch("LEDGER_CLOUD_CONTAINER", "iCloud.com.trimngo.TimeLedger").match?(/\AiCloud\.[A-Za-z0-9.-]+\z/)
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"), issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+      key_content: ENV.fetch("APP_STORE_CONNECT_KEY_P8"), is_key_content_base64: false
+    )
+    keychain_name = "ledger-ci-#{ENV.fetch('BUILD_NUMBER', 'local')}"
+    keychain_password = SecureRandom.hex(32)
+    Dir.mktmpdir("ledger-signing") do |directory|
+      certificate_path = File.join(directory, "distribution.p12")
+      File.binwrite(certificate_path, Base64.strict_decode64(ENV.fetch("APPLE_DISTRIBUTION_P12_BASE64")))
+      begin
+        create_keychain(name: keychain_name, password: keychain_password, default_keychain: false, unlock: true, timeout: 3600, lock_when_sleeps: true)
+        import_certificate(certificate_path: certificate_path, certificate_password: ENV.fetch("APPLE_DISTRIBUTION_P12_PASSWORD"), keychain_name: keychain_name, keychain_password: keychain_password)
+        sh("bash", "scripts/validate.sh")
+        profiles = {}
+        %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp].each do |identifier|
+          get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, readonly: false)
+          profiles[identifier] = lane_context[SharedValues::SIGH_NAME]
+        end
+        build_app(
+          project: "TimeLedger.xcodeproj", scheme: "TimeLedger", clean: true,
+          output_directory: File.join(directory, "output"), export_method: "app-store",
+          export_options: { signingStyle: "manual", provisioningProfiles: profiles },
+          xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp"
+        )
+        upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
+      ensure
+        delete_keychain(name: keychain_name)
+      end
+    end
+  end
+end

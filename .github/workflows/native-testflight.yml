@@ -1,0 +1,41 @@
+name: Native TestFlight delivery
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['native/**', '.github/workflows/native-testflight.yml']
+permissions:
+  contents: read
+concurrency:
+  group: native-testflight
+  cancel-in-progress: false
+jobs:
+  deliver:
+    if: vars.APPLE_SIGNING_READY == 'true'
+    runs-on: macos-15
+    environment: apple-testflight
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        run: brew install xcodegen
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: native
+      - name: Build and deliver to TestFlight
+        working-directory: native
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          LEDGER_CLOUD_ENABLED: ${{ vars.LEDGER_CLOUD_ENABLED || 'NO' }}
+          LEDGER_CLOUD_CONTAINER: ${{ vars.LEDGER_CLOUD_CONTAINER || 'iCloud.com.trimngo.TimeLedger' }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: bundle exec fastlane beta
