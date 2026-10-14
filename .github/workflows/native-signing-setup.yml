@@ -1,0 +1,41 @@
+name: One-time Apple signing setup
+on:
+  workflow_dispatch:
+    inputs:
+      create_certificate:
+        description: 'Create one new Apple Distribution certificate (requires paid membership and configured API key)'
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: read
+jobs:
+  create:
+    if: inputs.create_certificate
+    runs-on: macos-15
+    environment: apple-testflight
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create encrypted signing bundle
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          SIGNING_OUTPUT_DIRECTORY: ${{ runner.temp }}/ledger-signing-output
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ledger-signing-python"
+          "$RUNNER_TEMP/ledger-signing-python/bin/pip" install 'PyJWT[crypto]==2.10.1'
+          "$RUNNER_TEMP/ledger-signing-python/bin/python" native/scripts/create-signing-certificate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-apple-signing-bundle
+          path: ${{ runner.temp }}/ledger-signing-output/
+          retention-days: 1
+      - name: Next step
+        run: |
+          echo 'Download the encrypted-apple-signing-bundle artifact. Copy APPLE_DISTRIBUTION_P12_BASE64.txt into the GitHub environment secret with that name. Then delete the artifact.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary output
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ledger-signing-output" "$RUNNER_TEMP/ledger-signing-python"
