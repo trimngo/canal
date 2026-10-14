@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   create:
-    if: inputs.create_certificate
+    if: ${{ false }}
     runs-on: macos-15
     environment: apple-testflight
     timeout-minutes: 10
