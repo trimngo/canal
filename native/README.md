@@ -1,7 +1,7 @@
 # Time Ledger for iPhone and Apple Watch
 
 Native SwiftUI apps, with no Google Calendar connection and no notification server.
-Supports iOS 17+ and watchOS 10+. Work is on `feat/native-ios-watch`; the existing
+Supports iOS 17+ and watchOS 10+. Source is on `main`; the existing
 website is separate and remains available.
 
 ## First version
@@ -63,8 +63,10 @@ repository. Secrets belong in GitHub's `apple-testflight` environment.
    the artifact, copy `APPLE_DISTRIBUTION_P12_BASE64.txt` into the secret with that
    name, and delete the artifact. Avoid repeated runs: Apple limits active
    certificates. This workflow never revokes existing certificates.
-6. Set repository variables `APPLE_TEAM_ID` (10-character membership team ID) and
-   `APPLE_SIGNING_READY=true`. Leave `LEDGER_CLOUD_ENABLED=NO` until step 7 is done.
+6. The workflow defaults to Apple Team ID `M3ZCVUVHFT`; the optional repository
+   variable `APPLE_TEAM_ID` can override it. Set repository variable
+   `APPLE_SIGNING_READY=true` when registration and signing are complete.
+   Leave `LEDGER_CLOUD_ENABLED=NO` until step 7 is done.
    Run **Native TestFlight delivery**. It validates both apps, downloads/creates
    provisioning profiles, signs them with your certificate, and uploads the build.
    Add yourself as an internal tester and install it through TestFlight on your
