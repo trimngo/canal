@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deliver:
-    if: vars.APPLE_SIGNING_READY == 'true'
+    if: github.ref == 'refs/heads/main' && vars.APPLE_SIGNING_READY == 'true'
     runs-on: macos-15
     environment: apple-testflight
     timeout-minutes: 40
