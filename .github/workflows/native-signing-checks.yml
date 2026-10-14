@@ -13,6 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install signing test dependencies
-        run: python3 -m pip install -r native/scripts/signing-requirements.txt PyYAML
-      - name: Verify encryption, authorization checks, and private delivery
+        run: python3 -m pip install PyYAML
+      - name: Verify manual setup and signing restrictions
         run: python3 -m unittest discover -s native/TestsPython -v

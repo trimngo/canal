@@ -1,39 +1,15 @@
-name: One-time Apple signing setup
+name: Apple signing setup guide
 on:
   workflow_dispatch:
-    inputs:
-      create_certificate:
-        description: 'Create one new Apple Distribution certificate (requires paid membership and configured API key)'
-        type: boolean
-        required: true
-        default: false
-permissions:
-  contents: read
-concurrency:
-  group: native-signing-setup
-  cancel-in-progress: false
+permissions: {}
 jobs:
-  create:
-    if: github.ref == 'refs/heads/main' && inputs.create_certificate
-    runs-on: macos-15
-    environment: apple-testflight
-    timeout-minutes: 10
+  guide:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v4
-      - name: Create signing identity and save privately
-        env:
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
-          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
-          SIGNING_SECRET_WRITE_TOKEN: ${{ secrets.SIGNING_SECRET_WRITE_TOKEN }}
+      - name: Manual setup instructions
         run: |
-          python3 -m venv "$RUNNER_TEMP/ledger-signing-python"
-          "$RUNNER_TEMP/ledger-signing-python/bin/pip" install -r native/scripts/signing-requirements.txt
-          "$RUNNER_TEMP/ledger-signing-python/bin/python" native/scripts/create-signing-certificate.py
-      - name: Next step
-        run: |
-          echo 'The signing bundle is saved in the apple-testflight environment as APPLE_DISTRIBUTION_P12_BASE64. There is no download artifact. Revoke the temporary signing-secret writer token in GitHub settings.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Remove temporary output
-        if: always()
-        run: rm -rf "$RUNNER_TEMP/ledger-signing-python"
+          echo 'Create the signing identity on your Mac and paste the encrypted bundle into the apple-testflight environment secret APPLE_DISTRIBUTION_P12_BASE64. Use the password already saved as APPLE_DISTRIBUTION_P12_PASSWORD.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Instructions: https://github.com/trimngo/canal/blob/main/native/README.md#manual-signing-on-your-mac' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This guide does not access Apple credentials, create certificates, or publish signing files. No additional GitHub access token is required.' >> "$GITHUB_STEP_SUMMARY"

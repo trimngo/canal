@@ -30,7 +30,7 @@ repository variable `APPLE_SIGNING_READY` is `true` and signing is configured.
 Never put Apple credentials, signing files, or personal log exports in this public
 repository. Secrets belong in GitHub's `apple-testflight` environment.
 
-## One-time setup, entirely from a browser
+## One-time setup
 
 1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/enroll/)
    with your own Apple Account. Membership costs US$99/year or local pricing.
@@ -54,33 +54,16 @@ repository. Secrets belong in GitHub's `apple-testflight` environment.
    | `APP_STORE_CONNECT_ISSUER_ID` | Team API issuer ID |
    | `APP_STORE_CONNECT_KEY_P8` | Full text of the downloaded `.p8` file |
    | `APPLE_DISTRIBUTION_P12_PASSWORD` | Random password, at least 32 characters |
-   | `SIGNING_SECRET_WRITE_TOKEN` | Temporary fine-grained GitHub token from step 5 |
-   | `APPLE_DISTRIBUTION_P12_BASE64` | Created automatically by step 5; only add manually if you already have a signing bundle |
+   | `APPLE_DISTRIBUTION_P12_BASE64` | Encrypted signing bundle, copied from your Mac in step 5 |
 
-5. If you don't have a signing certificate/private key, create a temporary
-   [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new).
-   Set resource owner to `trimngo`, select only repository `canal`, choose a
-   short expiration (for example, 7 days), and grant repository permission
-   **Environments: Read and write**. No source-code or administration permission
-   is needed. Save it as `SIGNING_SECRET_WRITE_TOKEN` in `apple-testflight`;
-   never paste the token into chat. GitHub's built-in workflow token cannot
-   write these environment secrets.
-
-   Run **One-time Apple signing setup** in GitHub Actions on `main` and select
-   `create_certificate`. Before creating a private key or an Apple certificate,
-   the workflow checks that it can save secrets. It creates a password-encrypted
-   signing bundle and encrypts it again with GitHub's environment public key,
-   then saves it directly as `APPLE_DISTRIBUTION_P12_BASE64`. There is no
-   downloadable artifact or signing file in the repository, releases, or logs.
-   Private files are removed from the runner's temporary directory.
-
-   After saving the bundle, the workflow removes its saved copy of the temporary
-   token. **Revoke the token in your GitHub account settings after success**;
-   removing its secret copy is not revocation. An existing signing bundle is
-   preserved and no new certificate is created. This workflow never revokes
-   existing certificates. If a run fails after Apple created a certificate,
-   check Certificates, Identifiers & Profiles before retrying; Apple limits
-   active certificates.
+5. Create the signing identity on your Mac using the [manual instructions
+   below](#manual-signing-on-your-mac). Paste the encrypted bundle directly into
+   the `APPLE_DISTRIBUTION_P12_BASE64` environment secret. No additional GitHub
+   token is needed and no signing file is published as an artifact. The cloud
+   certificate generator is disabled; **Apple signing setup guide** only shows
+   instructions and has no access to secrets. If you already have a suitable
+   distribution identity with its private key, export that instead of creating
+   another certificate.
 6. The workflow defaults to Apple Team ID `M3ZCVUVHFT`; the optional repository
    variable `APPLE_TEAM_ID` can override it. Set repository variable
    `APPLE_SIGNING_READY=true` when registration and signing are complete.
@@ -104,7 +87,7 @@ instant. TestFlight builds expire after 90 days. Public App Store distribution i
 separate and requires review. GitHub runner billing depends on repository type
 and plan; standard hosted runners for this public repository are generally free.
 
-Both signing workflows run only on `main`. For an additional GitHub-side
+TestFlight signing runs only on `main`. For an additional GitHub-side
 restriction, open Settings → Environments → `apple-testflight` → Deployment
 branches and tags, select only branch `main`, and do not allow tags. This account
 setting must be configured by the repository owner; workflow checks alone do
@@ -112,9 +95,48 @@ not replace it. Keep write access to this repository limited to people you trust
 because a person who can change trusted signing code can change how it uses
 credentials. Making the repository public does not expose GitHub secret values.
 
-`Signing security checks` tests private secret delivery, encryption, branch and
-permission checks, error-message privacy, and temporary-file cleanup without
-using Apple credentials or creating a certificate.
+`Signing security checks` verifies that the setup guide has no credentials or
+exports, that cloud certificate creation is disabled, and that TestFlight signing
+is restricted to `main`. It uses no Apple credentials and creates no certificate.
+
+## Manual signing on your Mac
+
+This is a one-time setup. Subsequent cloud builds reuse the saved identity until
+its certificate expires (normally after one year) or is revoked. Your Mac does
+not need to stay on and you do not need to plug in your phone for builds.
+
+1. Open **Keychain Access** on your Mac. In its menu choose **Certificate
+   Assistant → Request a Certificate From a Certificate Authority**. Enter your
+   email address and a common name such as `Time Ledger Signing`; select
+   **Saved to disk**. Save the certificate signing request (`.certSigningRequest`).
+   Its matching private key remains in your Mac's keychain.
+2. Open [Apple Certificates](https://developer.apple.com/account/resources/certificates/list),
+   press **+**, select **Apple Distribution**, and upload that signing request.
+   Download the issued `.cer` file and double-click it to import it into Keychain
+   Access. Do not choose Developer ID, which is for a different distribution path.
+3. In Keychain Access → **My Certificates**, find the new **Apple Distribution**
+   identity. Expand it and verify there is a private key underneath. Select the
+   identity and use **File → Export Items** to export a `.p12` file. Save it as
+   `TimeLedgerSigning.p12` in Downloads. Set its export password to the same
+   password you already stored in `APPLE_DISTRIBUTION_P12_PASSWORD`.
+4. In your Mac's Terminal run the following. It copies the encoded encrypted
+   bundle to the clipboard without printing it:
+
+   ```sh
+   base64 < "$HOME/Downloads/TimeLedgerSigning.p12" | tr -d '\n' | pbcopy
+   ```
+
+5. Open [the GitHub environment settings](https://github.com/trimngo/canal/settings/environments),
+   select `apple-testflight`, add secret `APPLE_DISTRIBUTION_P12_BASE64`, paste,
+   and save. Do not paste it into chat or commit it as a source file. Keep a secure
+   backup of the identity and its password, and clear the clipboard after saving.
+
+Base64 is only an encoding. The `.p12` export password provides encryption;
+GitHub additionally protects the secret in its storage. GitHub does not provide
+an API to read a saved secret's value. The trusted TestFlight build runner must
+receive signing secrets to sign an app, but the assistant does not need their
+values or permission to manage them. Anyone able to modify trusted build code
+could change how credentials are used, so limit repository write access.
 
 ## Local or cloud Mac validation
 
