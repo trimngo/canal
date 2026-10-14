@@ -24,7 +24,7 @@ public struct Revision: Codable, Equatable, Comparable, Sendable {
     }
 }
 
-public struct Category: Codable, Identifiable, Equatable, Sendable {
+public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
     public var id: String
     public var name: String
     public var revision: Revision
@@ -80,9 +80,9 @@ public struct BreakdownRow: Identifiable, Equatable, Sendable {
 
 public struct Ledger: Codable, Equatable, Sendable {
     public var schemaVersion = 1
-    public var categories: [Category] = [
-        Category(id: "work", name: "Work"), Category(id: "personal", name: "Personal"),
-        Category(id: "rest", name: "Rest")
+    public var categories: [LedgerCategory] = [
+        LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "personal", name: "Personal"),
+        LedgerCategory(id: "rest", name: "Rest")
     ]
     public var entries: [CheckIn] = []
     public var captures: [Capture] = []
@@ -133,7 +133,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         entries.removeAll { $0.id == entry.id }; entries.append(entry)
     }
 
-    public mutating func saveCategory(id: String?, name: String, writer: String) throws {
+    public mutating func saveLedgerCategory(id: String?, name: String, writer: String) throws {
         let text = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 60 else { throw LedgerError.invalidCategory }
         guard !categories.contains(where: { $0.id != id && $0.name.caseInsensitiveCompare(text) == .orderedSame }) else { throw LedgerError.duplicateCategory }
@@ -141,7 +141,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         if let id {
             guard let index = categories.firstIndex(where: { $0.id == id }) else { throw LedgerError.invalidCategory }
             categories[index].name = text; categories[index].revision = revision
-        } else { categories.append(Category(name: text, revision: revision)) }
+        } else { categories.append(LedgerCategory(name: text, revision: revision)) }
     }
 
     public mutating func addCapture(text: String, writer: String, now: Date = Date()) throws {

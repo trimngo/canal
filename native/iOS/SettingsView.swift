@@ -14,7 +14,7 @@ struct SettingsView: View {
     @StateObject private var notifications = NotificationScheduler.shared
     @State private var settings = Settings()
     @State private var categoryName = ""
-    @State private var editingCategory: Category?
+    @State private var editingCategory: LedgerCategory?
     @State private var testSent = false
     @State private var saving = false
     private let stepMinutes = Array(stride(from: 0, to: 1440, by: 15))
@@ -64,7 +64,7 @@ struct SettingsView: View {
                 ForEach(store.ledger.categories) { category in
                     Button(category.name) { editingCategory = category; categoryName = category.name }
                 }
-                Button("Add category") { editingCategory = Category(id: "", name: ""); categoryName = "" }
+                Button("Add category") { editingCategory = LedgerCategory(id: "", name: ""); categoryName = "" }
             } footer: { Text("Renaming a category updates its label everywhere. Google Calendar is not connected.") }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)
@@ -75,10 +75,10 @@ struct SettingsView: View {
             }
         }.navigationTitle("Settings")
             .task { settings = store.ledger.settings; await notifications.refreshStatus() }
-            .alert(editingCategory?.id == "" ? "New category" : "Rename category", isPresented: Binding(get: { editingCategory != nil }, set: { if !$0 { editingCategory = nil } })) {
+            .alert(editingLedgerCategory?.id == "" ? "New category" : "Rename category", isPresented: Binding(get: { editingCategory != nil }, set: { if !$0 { editingCategory = nil } })) {
                 TextField("Category name", text: $categoryName)
                 Button("Save") {
-                    do { try store.saveCategory(id: editingCategory?.id == "" ? nil : editingCategory?.id, name: categoryName) } catch { store.report(error) }
+                    do { try store.saveLedgerCategory(id: editingLedgerCategory?.id == "" ? nil : editingLedgerCategory?.id, name: categoryName) } catch { store.report(error) }
                     editingCategory = nil
                 }
                 Button("Cancel", role: .cancel) { editingCategory = nil }

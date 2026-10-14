@@ -6,6 +6,7 @@ struct CheckInView: View {
     @State private var showIntervals = false
     @State private var saved = false
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 24) {
             Text("One moment at a time.").font(.subheadline).foregroundStyle(.secondary)
             Text("What were you doing?").font(.largeTitle.bold())
@@ -20,7 +21,9 @@ struct CheckInView: View {
             Text("Each answer covers 15 minutes. Missing one is okay.")
                 .font(.footnote).foregroundStyle(.secondary)
         }
-        .padding(24).navigationTitle("Check in").navigationBarTitleDisplayMode(.inline)
+        .padding(24)
+        }.scrollDismissesKeyboard(.interactively)
+        .navigationTitle("Check in").navigationBarTitleDisplayMode(.inline)
         .disabled(!store.storageAvailable)
         .onChange(of: store.selectedSlot) { _, _ in saved = false }
         .sheet(isPresented: $showIntervals) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 import LedgerCore
 
 @main
@@ -17,5 +18,6 @@ struct TimeLedgerWatchApp: App {
                     Button("OK") { store.error = nil }
                 } message: { Text(store.error ?? "") }
         }
+        WKNotificationScene(controller: CheckInNotificationController.self, category: "CHECKIN")
     }
 }

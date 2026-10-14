@@ -80,8 +80,8 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; draft.setCaptureDone(id: capture.id, done: done, writer: writer); try commit(draft)
     }
 
-    func saveCategory(id: String?, name: String) throws {
-        var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer); try commit(draft)
+    func saveLedgerCategory(id: String?, name: String) throws {
+        var draft = ledger; try draft.saveLedgerCategory(id: id, name: name, writer: writer); try commit(draft)
     }
 
     func saveSettings(_ settings: Settings) throws {

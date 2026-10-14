@@ -21,6 +21,10 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
       - name: Install project generator
         run: brew install xcodegen
+      - name: Validate signing automation syntax
+        run: |
+          ruby -c native/fastlane/Fastfile
+          python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
       - name: Test core and build iPhone and Watch apps
         env:
           LEDGER_UI_TESTS: '1'
