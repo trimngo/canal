@@ -40,6 +40,10 @@ platform :ios do
           export_options: { signingStyle: "manual", provisioningProfiles: profiles },
           xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp"
         )
+        actual_build = get_ipa_info_plist_value(ipa: lane_context[SharedValues::IPA_OUTPUT_PATH], key: "CFBundleVersion")
+        expected_build = ENV.fetch("BUILD_NUMBER", "1")
+        UI.user_error!("Packaged build number #{actual_build} does not match requested build number #{expected_build}") unless actual_build.to_s == expected_build
+        UI.message("Verified packaged build number: #{actual_build}")
         upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
       ensure
         delete_keychain(name: keychain_name)
