@@ -1,0 +1,13 @@
+Generated/
+TimeLedger.xcodeproj/
+build/
+Core/.build/
+.bundle/
+vendor/
+fastlane/report.xml
+fastlane/README.md
+*.ipa
+*.dSYM.zip
+*.p12
+*.p8
+*.mobileprovision
