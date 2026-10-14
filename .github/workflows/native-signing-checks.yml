@@ -1,0 +1,18 @@
+name: Signing security checks
+on:
+  push:
+    branches: [main, 'feat/native-*']
+    paths: ['native/scripts/**', 'native/TestsPython/**', '.github/workflows/native-signing-*.yml', '.github/workflows/native-testflight.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install signing test dependencies
+        run: python3 -m pip install -r native/scripts/signing-requirements.txt PyYAML
+      - name: Verify encryption, authorization checks, and private delivery
+        run: python3 -m unittest discover -s native/TestsPython -v

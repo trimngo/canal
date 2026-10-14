@@ -54,15 +54,33 @@ repository. Secrets belong in GitHub's `apple-testflight` environment.
    | `APP_STORE_CONNECT_ISSUER_ID` | Team API issuer ID |
    | `APP_STORE_CONNECT_KEY_P8` | Full text of the downloaded `.p8` file |
    | `APPLE_DISTRIBUTION_P12_PASSWORD` | Random password, at least 32 characters |
-   | `APPLE_DISTRIBUTION_P12_BASE64` | Existing encrypted signing bundle, or output of step 5 |
+   | `SIGNING_SECRET_WRITE_TOKEN` | Temporary fine-grained GitHub token from step 5 |
+   | `APPLE_DISTRIBUTION_P12_BASE64` | Created automatically by step 5; only add manually if you already have a signing bundle |
 
-5. If you don't have a signing certificate/private key, run **One-time Apple
-   signing setup** in GitHub Actions after merging the native workflow to the
-   default branch. Select `create_certificate`. It creates one certificate and
-   produces a password-encrypted signing bundle, without a local Mac. Download
-   the artifact, copy `APPLE_DISTRIBUTION_P12_BASE64.txt` into the secret with that
-   name, and delete the artifact. Avoid repeated runs: Apple limits active
-   certificates. This workflow never revokes existing certificates.
+5. If you don't have a signing certificate/private key, create a temporary
+   [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new).
+   Set resource owner to `trimngo`, select only repository `canal`, choose a
+   short expiration (for example, 7 days), and grant repository permission
+   **Environments: Read and write**. No source-code or administration permission
+   is needed. Save it as `SIGNING_SECRET_WRITE_TOKEN` in `apple-testflight`;
+   never paste the token into chat. GitHub's built-in workflow token cannot
+   write these environment secrets.
+
+   Run **One-time Apple signing setup** in GitHub Actions on `main` and select
+   `create_certificate`. Before creating a private key or an Apple certificate,
+   the workflow checks that it can save secrets. It creates a password-encrypted
+   signing bundle and encrypts it again with GitHub's environment public key,
+   then saves it directly as `APPLE_DISTRIBUTION_P12_BASE64`. There is no
+   downloadable artifact or signing file in the repository, releases, or logs.
+   Private files are removed from the runner's temporary directory.
+
+   After saving the bundle, the workflow removes its saved copy of the temporary
+   token. **Revoke the token in your GitHub account settings after success**;
+   removing its secret copy is not revocation. An existing signing bundle is
+   preserved and no new certificate is created. This workflow never revokes
+   existing certificates. If a run fails after Apple created a certificate,
+   check Certificates, Identifiers & Profiles before retrying; Apple limits
+   active certificates.
 6. The workflow defaults to Apple Team ID `M3ZCVUVHFT`; the optional repository
    variable `APPLE_TEAM_ID` can override it. Set repository variable
    `APPLE_SIGNING_READY=true` when registration and signing are complete.
@@ -85,6 +103,18 @@ TestFlight or tap Update. Apple still processes uploads; installation is not
 instant. TestFlight builds expire after 90 days. Public App Store distribution is
 separate and requires review. GitHub runner billing depends on repository type
 and plan; standard hosted runners for this public repository are generally free.
+
+Both signing workflows run only on `main`. For an additional GitHub-side
+restriction, open Settings → Environments → `apple-testflight` → Deployment
+branches and tags, select only branch `main`, and do not allow tags. This account
+setting must be configured by the repository owner; workflow checks alone do
+not replace it. Keep write access to this repository limited to people you trust,
+because a person who can change trusted signing code can change how it uses
+credentials. Making the repository public does not expose GitHub secret values.
+
+`Signing security checks` tests private secret delivery, encryption, branch and
+permission checks, error-message privacy, and temporary-file cleanup without
+using Apple credentials or creating a certificate.
 
 ## Local or cloud Mac validation
 

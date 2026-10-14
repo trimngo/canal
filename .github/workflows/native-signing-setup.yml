@@ -9,33 +9,31 @@ on:
         default: false
 permissions:
   contents: read
+concurrency:
+  group: native-signing-setup
+  cancel-in-progress: false
 jobs:
   create:
-    if: ${{ false }}
+    if: github.ref == 'refs/heads/main' && inputs.create_certificate
     runs-on: macos-15
     environment: apple-testflight
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Create encrypted signing bundle
+      - name: Create signing identity and save privately
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
           APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
-          SIGNING_OUTPUT_DIRECTORY: ${{ runner.temp }}/ledger-signing-output
+          SIGNING_SECRET_WRITE_TOKEN: ${{ secrets.SIGNING_SECRET_WRITE_TOKEN }}
         run: |
           python3 -m venv "$RUNNER_TEMP/ledger-signing-python"
-          "$RUNNER_TEMP/ledger-signing-python/bin/pip" install 'PyJWT[crypto]==2.10.1'
+          "$RUNNER_TEMP/ledger-signing-python/bin/pip" install -r native/scripts/signing-requirements.txt
           "$RUNNER_TEMP/ledger-signing-python/bin/python" native/scripts/create-signing-certificate.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: encrypted-apple-signing-bundle
-          path: ${{ runner.temp }}/ledger-signing-output/
-          retention-days: 1
       - name: Next step
         run: |
-          echo 'Download the encrypted-apple-signing-bundle artifact. Copy APPLE_DISTRIBUTION_P12_BASE64.txt into the GitHub environment secret with that name. Then delete the artifact.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The signing bundle is saved in the apple-testflight environment as APPLE_DISTRIBUTION_P12_BASE64. There is no download artifact. Revoke the temporary signing-secret writer token in GitHub settings.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary output
         if: always()
-        run: rm -rf "$RUNNER_TEMP/ledger-signing-output" "$RUNNER_TEMP/ledger-signing-python"
+        run: rm -rf "$RUNNER_TEMP/ledger-signing-python"
