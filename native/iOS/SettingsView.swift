@@ -75,10 +75,10 @@ struct SettingsView: View {
             }
         }.navigationTitle("Settings")
             .task { settings = store.ledger.settings; await notifications.refreshStatus() }
-            .alert(editingLedgerCategory?.id == "" ? "New category" : "Rename category", isPresented: Binding(get: { editingCategory != nil }, set: { if !$0 { editingCategory = nil } })) {
+            .alert(editingCategory?.id == "" ? "New category" : "Rename category", isPresented: Binding(get: { editingCategory != nil }, set: { if !$0 { editingCategory = nil } })) {
                 TextField("Category name", text: $categoryName)
                 Button("Save") {
-                    do { try store.saveLedgerCategory(id: editingLedgerCategory?.id == "" ? nil : editingLedgerCategory?.id, name: categoryName) } catch { store.report(error) }
+                    do { try store.saveCategory(id: editingCategory?.id == "" ? nil : editingCategory?.id, name: categoryName) } catch { store.report(error) }
                     editingCategory = nil
                 }
                 Button("Cancel", role: .cancel) { editingCategory = nil }

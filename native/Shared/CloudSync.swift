@@ -3,7 +3,7 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
-    case category(Category), entry(CheckIn), capture(Capture), settings(Settings)
+    case category(LedgerCategory), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
         case .category(let item): return "category-\(item.id)"

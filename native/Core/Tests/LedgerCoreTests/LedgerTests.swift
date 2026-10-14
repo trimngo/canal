@@ -41,10 +41,10 @@ final class LedgerTests: XCTestCase {
     func testCategoryRenamePreservesAssignments() throws {
         var ledger = Ledger(); let now = date("2026-10-14T10:00:00Z")
         try ledger.saveCheckIn(end: now, activity: "Prep", categoryID: "work", writer: "phone", now: now)
-        try ledger.saveLedgerCategory(id: "work", name: "Teaching", writer: "phone")
+        try ledger.saveCategory(id: "work", name: "Teaching", writer: "phone")
         XCTAssertEqual(ledger.breakdown(on: now, calendar: utc).first { $0.id == "work" }?.name, "Teaching")
         XCTAssertEqual(ledger.entries.first?.categoryID, "work")
-        XCTAssertThrowsError(try ledger.saveLedgerCategory(id: nil, name: " teaching ", writer: "phone"))
+        XCTAssertThrowsError(try ledger.saveCategory(id: nil, name: " teaching ", writer: "phone"))
     }
 
     func testMidnightIntervalBelongsToPreviousDay() throws {

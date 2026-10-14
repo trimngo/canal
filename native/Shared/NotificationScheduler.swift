@@ -12,7 +12,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
 
     func configureActions() {
         let open = UNNotificationAction(identifier: "OPEN_CHECKIN", title: "Log what I was doing", options: [.foreground])
-        center.setNotificationCategories([UNNotificationLedgerCategory(identifier: "CHECKIN", actions: [open], intentIdentifiers: [])])
+        center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [open], intentIdentifiers: [])])
     }
 
     func permission() async throws -> Bool {

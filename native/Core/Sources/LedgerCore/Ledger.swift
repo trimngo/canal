@@ -133,7 +133,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         entries.removeAll { $0.id == entry.id }; entries.append(entry)
     }
 
-    public mutating func saveLedgerCategory(id: String?, name: String, writer: String) throws {
+    public mutating func saveCategory(id: String?, name: String, writer: String) throws {
         let text = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 60 else { throw LedgerError.invalidCategory }
         guard !categories.contains(where: { $0.id != id && $0.name.caseInsensitiveCompare(text) == .orderedSame }) else { throw LedgerError.duplicateCategory }
