@@ -20,7 +20,7 @@ struct SettingsView: View {
     private let stepMinutes = Array(stride(from: 0, to: 1440, by: 15))
     var body: some View {
         Form {
-            Section("Check-in notifications") {
+            Section {
                 Toggle("Every 15 minutes", isOn: $settings.notificationsEnabled)
                 Picker("Start", selection: $settings.startMinute) {
                     ForEach(stepMinutes, id: \.self) { Text(minuteLabel($0)).tag($0) }
@@ -43,7 +43,7 @@ struct SettingsView: View {
                     }
                 }.disabled(saving || !store.storageAvailable)
                 Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
-            } footer: {
+            } header: { Text("Check-in notifications") } footer: {
                 Text("Default: 7:15 AM–10 PM. Prompts cover the preceding 15 minutes. A window can span up to 15 hours to stay within system scheduling limits. Alerts follow your Focus and Watch settings.")
             }
             Section("Test delivery") {
@@ -60,12 +60,12 @@ struct SettingsView: View {
                     do { try store.saveSettings(current); settings.use24HourTime = value } catch { store.report(error) }
                 }))
             }
-            Section("Categories") {
+            Section {
                 ForEach(store.ledger.categories) { category in
                     Button(category.name) { editingCategory = category; categoryName = category.name }
                 }
                 Button("Add category") { editingCategory = LedgerCategory(id: "", name: ""); categoryName = "" }
-            } footer: { Text("Renaming a category updates its label everywhere. Google Calendar is not connected.") }
+            } header: { Text("Categories") } footer: { Text("Renaming a category updates its label everywhere. Google Calendar is not connected.") }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)
                 Button("Sync now") { store.refresh() }

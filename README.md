@@ -4,5 +4,5 @@ Time Ledger: time check-ins, categorization, and quick capture.
 
 - [Native iPhone and Apple Watch app](native/README.md): SwiftUI, Siri capture,
   local notifications, and automated cloud builds/TestFlight delivery.
-- `notification-test/`: existing hosted web app and push notification prototype.
-- `time-ledger/`: earlier Google Calendar prototype.
+- Earlier web and Google Calendar prototypes remain on
+  [feat/pwa-notification-test](https://github.com/trimngo/canal/tree/feat/pwa-notification-test).
