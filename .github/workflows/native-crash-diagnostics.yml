@@ -1,0 +1,33 @@
+name: Native crash diagnostics
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/scripts/crash_diagnostics.py', '.github/scripts/test_crash_diagnostics.py', '.github/workflows/native-crash-diagnostics.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main' && vars.APPLE_SIGNING_READY == 'true'
+    runs-on: ubuntu-latest
+    environment: apple-testflight
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify diagnostic privacy
+        run: python3 -m unittest discover -s .github/scripts -p 'test_crash_diagnostics.py' -v
+      - name: Install Apple authentication dependency
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ledger-diagnostics-python"
+          "$RUNNER_TEMP/ledger-diagnostics-python/bin/pip" install 'PyJWT[crypto]==2.10.1'
+      - name: Read submitted crash feedback and emit safe signals
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: '"$RUNNER_TEMP/ledger-diagnostics-python/bin/python" .github/scripts/crash_diagnostics.py'
+      - name: Remove temporary dependencies
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ledger-diagnostics-python"
