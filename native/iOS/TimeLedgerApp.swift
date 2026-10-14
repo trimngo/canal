@@ -11,6 +11,11 @@ struct TimeLedgerApp: App {
                 .task {
                     store.start(); LedgerShortcuts.updateAppShortcutParameters()
                     do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) }
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--ui-notification-checkin") {
+                        NotificationScheduler.shared.presentSample()
+                    }
+                    #endif
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
@@ -38,6 +43,6 @@ struct RootView: View {
             NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(2)
             NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(3)
         }
-        .onChange(of: store.selectedSlot) { _, _ in tab = 0 }
+        .onChange(of: store.sampleRequestID) { _, _ in tab = 0 }
     }
 }

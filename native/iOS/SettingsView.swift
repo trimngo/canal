@@ -32,10 +32,15 @@ struct SettingsView: View {
                     Task {
                         saving = true; defer { saving = false }
                         do {
-                            _ = try settings.notificationMinutes()
-                            if settings.notificationsEnabled, !(try await notifications.permission()) { throw NotificationError.denied }
-                            try await notifications.apply(settings)
-                            try store.saveSettings(settings)
+                            var proposed = store.ledger.settings
+                            proposed.startMinute = settings.startMinute
+                            proposed.endMinute = settings.endMinute
+                            proposed.notificationsEnabled = settings.notificationsEnabled
+                            _ = try proposed.notificationMinutes()
+                            if proposed.notificationsEnabled, !(try await notifications.permission()) { throw NotificationError.denied }
+                            try await notifications.apply(proposed)
+                            try store.saveSettings(proposed)
+                            settings = store.ledger.settings
                         } catch {
                             try? await notifications.apply(store.ledger.settings)
                             store.report(error)
@@ -44,7 +49,7 @@ struct SettingsView: View {
                 }.disabled(saving || !store.storageAvailable)
                 Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
             } header: { Text("Check-in notifications") } footer: {
-                Text("Default: 7:15 AM–10 PM. Prompts cover the preceding 15 minutes. A window can span up to 15 hours to stay within system scheduling limits. Alerts follow your Focus and Watch settings.")
+                Text("Default: 7 AM–10 PM. Prompts ask what you’re doing at that moment. A window can span up to 15 hours to stay within system scheduling limits. You can log manually anytime. Alerts follow your Focus and Watch settings.")
             }
             Section("Test delivery") {
                 Button("Notify me in 15 seconds") {
@@ -59,6 +64,16 @@ struct SettingsView: View {
                     var current = store.ledger.settings; current.use24HourTime = value
                     do { try store.saveSettings(current); settings.use24HourTime = value } catch { store.report(error) }
                 }))
+            }
+            Section {
+                Picker("Method", selection: Binding(get: { store.ledger.settings.inferenceMethod }, set: { value in
+                    var current = store.ledger.settings; current.inferenceMethod = value
+                    do { try store.saveSettings(current); settings.inferenceMethod = value } catch { store.report(error) }
+                })) {
+                    ForEach(InferenceMethod.allCases) { Text($0.name).tag($0) }
+                }
+            } header: { Text("Estimate time") } footer: {
+                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. The last sample continues to now, or midnight for a past day. Time before the first sample stays unestimated. Changing methods keeps your original samples.")
             }
             Section {
                 ForEach(store.ledger.categories) { category in

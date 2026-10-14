@@ -12,7 +12,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     private override init() { super.init(); center.delegate = self }
 
     func configureActions() {
-        let open = UNNotificationAction(identifier: "OPEN_CHECKIN", title: "Log what I was doing", options: [.foreground])
+        let open = UNNotificationAction(identifier: "OPEN_CHECKIN", title: "Log what I’m doing", options: [.foreground])
         center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [open], intentIdentifiers: [])])
     }
 
@@ -48,8 +48,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             do {
                 for minute in minutes {
                     let content = UNMutableNotificationContent()
-                    content.title = "What were you doing?"
-                    content.body = "Log the last 15 minutes. Categorize now or later."
+                    content.title = "What are you doing right now?"
+                    content.body = "Record this moment. Categorize now or later."
                     content.sound = .default; content.categoryIdentifier = "CHECKIN"
                     content.userInfo = ["minute": minute]
                     var components = DateComponents(); components.hour = minute / 60; components.minute = minute % 60
@@ -71,6 +71,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         content.title = "Time Ledger test"
         content.body = "If you see this, native notifications are working."
         content.sound = .default
+        content.categoryIdentifier = "CHECKIN"
         try await center.add(UNNotificationRequest(identifier: "notification-test", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 15, repeats: false)))
         await refreshStatus()
     }
@@ -81,14 +82,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         guard response.notification.request.content.categoryIdentifier == "CHECKIN" else { return }
-        let delivered = response.notification.date
-        let minute = response.notification.request.content.userInfo["minute"] as? Int
-        var calendar = Calendar.current
-        calendar.timeZone = .current
-        let scheduled = minute.flatMap { calendar.date(bySettingHour: $0 / 60, minute: $0 % 60, second: 0, of: delivered) }
-        let end = Ledger.slotEnd(at: scheduled ?? delivered)
-        await MainActor.run { LedgerStore.shared.selectedSlot = min(end, Ledger.slotEnd(at: Date())) }
+        await MainActor.run { self.presentSample() }
     }
+
+    func presentSample() { LedgerStore.shared.beginSample() }
 }
 
 enum NotificationError: LocalizedError {

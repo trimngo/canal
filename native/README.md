@@ -6,12 +6,18 @@ website is separate and remains available.
 
 ## First version
 
-- Every 15 minutes during a configurable same-day window; default 7:15 AM–10 PM.
-  Each answered prompt covers the preceding 15 minutes. Missed prompts stay unlogged.
+- Log an instantaneous sample anytime, or respond to prompts every 15 minutes
+  during a configurable same-day window; default 7 AM–10 PM. A response records
+  what is happening at its saved timestamp, not a fixed 15-minute interval.
 - Categorize immediately or later, edit a previous answer, and rename categories
   without touching any external calendar.
-- Daily minutes and percentages use a fixed 1,440-minute denominator. Unlogged
-  time includes future intervals today; DST transition days have 23 or 25 real hours.
+- Estimate daily time with midpoint interpolation (default) or carry-forward.
+  Midpoint puts activity changes halfway between observations. Time before the
+  first sample is unestimated; the latest observation extends to now today or
+  midnight on a past day. Percentages use the whole day, normally 1,440 minutes;
+  daylight-saving days use their actual 23- or 25-hour duration.
+- Preserve raw timestamps, activities, and categories when changing estimation
+  methods. Upgrade schema-1 logs with a local backup before writing schema 2.
 - iPhone inbox for thoughts/tasks, completion and reopening. Captures do not count
   as time spent. Timed task reminders are a later feature.
 - Watch: dictate check-ins and captures, choose a category, view today's breakdown.
@@ -160,7 +166,7 @@ data format. No account/server credentials are needed for simulator validation.
 
 ## Notification and synchronization behavior to verify on your devices
 
-The iPhone schedules up to 60 repeating daily calendar notifications, leaving
+The iPhone schedules up to 61 repeating daily calendar notifications, leaving
 capacity for the test alert and future features. Apple can silence notifications
 with Focus, Scheduled Summary, or device settings. Watch forwarding follows
 Apple's usual routing: a notification may appear on your Watch instead of your
@@ -178,3 +184,12 @@ Before relying on it, test locked-phone alerts, Watch forwarding, Siri capture
 on both devices, offline Watch capture/reconnection, cloud recovery, timezone
 changes, and editing a late notification. Those require real devices and Apple
 signing; simulator builds alone do not verify them.
+
+## Crash diagnostics
+
+TestFlight already collects crash reports for Apple. `Native crash diagnostics`
+checks submitted TestFlight crash feedback hourly, using the existing Apple API
+key inside the GitHub environment. It emits only fixed allowlisted exception and
+component indicators. Raw reports, tester metadata, comments, and activity text
+are never printed or uploaded as artifacts. This feedback API may not expose all
+automatically collected Apple crash reports, and new reports may be delayed.

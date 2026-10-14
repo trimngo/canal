@@ -6,7 +6,7 @@ import LedgerCore
 final class LedgerStore: ObservableObject {
     static let shared = LedgerStore()
     @Published private(set) var ledger = Ledger()
-    @Published var selectedSlot = Ledger.slotEnd(at: Date())
+    @Published var sampleRequestID = UUID()
     @Published var error: String?
     @Published var syncStatus = "Saved on this device"
     @Published private(set) var storageAvailable = true
@@ -25,9 +25,23 @@ final class LedgerStore: ObservableObject {
         file = directory.appendingPathComponent("ledger-v1.json")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-legacy-ledger") {
+                var fixture = Ledger(); fixture.schemaVersion = 1
+                fixture.entries = [CheckIn(end: Ledger.slotEnd(at: Date()), activity: "Legacy sample UI fixture", categoryID: "work", revision: Revision(counter: 1, writer: "fixture"))]
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            #endif
             if FileManager.default.fileExists(atPath: file.path) {
-                let loaded = try JSONDecoder().decode(Ledger.self, from: Data(contentsOf: file))
-                guard loaded.schemaVersion == 1 else { throw StoreError.unsupportedVersion }
+                let original = try Data(contentsOf: file)
+                var loaded = try JSONDecoder().decode(Ledger.self, from: original)
+                guard (1...2).contains(loaded.schemaVersion) else { throw StoreError.unsupportedVersion }
+                if loaded.schemaVersion == 1 {
+                    let backup = directory.appendingPathComponent("ledger-before-instant-samples.json")
+                    if !FileManager.default.fileExists(atPath: backup.path) { try original.write(to: backup, options: [.atomic]) }
+                    loaded.schemaVersion = 2
+                    try JSONEncoder().encode(loaded).write(to: file, options: [.atomic])
+                }
                 ledger = loaded
             }
         } catch {
@@ -45,8 +59,11 @@ final class LedgerStore: ObservableObject {
             cloud = CloudSync(store: self)
         } else { syncStatus = "Device + paired Watch · iCloud setup pending" }
         saveObserver = { [weak self] in
-            self?.companion?.send()
-            self?.cloud?.requestSync()
+            // Leave the editor's save transaction before starting device sync.
+            Task { @MainActor [weak self] in
+                self?.companion?.send()
+                self?.cloud?.requestSync()
+            }
         }
         companion?.start(); cloud?.requestSync()
     }
@@ -61,14 +78,16 @@ final class LedgerStore: ObservableObject {
     }
 
     func merge(_ incoming: Ledger) throws {
-        guard incoming.schemaVersion == 1 else { throw StoreError.unsupportedVersion }
+        guard (1...2).contains(incoming.schemaVersion) else { throw StoreError.unsupportedVersion }
         var draft = ledger; draft.merge(incoming)
         if draft != ledger { try commit(draft) }
     }
 
-    func saveCheckIn(end: Date, activity: String, categoryID: String?) throws {
+    func beginSample() { sampleRequestID = UUID() }
+
+    func saveSample(id: String? = nil, at timestamp: Date = Date(), activity: String, categoryID: String?) throws {
         var draft = ledger
-        try draft.saveCheckIn(end: end, activity: activity, categoryID: categoryID, writer: writer)
+        try draft.saveSample(id: id, at: timestamp, activity: activity, categoryID: categoryID, writer: writer)
         try commit(draft)
     }
 
@@ -88,14 +107,17 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.saveSettings(settings, writer: writer); try commit(draft)
     }
 
-    func entry(at end: Date) -> CheckIn? { ledger.entries.first { $0.end == end } }
     func categoryName(_ id: String?) -> String { ledger.categories.first { $0.id == id }?.name ?? "Uncategorized" }
     func time(_ date: Date) -> String {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = ledger.settings.use24HourTime ? "HH:mm" : "h:mm a"
         return formatter.string(from: date)
     }
-    func interval(_ end: Date) -> String { "\(time(end.addingTimeInterval(-900)))–\(time(end))" }
+    func duration(_ minutes: Double) -> String {
+        if minutes > 0, minutes < 1 { return "<1m" }
+        let whole = Int(minutes.rounded())
+        return whole < 60 ? "\(whole)m" : "\(whole / 60)h \(whole % 60)m"
+    }
     func report(_ error: Error) { self.error = error.localizedDescription }
 }
 

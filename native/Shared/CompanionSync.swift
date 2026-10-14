@@ -25,7 +25,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             for transfer in session.outstandingFileTransfers { transfer.cancel() }
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("ledger-transfer-\(UUID().uuidString).json")
             try data.write(to: url, options: [.atomic])
-            session.transferFile(url, metadata: ["schema": 1])
+            session.transferFile(url, metadata: ["schema": 2])
         } catch { store.report(error) }
     }
 

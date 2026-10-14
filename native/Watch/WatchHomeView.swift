@@ -12,21 +12,20 @@ struct WatchHomeView: View {
         TabView(selection: $tab) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("What were you doing?").font(.headline)
-                    Text(store.interval(store.selectedSlot)).font(.caption).foregroundStyle(.secondary)
+                    Text("What are you doing now?").font(.headline)
+                    Text("Record a moment in your day.").font(.caption).foregroundStyle(.secondary)
                     TextField("Dictate an answer", text: $activity)
                     Picker("Category", selection: $categoryID) {
                         Text("Later").tag("")
                         ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
                     }
-                    Button(saved ? "Saved ✓" : "Save check-in") {
+                    Button(saved ? "Saved ✓" : "Save sample") {
                         do {
-                            try store.saveCheckIn(end: store.selectedSlot, activity: activity, categoryID: categoryID.isEmpty ? nil : categoryID)
-                            saved = true
+                            try store.saveSample(activity: activity, categoryID: categoryID.isEmpty ? nil : categoryID)
+                            activity = ""; saved = true
                         } catch { store.report(error) }
                     }.buttonStyle(.borderedProminent).disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
-                    Button("Latest 15 minutes") { store.selectedSlot = Ledger.slotEnd(at: Date()); load() }
-                        .font(.caption)
+                    Button("New sample") { store.beginSample() }.font(.caption)
                 }.padding(.horizontal, 4)
             }.tag(0)
             ScrollView {
@@ -39,23 +38,22 @@ struct WatchHomeView: View {
                     Text("You can review it on your phone.").font(.caption).foregroundStyle(.secondary)
                 }
             }.tag(1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Today").font(.headline)
-                    ForEach(store.ledger.breakdown(on: Date())) { row in
-                        HStack { Text(row.name); Spacer(); Text("\(row.percent, specifier: "%.0f")%").foregroundStyle(.secondary) }.font(.caption)
+            TimelineView(.periodic(from: Date(), by: 60)) { context in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Estimated today").font(.headline)
+                        ForEach(store.ledger.breakdown(on: context.date, now: context.date)) { row in
+                            HStack { Text(row.name); Spacer(); Text("\(row.percent, specifier: "%.0f")%").foregroundStyle(.secondary) }.font(.caption)
+                        }
+                        Text("Of the whole day").font(.caption2).foregroundStyle(.secondary)
+                        Button("Sync") { store.refresh() }
                     }
-                    Text("Of 24 hours").font(.caption2).foregroundStyle(.secondary)
-                    Button("Sync") { store.refresh() }
                 }
             }.tag(2)
         }.tabViewStyle(.verticalPage)
-            .onAppear { load() }
-            .onChange(of: store.selectedSlot) { _, _ in tab = 0; load() }
-    }
-    private func load() {
-        activity = store.entry(at: store.selectedSlot)?.activity ?? ""
-        categoryID = store.entry(at: store.selectedSlot)?.categoryID ?? ""
-        saved = false
+            .onChange(of: activity) { _, value in if !value.isEmpty { saved = false } }
+            .onChange(of: store.sampleRequestID) { _, _ in
+                tab = 0; activity = ""; categoryID = ""; saved = false
+            }
     }
 }
