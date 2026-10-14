@@ -112,8 +112,15 @@ not need to stay on and you do not need to plug in your phone for builds.
    Its matching private key remains in your Mac's keychain.
 2. Open [Apple Certificates](https://developer.apple.com/account/resources/certificates/list),
    press **+**, select **Apple Distribution**, and upload that signing request.
-   Download the issued `.cer` file and double-click it to import it into Keychain
-   Access. Do not choose Developer ID, which is for a different distribution path.
+   Download the issued `.cer` file. In Keychain Access select the local **login**
+   keychain (unlock it if needed), choose **File → Import Items**, select the
+   `.cer`, and explicitly choose **login** as the destination keychain before
+   importing. Click **Options** if the destination selector is hidden. This avoids
+   Finder's double-click import defaulting to an unsuitable keychain. Error
+   `-25294` means the destination keychain cannot be found; retry with the local
+   `login` destination before creating another certificate. See [Apple's guidance
+   on this error](https://developer.apple.com/forums/thread/675290).
+   Do not choose Developer ID, which is for a different distribution path.
 3. In Keychain Access → **My Certificates**, find the new **Apple Distribution**
    identity. Expand it and verify there is a private key underneath. Select the
    identity and use **File → Export Items** to export a `.p12` file. Save it as
