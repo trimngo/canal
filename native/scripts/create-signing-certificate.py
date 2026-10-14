@@ -21,7 +21,7 @@ def create(output: Path) -> None:
     password = os.environ["APPLE_DISTRIBUTION_P12_PASSWORD"]
     if len(password) < 32:
         raise RuntimeError("Use a randomly generated certificate password of at least 32 characters.")
-    private_key = base64.b64decode(os.environ["APP_STORE_CONNECT_KEY_P8_BASE64"], validate=True)
+    private_key = os.environ["APP_STORE_CONNECT_KEY_P8"]
     token = jwt.encode(
         {"iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"], "iat": int(time.time()),
          "exp": int(time.time()) + 1190, "aud": "appstoreconnect-v1"},

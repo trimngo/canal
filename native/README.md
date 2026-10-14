@@ -46,14 +46,13 @@ repository. Secrets belong in GitHub's `apple-testflight` environment.
    The developer account owner must authorize API access. Download its `.p8` file
    once; store it securely. Reduce access later if your provisioning workflow permits.
 4. Create the GitHub environment `apple-testflight`. Add the following secrets;
-   values are never committed or pasted into chat. Base64 is an encoding, not
-   encryption: treat the encoded `.p8` as the original private key.
+   values are never committed or pasted into chat. Paste the `.p8` file contents exactly, including its BEGIN/END lines.
 
    | Environment secret | Value |
    | --- | --- |
    | `APP_STORE_CONNECT_KEY_ID` | API key ID |
    | `APP_STORE_CONNECT_ISSUER_ID` | Team API issuer ID |
-   | `APP_STORE_CONNECT_KEY_P8_BASE64` | Base64 of the downloaded `.p8` file |
+   | `APP_STORE_CONNECT_KEY_P8` | Full text of the downloaded `.p8` file |
    | `APPLE_DISTRIBUTION_P12_PASSWORD` | Random password, at least 32 characters |
    | `APPLE_DISTRIBUTION_P12_BASE64` | Existing encrypted signing bundle, or output of step 5 |
 
@@ -87,7 +86,7 @@ and plan; standard hosted runners for this public repository are generally free.
 
 ## Local or cloud Mac validation
 
-Install Xcode 16.4 and XcodeGen, then:
+Install Xcode 26.3 and XcodeGen, then:
 
 ```sh
 bash native/scripts/validate.sh
