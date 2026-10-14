@@ -20,6 +20,9 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap(); field.typeText("Follow up with a client UI test")
         app.buttons["inbox.save"].tap()
+        // Leaving the editor dismisses the system keyboard before reviewing.
+        app.tabBars.buttons["My day"].tap()
+        app.tabBars.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["Follow up with a client UI test"].waitForExistence(timeout: 5))
     }
 }
