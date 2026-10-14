@@ -7,6 +7,7 @@ default_platform(:ios)
 platform :ios do
   desc "Validate, sign, and upload the iPhone + Watch app to TestFlight"
   lane :beta do
+    native_directory = File.expand_path("..", __dir__)
     required = %w[APPLE_TEAM_ID APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_P8 APPLE_DISTRIBUTION_P12_BASE64 APPLE_DISTRIBUTION_P12_PASSWORD]
     missing = required.select { |name| ENV[name].to_s.empty? }
     UI.user_error!("Missing GitHub signing configuration: #{missing.join(', ')}") unless missing.empty?
@@ -27,14 +28,14 @@ platform :ios do
       begin
         create_keychain(name: keychain_name, password: keychain_password, default_keychain: false, unlock: true, timeout: 3600, lock_when_sleeps: true)
         import_certificate(certificate_path: certificate_path, certificate_password: ENV.fetch("APPLE_DISTRIBUTION_P12_PASSWORD"), keychain_name: keychain_name, keychain_password: keychain_password)
-        sh("bash", "scripts/validate.sh")
+        sh("bash", File.join(native_directory, "scripts", "validate.sh"))
         profiles = {}
         %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp].each do |identifier|
           get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, readonly: false)
           profiles[identifier] = lane_context[SharedValues::SIGH_NAME]
         end
         build_app(
-          project: "TimeLedger.xcodeproj", scheme: "TimeLedger", clean: true,
+          project: File.join(native_directory, "TimeLedger.xcodeproj"), scheme: "TimeLedger", clean: true,
           output_directory: File.join(directory, "output"), export_method: "app-store",
           export_options: { signingStyle: "manual", provisioningProfiles: profiles },
           xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp"
