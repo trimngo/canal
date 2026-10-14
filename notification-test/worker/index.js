@@ -1,4 +1,5 @@
-import {page as todayPage,assets as todayAssets} from './today-assets.mjs';
+import {page as todayPage,assets as todayAssets,serviceWorker as checkinSw} from './today-assets.mjs';
+import {handleCheckins,tickCheckins} from './checkins.mjs';
 const page = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f4f6fc"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Notify Test"><meta name="description" content="A simple test of PWA notifications on your phone."><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg"><link rel="apple-touch-icon" href="/icon.png"><title>Time Ledger · Notification test</title><style>
 :root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1b2540;background:#f4f6fc}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;padding:26px 20px calc(28px + env(safe-area-inset-bottom))}main{max-width:440px;margin:0 auto}.brand{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:650;color:#6f7b97;margin-bottom:36px}.brand span{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#315eec;color:white;font-size:19px}.eyebrow{font-size:10px;letter-spacing:1.5px;font-weight:650;color:#7583a3}h1{font-size:37px;line-height:1.12;letter-spacing:-1.4px;margin:12px 0 14px}h1 span{color:#315eec}.intro{font-size:14px;line-height:1.7;color:#73809a;margin:0 0 25px}.card{background:white;border:1px solid #e3e8f3;border-radius:18px;padding:20px;margin:12px 0}.step{display:flex;align-items:center;gap:10px;margin-bottom:10px}.number{display:grid;place-items:center;width:24px;height:24px;background:#eef3ff;border-radius:8px;color:#315eec;font-size:11px;font-weight:700}h2{font-size:16px;letter-spacing:-.3px;margin:0}.card p{font-size:12px;color:#74809a;line-height:1.65;margin:9px 0 14px}button,a.button{width:100%;min-height:48px;border:0;border-radius:11px;background:#315eec;color:white;font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:13px 14px;cursor:pointer;display:block;text-align:center;text-decoration:none}button:disabled{opacity:.45;cursor:default}.secondary{background:#edf2ff;color:#315eec;margin-top:9px}button:focus-visible,a:focus-visible{outline:3px solid #a3baff;outline-offset:3px}.hint{padding:15px 16px;background:#eaf0ff;border:1px solid #dbe5ff;border-radius:13px;font-size:12px;line-height:1.7;color:#5872a5}.hint strong{color:#254bba}.hint ol{margin:8px 0 0;padding-left:18px}.hint[hidden]{display:none}.status{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf0f6;font-size:11px}.status:last-child{border:0}.status span{color:#8490a9}.status strong{font-size:11px;font-weight:550;text-align:right;max-width:65%;overflow-wrap:anywhere}.message{font-size:12px;line-height:1.7;padding:13px 15px;border-radius:12px;background:#eaf0ff;color:#38538c;white-space:pre-line;margin:14px 0}.message.error{background:#fff0eb;color:#a34d32}.message[hidden]{display:none}.quiet{font-size:10px;line-height:1.8;text-align:center;color:#8b96ab;margin:18px 0}.badge{display:inline-block;background:#e9f7f1;color:#2c9676;padding:3px 7px;border-radius:5px;font-size:10px;font-weight:600;margin-left:auto}.reset{background:none;color:#8490a9;font-size:10px;min-height:30px;padding:3px;margin-top:10px}.small{font-size:10px;color:#8a94aa}.dismiss{margin-top:10px;background:#edf2ff;color:#315eec}.loading{font-size:12px;color:#7b88a3}footer{padding-top:10px;text-align:center;font-size:10px;color:#96a0b4}@media(min-width:650px){body{padding-top:50px}main{max-width:440px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
@@ -71,21 +72,7 @@ const client = `(() => {
  initialize();
 })();`;
 
-const sw = `self.addEventListener('install',()=>self.skipWaiting());
-self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
-self.addEventListener('push',event=>{
- event.waitUntil(self.registration.showNotification('Time’s up — notification test',{
-   body:'Your PWA received a real push. Tap to return to the test.',
-   icon:'/icon.png',badge:'/icon.png',tag:'push-test-'+Date.now(),data:{url:'/?openedFromNotification=1'}
- }));
-});
-self.addEventListener('notificationclick',event=>{
- event.notification.close();
- event.waitUntil((async()=>{const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
- const match=windows.find(client=>new URL(client.url).origin===self.location.origin);
- if(match){await match.navigate('/?openedFromNotification=1');return match.focus();}
- return self.clients.openWindow('/?openedFromNotification=1');})());
-});`;
+const sw = checkinSw;
 
 const icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="48" fill="#315eec"/><path d="M55 137 137 55M68 55h69v69" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // Replaced by scripts/make-icon.mjs with a self-contained PNG before packaging.
@@ -116,8 +103,10 @@ export async function sendPush(endpoint,env){
  return response.status;
 }
 export default {
+ async scheduled(event,env,ctx){ctx.waitUntil(tickCheckins(env,{sendPush,validateEndpoint}));},
  async fetch(request,env,ctx){
   const url=new URL(request.url);
+  const checkin=await handleCheckins(request,env,{sendPush,validateEndpoint});if(checkin)return checkin;
   if(request.method==='GET'){
    if(url.pathname==='/')return new Response(todayPage,{headers:{...headers,'Content-Type':'text/html; charset=utf-8'}});
    if(url.pathname==='/notifications')return new Response(page.replace('Calendar work is paused. This page only tests notifications.','<a href="/">Back to today</a>'),{headers:{...headers,'Content-Type':'text/html; charset=utf-8'}});
