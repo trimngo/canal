@@ -23,6 +23,11 @@ jobs:
           xcrun xcresulttool export attachments --path results/UITests.xcresult --output-path attachments
           python3 - <<'PY'
           from pathlib import Path
+          import shutil
+          Path('review').mkdir()
+          for p in Path('attachments').rglob('*'):
+              if p.is_file() and (p.suffix != '.mp4' or p.name == '4A2AF0E5-CF5A-45AD-AC53-EFA057DD1305.mp4'):
+                  shutil.copyfile(p, Path('review') / p.name)
           for p in Path('attachments').rglob('*.json'):
               print(p.name, p.read_text()[:40000])
           PY
@@ -30,6 +35,5 @@ jobs:
         with:
           name: history-ui-diagnostics
           path: |
-            attachments/**/*.png
-            attachments/**/*.json
+            review/**
           retention-days: 1
