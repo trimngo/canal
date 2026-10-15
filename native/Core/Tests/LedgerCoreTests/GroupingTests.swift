@@ -168,4 +168,19 @@ final class GroupingTests: XCTestCase {
         XCTAssertNil(ledger.entries.last?.categoryID)
         XCTAssertEqual(ledger.suggestedCategory(for: "Working on app"), "work")
     }
+
+    func testClearingLegacyAutomaticCacheCannotPingPongWithAnOlderWatch() {
+        var watch = Ledger(), phone = Ledger()
+        let cached = CheckIn(end: now, activity: "Working on app", categoryID: "work", revision: Revision(counter: 7, writer: "old-watch"), sampleID: "sample", categoryAssignment: .automatic)
+        watch.entries = [cached]
+        phone.merge(watch); phone.prepareGroupSuggestions(writer: "phone")
+        XCTAssertNil(phone.entries[0].categoryID)
+        XCTAssertEqual(phone.entries[0].revision, cached.revision)
+        let oldWatch = watch
+        watch.merge(phone)
+        XCTAssertEqual(watch, oldWatch)
+        let normalized = phone
+        phone.merge(watch); phone.prepareGroupSuggestions(writer: "phone")
+        XCTAssertEqual(phone, normalized)
+    }
 }

@@ -88,16 +88,16 @@ extension Ledger {
         }
     }
 
-    public mutating func prepareGroupSuggestions(writer: String) {
-        var counter = nextRevision(writer: writer).counter
+    public mutating func prepareGroupSuggestions(writer _: String) {
         for index in entries.indices {
             let entry = entries[index]
             // Clear cached automatic assignments from previous versions or an
             // older paired device. Suggestions are computed only for display.
             guard entry.categoryAssignment == .automatic && entry.categoryID != nil else { continue }
             entries[index].categoryID = nil
-            entries[index].revision = Revision(counter: counter, writer: writer)
-            counter += 1
+            // This removes an obsolete derived cache, not a user's edit. Keep
+            // its revision so an older Watch cannot create a sync ping-pong by
+            // restoring that cache and receiving a newer clearing revision.
         }
     }
 
