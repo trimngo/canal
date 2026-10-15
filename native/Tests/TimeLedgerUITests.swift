@@ -125,7 +125,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["checkin.save"].isHittable)
         field.tap(); field.typeText("Notification sample UI test")
         app.buttons["quicklog.save"].tap()
-        XCTAssertTrue(app.staticTexts["Saved"].waitForExistence(timeout: 5))
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["Close"])
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
         app.terminate(); app.launchArguments = []; app.launch()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Notification sample UI test"].waitForExistence(timeout: 5))
@@ -225,7 +226,8 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     func testBackupPreviewAndRestoreRecoverOlderLogsIntoHistory() {
-        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-local-backup", "--ui-backup-fixture"]; app.launch()
+        let app = XCUIApplication(); app.launchArguments = ["--ui-corrupt-ledger", "--ui-local-backup", "--ui-backup-fixture"]; app.launch()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 10)); app.alerts.buttons["OK"].tap()
         app.tabBars.buttons["Settings"].tap()
         let restore = app.buttons["backup.restore"]; reveal(restore, in: app); restore.tap()
         let file = app.buttons.matching(identifier: "backup.file").firstMatch

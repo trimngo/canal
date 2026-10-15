@@ -71,6 +71,9 @@ final class LedgerStore: ObservableObject {
                 try LedgerBackup(ledger: fixture).encoded().write(to: url, options: [.atomic])
                 try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: url.path)
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-corrupt-ledger") {
+                try Data("Unrecoverable UI fixture bytes".utf8).write(to: file, options: [.atomic])
+            }
             #endif
             if FileManager.default.fileExists(atPath: file.path) {
                 let original = try Data(contentsOf: file)
@@ -92,7 +95,11 @@ final class LedgerStore: ObservableObject {
     }
 
     func start() {
-        guard !started, storageAvailable else { return }; started = true
+        #if os(iOS)
+        if backup == nil { backup = AutomaticBackup(store: self, writer: writer) }
+        #endif
+        guard storageAvailable else { backupStatus = "Backup paused · restore your saved data to resume"; return }
+        guard !started else { return }; started = true
         do {
             var draft = ledger
             draft.ensureDefaultGroups(writer: writer)
@@ -110,9 +117,6 @@ final class LedgerStore: ObservableObject {
         if cloudFlag as? Bool == true || (cloudFlag as? String)?.uppercased() == "YES" {
             cloud = CloudSync(store: self)
         } else { syncStatus = "Saved on this device" }
-        #if os(iOS)
-        backup = AutomaticBackup(store: self, writer: writer)
-        #endif
         saveObserver = { [weak self] in
             // Leave the editor's save transaction before starting device sync.
             Task { @MainActor [weak self] in
@@ -129,14 +133,14 @@ final class LedgerStore: ObservableObject {
         importSiriCaptures()
         companion?.start(); cloud?.requestSync()
         #if os(iOS)
-        backup?.request(ledger)
+        if storageAvailable { backup?.request(ledger) }
         #endif
     }
 
     func refresh() {
         start(); importSiriCaptures(); companion?.refresh(); cloud?.requestSync()
         #if os(iOS)
-        backup?.request(ledger)
+        if storageAvailable { backup?.request(ledger) }
         #endif
     }
 

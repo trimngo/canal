@@ -1,6 +1,6 @@
 import Foundation
 
-public enum HistoryRange: String, CaseIterable, Identifiable, Sendable {
+public enum HistoryRange: String, CaseIterable, Identifiable, Hashable, Sendable {
     case today, week, allTime, custom
     public var id: String { rawValue }
     public var name: String {
