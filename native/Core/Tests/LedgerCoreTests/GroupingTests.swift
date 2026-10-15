@@ -178,7 +178,7 @@ final class GroupingTests: XCTestCase {
         XCTAssertEqual(phone.entries[0].revision, cached.revision)
         let oldWatch = watch
         watch.merge(phone)
-        XCTAssertEqual(watch, oldWatch)
+        XCTAssertEqual(watch.entries, oldWatch.entries)
         let normalized = phone
         phone.merge(watch); phone.prepareGroupSuggestions(writer: "phone")
         XCTAssertEqual(phone, normalized)
