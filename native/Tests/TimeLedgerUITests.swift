@@ -9,7 +9,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["dashboard.review.uncategorized"].tap()
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
         app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
-        let undo = app.buttons["Undo last categorization"]
+        let undo = app.buttons["group.undo"]
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
         app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
@@ -26,16 +26,21 @@ final class TimeLedgerUITests: XCTestCase {
         app.alerts.buttons["Create & categorize"].tap()
         app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
         app.swipeUp()
-        app.staticTexts["Creative Practice"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.rename.", "Creative Practice")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let groupID = String(row.identifier.dropFirst("groups.rename.".count))
+        row.tap()
         let rename = app.alerts.textFields["Group name"]
         XCTAssertTrue(rename.waitForExistence(timeout: 5))
         rename.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         rename.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30))
         rename.typeText("Creative Projects")
         app.alerts.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts["Creative Projects"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["groups.rename.\(groupID)"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["groups.rename.\(groupID)"].label.contains("Creative Projects"))
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.staticTexts["Creative Projects"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["dashboard.group.\(groupID)"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["dashboard.group.\(groupID)"].label.contains("Creative Projects"))
     }
 
     func testCalendarViewShowsDayGridAndNoonMarker() {

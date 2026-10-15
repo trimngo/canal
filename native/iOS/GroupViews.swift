@@ -62,7 +62,7 @@ struct GroupEntriesView: View {
                     }.padding(.vertical, 5)
                 }
                 if store.canUndoGrouping {
-                    Section { Button("Undo last categorization") { store.undoCategorization() } }
+                    Section { Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("group.undo") }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
                 Section {
