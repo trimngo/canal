@@ -4,8 +4,9 @@ final class TimeLedgerUITests: XCTestCase {
     func testDashboardCategorizesAnUnknownActivityAndSupportsUndo() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         XCTAssertTrue(app.buttons["dashboard.group.uncategorized"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["dashboard.review.uncategorized"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
-        app.buttons["dashboard.group.uncategorized"].tap()
+        app.buttons["dashboard.review.uncategorized"].tap()
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
         app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
         let undo = app.buttons["Undo last categorization"]

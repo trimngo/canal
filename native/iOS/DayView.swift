@@ -17,6 +17,10 @@ struct DayView: View {
     private var uncategorizedCount: Int {
         entries.filter { entry in !store.ledger.categories.contains { $0.id == entry.categoryID } }.count
     }
+    private var totalUncategorizedCount: Int {
+        let known = Set(store.ledger.categories.map(\.id))
+        return store.ledger.entries.filter { $0.end <= Date() && !known.contains($0.categoryID ?? "") }.count
+    }
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { _ in
@@ -64,6 +68,11 @@ struct DayView: View {
                 Button { store.beginSample() } label: {
                     Label("Log what I’m doing", systemImage: "plus.circle.fill").font(.headline)
                 }.accessibilityIdentifier("dashboard.log")
+                if totalUncategorizedCount > 0 {
+                    Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized") } label: {
+                        Label("Uncategorized · \(totalUncategorizedCount) logs to group", systemImage: "tray")
+                    }.accessibilityIdentifier("dashboard.review.uncategorized")
+                }
                 if let first = entries.last {
                     if Calendar.current.isDateInToday(day) {
                         Text("Since your first log at \(store.time(first.end))").font(.subheadline).foregroundStyle(.secondary)

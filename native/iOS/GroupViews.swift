@@ -7,27 +7,40 @@ struct GroupEntriesView: View {
     let day: Date
     let groupID: String
     let initialName: String
+    @State private var allDays: Bool
     @State private var creatingFor: CheckIn?
     @State private var showingNewGroup = false
     @State private var groupName = ""
     @State private var editing: CheckIn?
     @State private var error: String?
+    init(day: Date, groupID: String, initialName: String) {
+        self.day = day; self.groupID = groupID; self.initialName = initialName
+        _allDays = State(initialValue: groupID == "uncategorized")
+    }
     private var entries: [CheckIn] {
         let known = Set(store.ledger.categories.map(\.id))
-        return store.ledger.entries(on: day).filter {
+        let source = allDays ? store.ledger.entries.sorted { $0.end > $1.end } : store.ledger.entries(on: day)
+        return source.filter {
             $0.end <= Date() && (groupID == "uncategorized" ? !known.contains($0.categoryID ?? "") : $0.categoryID == groupID)
         }
     }
     var body: some View {
         NavigationStack {
             List {
-                if entries.isEmpty { Text("All sorted. There are no entries in this group for this day.").foregroundStyle(.secondary) }
+                if groupID == "uncategorized" {
+                    Picker("Review", selection: $allDays) {
+                        Text("Selected day").tag(false)
+                        Text("All days").tag(true)
+                    }.pickerStyle(.segmented)
+                }
+                if entries.isEmpty { Text("All sorted. There are no entries in this view.").foregroundStyle(.secondary) }
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 10) {
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(entry.activity).foregroundStyle(.primary)
-                                Text(store.time(entry.end)).font(.caption).foregroundStyle(.secondary)
+                                Text(allDays ? "\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end))" : store.time(entry.end))
+                                    .font(.caption).foregroundStyle(.secondary)
                             }
                         }.buttonStyle(.plain)
                         Menu {
