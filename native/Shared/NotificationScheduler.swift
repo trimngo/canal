@@ -9,6 +9,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     @Published var status = "Not enabled"
     private let center = UNUserNotificationCenter.current()
     private var applied: Settings?
+    private var appliedSummary: String?
     private override init() { super.init(); center.delegate = self }
 
     func configureActions() {
@@ -37,7 +38,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     func apply(_ settings: Settings) async throws {
         configureActions(); await refreshStatus()
         #if os(iOS)
-        guard applied != settings else { return }
+        let summary = LedgerStore.shared.notificationSummary()
+        guard applied != settings || appliedSummary != summary else { return }
         let minutes = try settings.notificationMinutes()
         let pending = await center.pendingNotificationRequests()
         let ids = pending.filter { $0.identifier.hasPrefix("checkin-") }.map(\.identifier)
@@ -49,7 +51,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                 for minute in minutes {
                     let content = UNMutableNotificationContent()
                     content.title = "What are you doing right now?"
-                    content.body = "Record this moment. Categorize now or later."
+                    content.body = summary
                     content.sound = .default; content.categoryIdentifier = "CHECKIN"
                     content.userInfo = ["minute": minute]
                     var components = DateComponents(); components.hour = minute / 60; components.minute = minute % 60
@@ -62,6 +64,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             }
         }
         applied = settings
+        appliedSummary = summary
         #endif
     }
 
@@ -69,7 +72,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         guard try await permission() else { throw NotificationError.denied }
         let content = UNMutableNotificationContent()
         content.title = "Time Ledger test"
-        content.body = "If you see this, native notifications are working."
+        content.body = LedgerStore.shared.notificationSummary()
         content.sound = .default
         content.categoryIdentifier = "CHECKIN"
         try await center.add(UNNotificationRequest(identifier: "notification-test", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 15, repeats: false)))

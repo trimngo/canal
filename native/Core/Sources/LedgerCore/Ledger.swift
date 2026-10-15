@@ -1,7 +1,7 @@
 import Foundation
 
 public enum LedgerError: LocalizedError {
-    case invalidActivity, invalidCategory, futureSlot, invalidSlot, invalidSchedule, duplicateCategory
+    case invalidActivity, invalidCategory, futureSlot, invalidSlot, invalidSchedule, duplicateCategory, reservedCategory
     public var errorDescription: String? {
         switch self {
         case .invalidActivity: return "Enter what you were doing (up to 500 characters)."
@@ -10,6 +10,7 @@ public enum LedgerError: LocalizedError {
         case .invalidSlot: return "Choose a valid sample time."
         case .invalidSchedule: return "Choose a same-day window of up to 15 hours, in 15-minute steps."
         case .duplicateCategory: return "A category with that name already exists."
+        case .reservedCategory: return "Uncategorized is reserved for activities waiting to be grouped. Choose another name."
         }
     }
 }
@@ -33,14 +34,18 @@ public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
+
 public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
+    public var categoryAssignment: CategoryAssignment?
     public var sampleID: String?
     public var id: String { sampleID ?? String(Int64(end.timeIntervalSince1970)) }
     public var end: Date
     public var activity: String
     public var categoryID: String?
     public var revision: Revision
-    public init(end: Date, activity: String, categoryID: String?, revision: Revision, sampleID: String? = nil) {
+    public init(end: Date, activity: String, categoryID: String?, revision: Revision, sampleID: String? = nil, categoryAssignment: CategoryAssignment? = nil) {
+        self.categoryAssignment = categoryAssignment
         self.sampleID = sampleID
         self.end = end; self.activity = activity; self.categoryID = categoryID; self.revision = revision
     }
@@ -102,7 +107,7 @@ public struct BreakdownRow: Identifiable, Equatable, Sendable {
     public var name: String
     public var minutes: Double
     public var dayMinutes: Double = 1440
-    public var percent: Double { minutes / dayMinutes * 100 }
+    public var percent: Double { dayMinutes > 0 ? minutes / dayMinutes * 100 : 0 }
 }
 
 public struct InferredSegment: Equatable, Sendable {
@@ -115,10 +120,7 @@ public struct InferredSegment: Equatable, Sendable {
 
 public struct Ledger: Codable, Equatable, Sendable {
     public var schemaVersion = 2
-    public var categories: [LedgerCategory] = [
-        LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "personal", name: "Personal"),
-        LedgerCategory(id: "rest", name: "Rest")
-    ]
+    public var categories: [LedgerCategory] = OfflineGrouping.defaultGroups
     public var entries: [CheckIn] = []
     public var captures: [Capture] = []
     public var settings = Settings()
@@ -150,8 +152,10 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func inferredSegments(on day: Date, now: Date = Date(), calendar: Calendar = .current, method: InferenceMethod? = nil) -> [InferredSegment] {
         guard let bounds = calendar.dateInterval(of: .day, for: day), now > bounds.start else { return [] }
-        let cutoff = min(bounds.end, now)
-        let eligible = entries(on: day, calendar: calendar).filter { $0.end <= cutoff }
+        let eligible = entries(on: day, calendar: calendar).filter { $0.end <= min(bounds.end, now) }
+        // Closed days end at the last observation, rather than assuming the
+        // final activity continued while the person slept.
+        let cutoff = now >= bounds.end ? (eligible.first?.end ?? bounds.start) : now
         // Keep all raw observations. If timestamps coincide, infer from the latest
         // revision once, so contradictory observations cannot double-count time.
         let distinct = Dictionary(eligible.map { ($0.end, $0) }, uniquingKeysWith: {
@@ -176,13 +180,12 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func breakdown(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> [BreakdownRow] {
         let segments = inferredSegments(on: day, now: now, calendar: calendar)
-        let dayMinutes = (calendar.dateInterval(of: .day, for: day)?.duration ?? 86400) / 60
+        let dayMinutes = segments.reduce(0) { $0 + $1.minutes }
         let known = Set(categories.map(\.id))
         var rows = categories.map { category in
             BreakdownRow(id: category.id, name: category.name, minutes: segments.filter { $0.categoryID == category.id }.reduce(0) { $0 + $1.minutes }, dayMinutes: dayMinutes)
         }
         rows.append(BreakdownRow(id: "uncategorized", name: "Uncategorized", minutes: segments.filter { !known.contains($0.categoryID ?? "") }.reduce(0) { $0 + $1.minutes }, dayMinutes: dayMinutes))
-        rows.append(BreakdownRow(id: "unlogged", name: "Unestimated", minutes: max(0, dayMinutes - segments.reduce(0) { $0 + $1.minutes }), dayMinutes: dayMinutes))
         return rows
     }
 
@@ -199,13 +202,20 @@ public struct Ledger: Codable, Equatable, Sendable {
         guard timestamp.timeIntervalSince1970.isFinite else { throw LedgerError.invalidSlot }
         guard timestamp <= now else { throw LedgerError.futureSlot }
         if let categoryID, !categories.contains(where: { $0.id == categoryID }) { throw LedgerError.invalidCategory }
-        let entry = CheckIn(end: timestamp, activity: text, categoryID: categoryID, revision: nextRevision(writer: writer), sampleID: id ?? UUID().uuidString)
-        entries.removeAll { $0.id == entry.id }; entries.append(entry)
+        let revision = nextRevision(writer: writer)
+        let sampleID = id ?? UUID().uuidString
+        entries.removeAll { $0.id == sampleID }
+        let assignment: CategoryAssignment = categoryID == nil ? .automatic : .manual
+        let resolved = categoryID ?? suggestedCategory(for: text)
+        let entry = CheckIn(end: timestamp, activity: text, categoryID: resolved, revision: revision, sampleID: sampleID, categoryAssignment: assignment)
+        entries.append(entry)
+        recategorizeAutomatically(writer: writer)
     }
 
     public mutating func saveCategory(id: String?, name: String, writer: String) throws {
         let text = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 60 else { throw LedgerError.invalidCategory }
+        guard text.caseInsensitiveCompare("Uncategorized") != .orderedSame else { throw LedgerError.reservedCategory }
         guard !categories.contains(where: { $0.id != id && $0.name.caseInsensitiveCompare(text) == .orderedSame }) else { throw LedgerError.duplicateCategory }
         let revision = nextRevision(writer: writer)
         if let id {

@@ -28,7 +28,7 @@ final class LedgerTests: XCTestCase {
         XCTAssertEqual(ledger.entries[0].end, time)
     }
 
-    func testMidpointUsesHalfwayTransitionAndTwentyFourHourPercentages() throws {
+    func testMidpointUsesHalfwayTransitionAndTrackedTimePercentages() throws {
         var ledger = Ledger(); let first = date("2026-10-14T10:00:00Z")
         let second = date("2026-10-14T10:30:00Z"), now = date("2026-10-14T11:00:00Z")
         try ledger.saveSample(at: first, activity: "Preparing classes", categoryID: "work", writer: "phone", now: now)
@@ -42,8 +42,8 @@ final class LedgerTests: XCTestCase {
         let rows = ledger.breakdown(on: now, now: now, calendar: utc)
         XCTAssertEqual(rows.first { $0.id == "work" }?.minutes, 15)
         XCTAssertEqual(rows.first { $0.id == "personal" }?.minutes, 45)
-        XCTAssertEqual(rows.first { $0.id == "work" }!.percent, 15.0 / 1440 * 100, accuracy: 0.0001)
-        XCTAssertEqual(rows.first { $0.id == "unlogged" }?.minutes, 1380)
+        XCTAssertEqual(rows.first { $0.id == "work" }!.percent, 25, accuracy: 0.0001)
+        XCTAssertNil(rows.first { $0.id == "unlogged" })
         XCTAssertEqual(rows.reduce(0) { $0 + $1.percent }, 100, accuracy: 0.0001)
         XCTAssertEqual(ledger.entries, original)
     }
@@ -80,7 +80,7 @@ final class LedgerTests: XCTestCase {
         XCTAssertEqual(segments[0].start, first)
         XCTAssertEqual(segments[0].end, now)
         XCTAssertEqual(segments[0].minutes, 240)
-        XCTAssertEqual(ledger.breakdown(on: now, now: now, calendar: utc).last?.minutes, 1200)
+        XCTAssertEqual(ledger.breakdown(on: now, now: now, calendar: utc).first { $0.id == "work" }?.percent, 100)
     }
 
     func testCoincidentSamplesRemainStoredButDoNotDoubleCount() throws {
@@ -106,16 +106,18 @@ final class LedgerTests: XCTestCase {
         XCTAssertEqual(ledger.breakdown(on: now, now: now, calendar: utc).first { $0.id == "work" }?.minutes, 50)
     }
 
-    func testMidnightSampleBelongsToNewDayAndPastDayStopsAtMidnight() throws {
+    func testMidnightSampleBelongsToNewDayAndPastDayStopsAtLastObservation() throws {
         var ledger = Ledger(); let previous = date("2026-10-14T23:17:00Z")
         let midnight = date("2026-10-15T00:00:00Z"), now = date("2026-10-15T08:00:00Z")
         try ledger.saveSample(at: previous, activity: "Rest", categoryID: "rest", writer: "phone", now: now)
+        let last = date("2026-10-14T23:47:00Z")
+        try ledger.saveSample(at: last, activity: "Rest", categoryID: "rest", writer: "phone", now: now)
         try ledger.saveSample(at: midnight, activity: "Sleeping", categoryID: "rest", writer: "phone", now: now)
-        XCTAssertEqual(ledger.entries(on: previous, calendar: utc).count, 1)
+        XCTAssertEqual(ledger.entries(on: previous, calendar: utc).count, 2)
         XCTAssertEqual(ledger.entries(on: midnight, calendar: utc).count, 1)
         let segments = ledger.inferredSegments(on: previous, now: now, calendar: utc)
-        XCTAssertEqual(segments.last?.end, midnight)
-        XCTAssertEqual(segments.last?.minutes, 43)
+        XCTAssertEqual(segments.last?.end, last)
+        XCTAssertEqual(segments.reduce(0) { $0 + $1.minutes }, 30)
     }
 
     func testPreviousDaysSamplesDoNotFillBeforeTodaysFirstSample() throws {
@@ -143,7 +145,8 @@ final class LedgerTests: XCTestCase {
         try ledger.addCapture(text: "Buy milk", writer: "phone", now: now)
         let rows = ledger.breakdown(on: now, now: now, calendar: utc)
         XCTAssertEqual(rows.first { $0.id == "work" }?.minutes, 0)
-        XCTAssertEqual(rows.last?.percent, 100)
+        XCTAssertEqual(rows.reduce(0) { $0 + $1.percent }, 0)
+        XCTAssertFalse(rows.contains { $0.id == "unlogged" })
     }
 
     func testFutureNonfiniteAndEmptySamplesRejected() {
@@ -187,12 +190,13 @@ final class LedgerTests: XCTestCase {
 
     func testDaylightSavingDaysStillHaveOneHundredPercentTotal() throws {
         var calendar = utc; calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
-        for (day, now, expected) in [
-            ("2026-03-29T12:00:00Z", "2026-03-30T12:00:00Z", 1380.0),
-            ("2026-10-25T12:00:00Z", "2026-10-26T12:00:00Z", 1500.0)
+        for (day, expected) in [
+            ("2026-03-29T12:00:00Z", 1379.0),
+            ("2026-10-25T12:00:00Z", 1499.0)
         ] {
-            var ledger = Ledger(); let target = date(day), cutoff = date(now)
+            var ledger = Ledger(); let target = date(day)
             let start = calendar.startOfDay(for: target)
+            let cutoff = calendar.date(byAdding: .day, value: 1, to: start)!.addingTimeInterval(-60)
             try ledger.saveSample(at: start, activity: "Rest", categoryID: "rest", writer: "phone", now: cutoff)
             let rows = ledger.breakdown(on: target, now: cutoff, calendar: calendar)
             XCTAssertEqual(rows.first { $0.id == "rest" }?.minutes, expected)

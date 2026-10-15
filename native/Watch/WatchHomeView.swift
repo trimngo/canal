@@ -16,7 +16,7 @@ struct WatchHomeView: View {
                     Text("Record a moment in your day.").font(.caption).foregroundStyle(.secondary)
                     TextField("Dictate an answer", text: $activity)
                     Picker("Category", selection: $categoryID) {
-                        Text("Later").tag("")
+                        Text("Automatic").tag("")
                         ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
                     }
                     Button(saved ? "Saved ✓" : "Save sample") {
@@ -42,10 +42,13 @@ struct WatchHomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Estimated today").font(.headline)
-                        ForEach(store.ledger.breakdown(on: context.date, now: context.date)) { row in
-                            HStack { Text(row.name); Spacer(); Text("\(row.percent, specifier: "%.0f")%").foregroundStyle(.secondary) }.font(.caption)
+                        ForEach(store.ledger.breakdown(on: context.date, now: context.date).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }) { row in
+                            VStack(alignment: .leading) {
+                                Text(row.name)
+                                Text("\(row.percent, specifier: "%.0f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
+                            }.font(.caption)
                         }
-                        Text("Of the whole day").font(.caption2).foregroundStyle(.secondary)
+                        Text("Of time since your first log").font(.caption2).foregroundStyle(.secondary)
                         Button("Sync") { store.refresh() }
                     }
                 }

@@ -14,8 +14,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: LedgerStore
     @StateObject private var notifications = NotificationScheduler.shared
     @State private var settings = Settings()
-    @State private var categoryName = ""
-    @State private var editingCategory: LedgerCategory?
+    @State private var managingGroups = false
     @State private var testSent = false
     @State private var saving = false
     private let stepMinutes = Array(stride(from: 0, to: 1440, by: 15))
@@ -74,14 +73,13 @@ struct SettingsView: View {
                     ForEach(InferenceMethod.allCases) { Text($0.name).tag($0) }
                 }
             } header: { Text("Estimate time") } footer: {
-                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. The last sample continues to now, or midnight for a past day. Time before the first sample stays unestimated. Changing methods keeps your original samples.")
+                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Today covers your first log until now; past days end at the last log. Percentages use tracked time. Changing methods keeps your original samples.")
             }
             Section {
-                ForEach(store.ledger.categories) { category in
-                    Button(category.name) { editingCategory = category; categoryName = category.name }
-                }
-                Button("Add category") { editingCategory = LedgerCategory(id: "", name: ""); categoryName = "" }
-            } header: { Text("Categories") } footer: { Text("Renaming a category updates its label everywhere. Google Calendar is not connected.") }
+                Button("Manage groups") { managingGroups = true }
+            } header: { Text("Activity groups") } footer: {
+                Text("Phrase matching and your corrections group activities offline. You can create and rename groups anytime. Existing manual choices stay intact.")
+            }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)
                 Button("Sync now") { store.refresh() }
@@ -97,14 +95,7 @@ struct SettingsView: View {
             }
         }.navigationTitle("Settings")
             .task { settings = store.ledger.settings; await notifications.refreshStatus() }
-            .alert(editingCategory?.id == "" ? "New category" : "Rename category", isPresented: Binding(get: { editingCategory != nil }, set: { if !$0 { editingCategory = nil } })) {
-                TextField("Category name", text: $categoryName)
-                Button("Save") {
-                    do { try store.saveCategory(id: editingCategory?.id == "" ? nil : editingCategory?.id, name: categoryName) } catch { store.report(error) }
-                    editingCategory = nil
-                }
-                Button("Cancel", role: .cancel) { editingCategory = nil }
-            }
+            .sheet(isPresented: $managingGroups) { GroupManagerView() }
     }
     private func minuteLabel(_ minutes: Int) -> String {
         let start = Calendar.current.startOfDay(for: Date())

@@ -9,19 +9,27 @@ website is separate and remains available.
 - Log an instantaneous sample anytime, or respond to prompts every 15 minutes
   during a configurable same-day window; default 7 AM–10 PM. A response records
   what is happening at its saved timestamp, not a fixed 15-minute interval.
-- Categorize immediately or later, edit a previous answer, and rename categories
-  without touching any external calendar.
+- The dashboard opens first with hours and percentages by activity group. Tap
+  Uncategorized to assign an existing group or create one directly. Rename groups
+  from the dashboard or Settings; original log text and stable group IDs are kept.
+- Offline phrase matching groups common activities, and explicit corrections teach
+  future matching descriptions. Unknowns remain Uncategorized. Manually assigned
+  entries are preserved. Matching automatic entries update, with a device-local
+  Undo for the latest categorization. Existing logs are backed up before grouping.
 - Estimate daily time with midpoint interpolation (default) or carry-forward.
-  Midpoint puts activity changes halfway between observations. Time before the
-  first sample is unestimated; the latest observation extends to now today or
-  midnight on a past day. Percentages use the whole day, normally 1,440 minutes;
-  daylight-saving days use their actual 23- or 25-hour duration.
+  Midpoint puts activity changes halfway between observations. Percentages cover
+  the first log until now today, and the first to last log on closed days. There
+  is no Unestimated row or assumed overnight extension. Zero-duration samples
+  remain accessible for categorization without producing invalid percentages.
 - Preserve raw timestamps, activities, and categories when changing estimation
   methods. Upgrade schema-1 logs with a local backup before writing schema 2.
 - iPhone inbox for thoughts/tasks, completion and reopening. Captures do not count
   as time spent. Timed task reminders are a later feature.
-- Watch: dictate check-ins and captures, choose a category, view today's breakdown.
-- Siri/Shortcuts: “Capture in Time Ledger,” then answer Siri's text prompt.
+- Watch: dictate check-ins and captures, use automatic groups, and view hours and
+  percentages. Expanded Watch notifications use available local logs. Phone
+  banners show a dated summary snapshot, refreshed when logs or groups change;
+  offline background delivery does not imply a freshly recomputed summary.
+- Siri/Shortcuts: “Capture in Ledger,” then answer Siri's text prompt.
 - Atomic local storage, JSON backup export, deterministic merge of device edits,
   paired-device file transfers, and optional private CloudKit synchronization.
 

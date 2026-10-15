@@ -1,6 +1,42 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testDashboardCategorizesAnUnknownActivityAndSupportsUndo() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
+        XCTAssertTrue(app.buttons["dashboard.group.uncategorized"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Unestimated"].exists)
+        app.buttons["dashboard.group.uncategorized"].tap()
+        XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
+        app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
+        let undo = app.buttons["Undo last categorization"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
+        XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
+        app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["dashboard.group.social"].waitForExistence(timeout: 5))
+    }
+
+    func testDashboardCreatesAndRenamesANewGroup() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
+        app.buttons["dashboard.group.uncategorized"].tap()
+        app.buttons["Choose group"].tap(); app.buttons["Create new group…"].tap()
+        let field = app.alerts.textFields["Group name"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Creative Practice")
+        app.alerts.buttons["Create & categorize"].tap()
+        app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
+        app.swipeUp()
+        app.staticTexts["Creative Practice"].tap()
+        let rename = app.alerts.textFields["Group name"]
+        XCTAssertTrue(rename.waitForExistence(timeout: 5))
+        rename.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        rename.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30))
+        rename.typeText("Creative Projects")
+        app.alerts.buttons["Save"].tap()
+        XCTAssertTrue(app.staticTexts["Creative Projects"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["Creative Projects"].waitForExistence(timeout: 5))
+    }
+
     func testCalendarViewShowsDayGridAndNoonMarker() {
         let app = XCUIApplication(); app.launch()
         app.tabBars.buttons["My day"].tap()
@@ -39,6 +75,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testSampleCanBeCategorizedAfterSaving() {
         let app = XCUIApplication(); app.launch()
+        app.tabBars.buttons["Check in"].tap()
         let activity = app.textFields["checkin.activity"].exists ? app.textFields["checkin.activity"] : app.textViews["checkin.activity"]
         XCTAssertTrue(activity.waitForExistence(timeout: 10))
         activity.tap(); activity.typeText("Categorization UI test")
@@ -56,6 +93,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCheckInCanBeSavedAndCategorizedLater() {
         let app = XCUIApplication(); app.launch()
+        app.tabBars.buttons["Check in"].tap()
         let activity = app.textFields["checkin.activity"].exists ? app.textFields["checkin.activity"] : app.textViews["checkin.activity"]
         XCTAssertTrue(activity.waitForExistence(timeout: 10))
         activity.tap(); activity.typeText("Preparing classes UI test")

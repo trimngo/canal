@@ -61,11 +61,6 @@ struct DayCalendarView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     ZStack(alignment: .topLeading) {
-                        if let first = blocks.first, y(first.start) > 0 {
-                            unestimatedArea(until: first.start)
-                        } else if blocks.isEmpty {
-                            unestimatedArea(until: cutoff)
-                        }
                         ForEach(hours, id: \.self) { hour in
                             hourLine(hour).padding(.top, max(0, y(hour)))
                         }
@@ -107,12 +102,6 @@ struct DayCalendarView: View {
                     .onChange(of: day) { _, _ in proxy.scrollTo(scrollTarget, anchor: .center) }
             }
         }.sheet(item: $selected) { block in CalendarActivityDetail(block: block) }
-    }
-    private func unestimatedArea(until date: Date) -> some View {
-        Text(y(date) >= 30 ? "Unestimated" : "")
-            .font(.caption).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: max(0, y(date)), maxHeight: max(0, y(date)))
-            .background(.secondary.opacity(0.08)).padding(.leading, 64).padding(.trailing, 8)
     }
     private func hourLine(_ date: Date, emphasize: Bool = false) -> some View {
         HStack(spacing: 8) {

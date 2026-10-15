@@ -35,7 +35,7 @@ struct TimeLedgerApp: App {
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
-    @State private var tab = 0
+    @State private var tab = 1
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { CheckInView() }.tabItem { Label("Check in", systemImage: "clock") }.tag(0)

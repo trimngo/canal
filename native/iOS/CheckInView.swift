@@ -40,9 +40,13 @@ struct CheckInEditor: View {
                 .lineLimit(3...6).padding(16).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 18))
                 .focused($focused).accessibilityIdentifier("checkin.activity")
             Picker("Category", selection: $categoryID) {
-                Text("Categorize later").tag("")
+                Text("Automatic").tag("")
                 ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
             }.pickerStyle(.menu).accessibilityIdentifier("checkin.category")
+            if categoryID.isEmpty {
+                Text(store.ledger.suggestedCategory(for: activity).map { "Will group as \(store.categoryName($0))" } ?? "Unrecognized activities can be grouped later from My day.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Toggle("Use current time", isOn: $recordNow)
                 .onChange(of: recordNow) { _, value in if !value, entry == nil { timestamp = Date() } }
             if !recordNow {
@@ -65,7 +69,7 @@ struct CheckInEditor: View {
                 .accessibilityIdentifier("checkin.save")
         }.onAppear {
             if let entry {
-                activity = entry.activity; categoryID = entry.categoryID ?? ""
+                activity = entry.activity; categoryID = entry.categoryAssignment == .automatic ? "" : entry.categoryID ?? ""
                 timestamp = entry.end; recordNow = false
             }
         }

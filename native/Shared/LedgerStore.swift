@@ -10,6 +10,8 @@ final class LedgerStore: ObservableObject {
     @Published var error: String?
     @Published var syncStatus = "Saved on this device"
     @Published private(set) var storageAvailable = true
+    @Published private(set) var canUndoGrouping = false
+    private var groupingUndo: [(before: CheckIn, after: CheckIn)] = []
     private let file: URL
     private let writer: String
     private var saveObserver: (() -> Void)?
@@ -29,6 +31,13 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-legacy-ledger") {
                 var fixture = Ledger(); fixture.schemaVersion = 1
                 fixture.entries = [CheckIn(end: Ledger.slotEnd(at: Date()), activity: "Legacy sample UI fixture", categoryID: "work", revision: Revision(counter: 1, writer: "fixture"))]
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") {
+                var fixture = Ledger()
+                let now = Date()
+                try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: nil, writer: "fixture", now: now)
+                try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             #endif
@@ -53,6 +62,18 @@ final class LedgerStore: ObservableObject {
 
     func start() {
         guard !started, storageAvailable else { return }; started = true
+        do {
+            var draft = ledger
+            draft.ensureDefaultGroups(writer: writer)
+            draft.recategorizeAutomatically(writer: writer)
+            if draft != ledger {
+                let backup = file.deletingLastPathComponent().appendingPathComponent("ledger-before-offline-grouping.json")
+                if FileManager.default.fileExists(atPath: file.path), !FileManager.default.fileExists(atPath: backup.path) {
+                    try Data(contentsOf: file).write(to: backup, options: [.atomic])
+                }
+                try commit(draft)
+            }
+        } catch { report(error) }
         companion = CompanionSync(store: self)
         let cloudFlag = Bundle.main.object(forInfoDictionaryKey: "LedgerCloudEnabled")
         if cloudFlag as? Bool == true || (cloudFlag as? String)?.uppercased() == "YES" {
@@ -63,6 +84,11 @@ final class LedgerStore: ObservableObject {
             Task { @MainActor [weak self] in
                 self?.companion?.send()
                 self?.cloud?.requestSync()
+                #if os(iOS)
+                if let self {
+                    do { try await NotificationScheduler.shared.apply(self.ledger.settings) } catch { self.report(error) }
+                }
+                #endif
             }
         }
         companion?.start(); cloud?.requestSync()
@@ -80,6 +106,7 @@ final class LedgerStore: ObservableObject {
     func merge(_ incoming: Ledger) throws {
         guard (1...2).contains(incoming.schemaVersion) else { throw StoreError.unsupportedVersion }
         var draft = ledger; draft.merge(incoming)
+        draft.recategorizeAutomatically(writer: writer)
         if draft != ledger { try commit(draft) }
     }
 
@@ -103,11 +130,53 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer); try commit(draft)
     }
 
+    func categorize(_ entry: CheckIn, categoryID: String?, newGroupName: String? = nil) throws {
+        var draft = ledger
+        var destination = categoryID
+        if let newGroupName {
+            try draft.saveCategory(id: nil, name: newGroupName, writer: writer)
+            destination = draft.categories.last?.id
+        }
+        guard let current = draft.entries.first(where: { $0.id == entry.id }) else { return }
+        try draft.saveSample(id: current.id, at: current.end, activity: current.activity, categoryID: destination, writer: writer)
+        let changed = draft.entries.compactMap { updated -> (before: CheckIn, after: CheckIn)? in
+            guard let original = ledger.entries.first(where: { $0.id == updated.id }),
+                  original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment else { return nil }
+            return (original, updated)
+        }
+        try commit(draft)
+        groupingUndo = changed; canUndoGrouping = !changed.isEmpty
+    }
+
+    func undoCategorization() {
+        do {
+            var draft = ledger
+            for change in groupingUndo {
+                guard let index = draft.entries.firstIndex(where: { $0.id == change.after.id }),
+                      draft.entries[index].revision == change.after.revision else { continue }
+                let revision = draft.nextRevision(writer: writer)
+                draft.entries[index].categoryID = change.before.categoryID
+                draft.entries[index].categoryAssignment = change.before.categoryAssignment
+                draft.entries[index].revision = revision
+            }
+            draft.recategorizeAutomatically(writer: writer)
+            try commit(draft)
+            groupingUndo = []; canUndoGrouping = false
+        } catch { report(error) }
+    }
+
     func saveSettings(_ settings: Settings) throws {
         var draft = ledger; try draft.saveSettings(settings, writer: writer); try commit(draft)
     }
 
     func categoryName(_ id: String?) -> String { ledger.categories.first { $0.id == id }?.name ?? "Uncategorized" }
+    func notificationSummary(now: Date = Date()) -> String {
+        let rows = ledger.breakdown(on: now, now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }
+        guard !rows.isEmpty else { return "Log an activity to start today’s breakdown." }
+        let stamp = DateFormatter(); stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = ledger.settings.use24HourTime ? "MMM d, HH:mm" : "MMM d, h:mm a"
+        return "Summary as of \(stamp.string(from: now))\n" + rows.map { "\($0.name): \(Int($0.percent.rounded()))% · \(duration($0.minutes))" }.joined(separator: "\n")
+    }
     func time(_ date: Date) -> String {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = ledger.settings.use24HourTime ? "HH:mm" : "h:mm a"
