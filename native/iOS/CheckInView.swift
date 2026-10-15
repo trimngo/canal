@@ -82,6 +82,8 @@ struct CheckInEditor: View {
             if let entry {
                 activity = entry.activity; categoryID = store.ledger.confirmedCategoryID(for: entry) ?? ""
                 timestamp = entry.end; recordNow = false
+            } else if let draft = store.quickReplyDraft {
+                activity = draft; store.quickReplyDraft = nil
             }
         }.onChange(of: activity) { old, new in
             if entry == nil, OfflineGrouping.normalized(old) != OfflineGrouping.normalized(new) { categoryID = "" }

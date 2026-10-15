@@ -69,7 +69,8 @@ struct WatchHomeView: View {
                 if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryID = "" }
             }
             .onChange(of: store.sampleRequestID) { _, _ in
-                tab = 0; activity = ""; categoryID = ""; saved = false
+                tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
+                categoryID = ""; saved = false
             }
     }
 }

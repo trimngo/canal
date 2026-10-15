@@ -31,7 +31,15 @@ platform :ios do
         sh("bash", File.join(native_directory, "scripts", "validate.sh"))
         profiles = {}
         %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp].each do |identifier|
-          get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, readonly: false)
+          # Enable only Siri on the existing App IDs. Existing iCloud and other
+          # capabilities remain intact. Credentials stay in this CI process.
+          bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier)
+          UI.user_error!("Missing registered App ID: #{identifier}") unless bundle_id
+          unless bundle_id.get_capabilities.any? { |capability| capability.is_type?("SIRIKIT") }
+            bundle_id.create_capability("SIRIKIT")
+            UI.message("Enabled Siri for #{identifier}")
+          end
+          get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, readonly: false, force: true)
           profiles[identifier] = lane_context[SharedValues::SIGH_NAME]
         end
         build_app(

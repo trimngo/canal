@@ -8,6 +8,7 @@ final class LedgerStore: ObservableObject {
     @Published private(set) var ledger = Ledger()
     @Published var sampleRequestID = UUID()
     @Published var pendingLogRequest = false
+    @Published var quickReplyDraft: String?
     @Published var error: String?
     @Published var syncStatus = "Saved on this device"
     @Published private(set) var storageAvailable = true
@@ -122,8 +123,19 @@ final class LedgerStore: ObservableObject {
         try commit(draft)
     }
 
-    func addCapture(_ text: String) throws {
-        var draft = ledger; try draft.addCapture(text: text, writer: writer); try commit(draft)
+    func saveQuickSample(_ text: String, id: String = UUID().uuidString, at timestamp: Date = Date()) throws {
+        start()
+        var draft = ledger
+        try draft.saveQuickSample(id: id, at: timestamp, activity: text, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
+
+    @discardableResult
+    func addCapture(_ text: String, at timestamp: Date = Date()) throws -> Capture {
+        var draft = ledger
+        let capture = try draft.addCapture(text: text, writer: writer, now: timestamp)
+        try commit(draft)
+        return capture
     }
 
     func setCaptureDone(_ capture: Capture, done: Bool) throws {

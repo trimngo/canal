@@ -11,7 +11,7 @@ website is separate and remains available.
   what is happening at its saved timestamp, not a fixed 15-minute interval.
 - Today shows the time breakdown first, then an inline logging form. There are no
   tabs or Summary/Calendar selector. Calendar has its own navigation button;
-  Inbox and Settings remain accessible through More. Notifications open logging.
+  Inbox and Settings remain accessible through More.
 - Offline phrase matching and previous confirmations suggest groups. Every new
   log stays Uncategorized until the user accepts a suggestion or chooses a group.
   Suggestions are visible during logging and review. Explicit batch confirmation
@@ -31,11 +31,17 @@ website is separate and remains available.
   methods. Upgrade schema-1 logs with a local backup before writing schema 2.
 - iPhone inbox for thoughts/tasks, completion and reopening. Captures do not count
   as time spent. Timed task reminders are a later feature.
-- Watch: dictate check-ins and captures, confirm suggested groups, and view hours and
-  percentages. Expanded Watch notifications use available local logs. Phone
-  banners show a dated summary snapshot, refreshed when logs or groups change;
-  offline background delivery does not imply a freshly recomputed summary.
-- Siri/Shortcuts: “Capture in Ledger,” then answer Siri's text prompt.
+- Watch notifications focus on input. Tap Dictate log, finish system text input,
+  and the sample saves immediately, shows a checkmark, plays a success haptic,
+  and dismisses. No category or summary blocks the reply. watchOS controls its
+  keyboard/dictation chooser, so exact hardware tap counts need device testing.
+  Notification text-reply actions also save directly; ordinary taps open logging.
+- Siri notes: try “Create a note in Ledger called try shorter lessons.” The
+  built-in note intent carries title/body together, saves to the local inbox
+  with a timestamp, and syncs with the paired device. Nothing counts as time
+  spent. The existing Capture a thought App Shortcut remains available.
+  Siri recognition and invocation on a physical Watch still need device testing;
+  the native simulator checks cannot prove single-utterance voice recognition.
 - Atomic local storage, JSON backup export, deterministic merge of device edits,
   paired-device file transfers, and optional private CloudKit synchronization.
 

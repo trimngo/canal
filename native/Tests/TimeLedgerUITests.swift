@@ -133,4 +133,23 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["Follow up with a client UI test"].waitForExistence(timeout: 5))
     }
+
+    func testQuickNotificationReplySavesWithoutEditorConfirmationAndSurvivesRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-quick-reply"]; app.launch()
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Direct notification reply UI fixture"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["dashboard.review.uncategorized"].exists)
+        app.terminate(); app.launchArguments = []; app.launch()
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Direct notification reply UI fixture"].waitForExistence(timeout: 5))
+    }
+
+    func testSiriNoteHandlerSavesTitleOnlyWithoutOpeningAnEditorAndPersists() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-capture"]; app.launch()
+        app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
+        XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
+        app.terminate(); app.launchArguments = []; app.launch()
+        app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
+        XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
+    }
 }

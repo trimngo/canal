@@ -27,13 +27,14 @@ struct InboxView: View {
                             .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
                         VStack(alignment: .leading, spacing: 6) {
                             Text(capture.text)
-                            Text(capture.createdAt, style: .date).font(.caption).foregroundStyle(.secondary)
+                            Text(capture.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }.padding(.vertical, 4)
                 }
             }
             Section("Hands-free capture") {
-                Text("Say “Siri, capture in Time Ledger,” then tell Siri what to save.")
+                Text("Try: ‘Siri, create a note in Ledger called try shorter lessons.’ Say the whole thought in the same sentence.")
                 Text("Timed task reminders will come later. This first inbox is for capturing and reviewing.")
                     .font(.footnote).foregroundStyle(.secondary)
             }

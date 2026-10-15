@@ -88,10 +88,10 @@ struct SettingsView: View {
                 }
             }
             Section {
-                Text("Say ‘Siri, capture in Ledger,’ then say your task when Siri asks.")
+                Text("Try one sentence on your Watch: ‘Siri, create a note in Ledger called try shorter lessons.’")
                 ShortcutsLink()
             } header: { Text("Siri & Shortcuts") } footer: {
-                Text("For a shorter command, create a personal shortcut using Capture a thought and rename it in Apple’s Shortcuts app. Siri controls spoken recognition; this app cannot change a command name in Settings or guarantee free-form task text in a single utterance.")
+                Text("Siri notes save directly to your inbox with a timestamp. No app confirmation is required. Siri controls recognition and may ask for missing information. The Capture a thought shortcut remains available; personal shortcut names can be changed in Apple’s Shortcuts app.")
             }
         }.navigationTitle("Settings")
             .task { settings = store.ledger.settings; await notifications.refreshStatus() }

@@ -2,6 +2,9 @@ import Foundation
 import Combine
 import UserNotifications
 import LedgerCore
+#if os(watchOS)
+import WatchKit
+#endif
 
 @MainActor
 final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, ObservableObject {
@@ -9,12 +12,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     @Published var status = "Not enabled"
     private let center = UNUserNotificationCenter.current()
     private var applied: Settings?
-    private var appliedSummary: String?
+    private let promptBody = "Dictate what you’re doing. It saves when you finish."
     private override init() { super.init(); center.delegate = self }
 
     func configureActions() {
-        let open = UNNotificationAction(identifier: "OPEN_CHECKIN", title: "Log what I’m doing", options: [.foreground])
-        center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [open], intentIdentifiers: [])])
+        let reply = UNTextInputNotificationAction(identifier: "QUICK_LOG", title: "Dictate log", options: [],
+            textInputButtonTitle: "Save", textInputPlaceholder: "What are you doing now?")
+        center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [reply], intentIdentifiers: [])])
     }
 
     func permission() async throws -> Bool {
@@ -38,8 +42,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     func apply(_ settings: Settings) async throws {
         configureActions(); await refreshStatus()
         #if os(iOS)
-        let summary = LedgerStore.shared.notificationSummary()
-        guard applied != settings || appliedSummary != summary else { return }
+        guard applied != settings else { return }
         let minutes = try settings.notificationMinutes()
         let pending = await center.pendingNotificationRequests()
         let ids = pending.filter { $0.identifier.hasPrefix("checkin-") }.map(\.identifier)
@@ -51,7 +54,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                 for minute in minutes {
                     let content = UNMutableNotificationContent()
                     content.title = "What are you doing right now?"
-                    content.body = summary
+                    content.body = promptBody
                     content.sound = .default; content.categoryIdentifier = "CHECKIN"
                     content.userInfo = ["minute": minute]
                     var components = DateComponents(); components.hour = minute / 60; components.minute = minute % 60
@@ -64,7 +67,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             }
         }
         applied = settings
-        appliedSummary = summary
         #endif
     }
 
@@ -72,7 +74,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         guard try await permission() else { throw NotificationError.denied }
         let content = UNMutableNotificationContent()
         content.title = "Time Ledger test"
-        content.body = LedgerStore.shared.notificationSummary()
+        content.body = promptBody
         content.sound = .default
         content.categoryIdentifier = "CHECKIN"
         try await center.add(UNNotificationRequest(identifier: "notification-test", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 15, repeats: false)))
@@ -86,11 +88,37 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
-        let opensSample = response.notification.request.content.categoryIdentifier == "CHECKIN"
-        // Complete every system callback once, without carrying its Objective-C
-        // completion block across an actor boundary. UI work belongs on main.
-        if opensSample { Task { @MainActor in self.presentSample() } }
-        completionHandler()
+        guard response.notification.request.content.categoryIdentifier == "CHECKIN",
+              response.actionIdentifier != UNNotificationDismissActionIdentifier else {
+            completionHandler(); return
+        }
+        if response.actionIdentifier == "QUICK_LOG", let reply = response as? UNTextInputNotificationResponse {
+            let text = reply.userText
+            let timestamp = Date()
+            let id = Self.replyID(for: response.notification)
+            Task { @MainActor in
+                do {
+                    try LedgerStore.shared.saveQuickSample(text, id: id, at: timestamp)
+                    center.removeDeliveredNotifications(withIdentifiers: [response.notification.request.identifier])
+                    #if os(watchOS)
+                    WKInterfaceDevice.current().play(.success)
+                    #endif
+                } catch {
+                    LedgerStore.shared.quickReplyDraft = text
+                    LedgerStore.shared.beginSample()
+                    LedgerStore.shared.report(error)
+                }
+                completionHandler()
+            }
+        } else {
+            // Default taps and the old foreground action still open logging.
+            Task { @MainActor in self.presentSample() }
+            completionHandler()
+        }
+    }
+
+    nonisolated static func replyID(for notification: UNNotification) -> String {
+        "notification-\(notification.request.identifier)-\(notification.date.timeIntervalSince1970)"
     }
 
     func presentSample() { LedgerStore.shared.beginSample() }

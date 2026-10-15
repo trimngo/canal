@@ -1,8 +1,10 @@
 import SwiftUI
 import LedgerCore
+import Intents
 
 @main
 struct TimeLedgerApp: App {
+    @UIApplicationDelegateAdaptor(SiriAppDelegate.self) private var siriDelegate
     @StateObject private var store = LedgerStore.shared
     @Environment(\.scenePhase) private var scenePhase
     var body: some Scene {
@@ -14,6 +16,16 @@ struct TimeLedgerApp: App {
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--ui-notification-checkin") {
                         NotificationScheduler.shared.presentSample()
+                    }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-quick-reply") {
+                        do { try store.saveQuickSample("Direct notification reply UI fixture", id: "ui-notification-reply") }
+                        catch { store.report(error) }
+                    }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-siri-capture") {
+                        let intent = INCreateNoteIntent(title: INSpeakableString(spokenPhrase: "One sentence Siri UI fixture"), content: nil, groupName: nil)
+                        if let handler = siriDelegate.application(UIApplication.shared, handlerFor: intent) as? SiriCaptureHandler {
+                            handler.handle(intent: intent) { _ in }
+                        }
                     }
                     #endif
                 }

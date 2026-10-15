@@ -4,6 +4,7 @@ import LedgerCore
 
 @main
 struct TimeLedgerWatchApp: App {
+    @WKApplicationDelegateAdaptor(SiriWatchDelegate.self) private var siriDelegate
     @StateObject private var store = LedgerStore.shared
     @Environment(\.scenePhase) private var scenePhase
     var body: some Scene {
