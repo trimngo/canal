@@ -28,7 +28,6 @@ platform :ios do
       begin
         create_keychain(name: keychain_name, password: keychain_password, default_keychain: false, unlock: true, timeout: 3600, lock_when_sleeps: true)
         import_certificate(certificate_path: certificate_path, certificate_password: ENV.fetch("APPLE_DISTRIBUTION_P12_PASSWORD"), keychain_name: keychain_name, keychain_password: keychain_password)
-        sh("bash", File.join(native_directory, "scripts", "validate.sh"))
         profiles = {}
         %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp com.trimngo.TimeLedger.watchkitapp.capture].each do |identifier|
           # Enable only Siri on the existing App IDs. Existing iCloud and other
@@ -49,9 +48,10 @@ platform :ios do
               .post("v1/bundleIdCapabilities", request)
             UI.message("Enabled Siri for #{identifier}")
           end
-          get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, readonly: false, force: true)
+          get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, force: true)
           profiles[identifier] = lane_context[SharedValues::SIGH_NAME]
         end
+        sh("bash", File.join(native_directory, "scripts", "validate.sh"))
         build_app(
           project: File.join(native_directory, "TimeLedger.xcodeproj"), scheme: "TimeLedger", clean: true,
           output_directory: File.join(directory, "output"), export_method: "app-store",
