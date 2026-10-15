@@ -96,10 +96,28 @@ final class LedgerStore: ObservableObject {
                 #endif
             }
         }
+        importSiriCaptures()
         companion?.start(); cloud?.requestSync()
     }
 
-    func refresh() { start(); companion?.send(); cloud?.requestSync() }
+    func refresh() { start(); importSiriCaptures(); companion?.send(); cloud?.requestSync() }
+
+    private func importSiriCaptures() {
+        #if os(watchOS)
+        do {
+            let pending = try SiriCaptureQueue.pending()
+            guard !pending.isEmpty else { return }
+            var draft = ledger
+            for capture in pending {
+                try draft.addCapture(text: capture.text, id: capture.id, writer: writer, now: capture.createdAt)
+            }
+            if draft != ledger { try commit(draft) }
+            // Delete only after an atomic ledger commit. A crash before removal
+            // safely replays the queue without duplicating/reopening a capture.
+            for capture in pending { try SiriCaptureQueue.remove(capture) }
+        } catch { report(error) }
+        #endif
+    }
 
     private func commit(_ draft: Ledger) throws {
         guard storageAvailable else { throw StoreError.unavailable }

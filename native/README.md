@@ -42,6 +42,10 @@ website is separate and remains available.
   spent. The existing Capture a thought App Shortcut remains available.
   Siri recognition and invocation on a physical Watch still need device testing;
   the native simulator checks cannot prove single-utterance voice recognition.
+- The Watch Siri extension writes individual thoughts to a shared Keychain queue.
+  The app imports them atomically, preserves IDs/timestamps, then removes the
+  queued copies. Replaying after a crash cannot duplicate or reopen a thought.
+  Existing ledger files and backups are not moved into shared storage.
 - Atomic local storage, JSON backup export, deterministic merge of device edits,
   paired-device file transfers, and optional private CloudKit synchronization.
 

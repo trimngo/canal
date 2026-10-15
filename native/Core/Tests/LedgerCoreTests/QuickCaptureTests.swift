@@ -64,4 +64,15 @@ final class QuickCaptureTests: XCTestCase {
         XCTAssertThrowsError(try ledger.saveQuickSample(id: "empty", at: Date(), activity: " \n", writer: "watch"))
         XCTAssertEqual(ledger, previous)
     }
+
+    func testReplayingASiriCaptureQueuePreservesIDTimestampAndCompletion() throws {
+        var ledger = Ledger()
+        let timestamp = Date(timeIntervalSince1970: 1_792_060_000)
+        let capture = try ledger.addCapture(text: "A Watch thought", id: "queued-id", writer: "watch", now: timestamp)
+        ledger.setCaptureDone(id: capture.id, done: true, writer: "phone")
+        let saved = ledger
+        try ledger.addCapture(text: capture.text, id: capture.id, writer: "watch", now: timestamp)
+        XCTAssertEqual(ledger, saved)
+        XCTAssertEqual(ledger.captures.first?.createdAt, timestamp)
+    }
 }

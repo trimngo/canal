@@ -30,12 +30,15 @@ platform :ios do
         import_certificate(certificate_path: certificate_path, certificate_password: ENV.fetch("APPLE_DISTRIBUTION_P12_PASSWORD"), keychain_name: keychain_name, keychain_password: keychain_password)
         sh("bash", File.join(native_directory, "scripts", "validate.sh"))
         profiles = {}
-        %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp].each do |identifier|
+        %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp com.trimngo.TimeLedger.watchkitapp.capture].each do |identifier|
           # Enable only Siri on the existing App IDs. Existing iCloud and other
           # capabilities remain intact. Credentials stay in this CI process.
           bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier)
+          if !bundle_id && identifier == "com.trimngo.TimeLedger.watchkitapp.capture"
+            bundle_id = Spaceship::ConnectAPI::BundleId.create(name: "Ledger Watch Siri Capture", platform: "IOS", identifier: identifier)
+          end
           UI.user_error!("Missing registered App ID: #{identifier}") unless bundle_id
-          unless bundle_id.get_capabilities.any? { |capability| capability.is_type?("SIRIKIT") }
+          unless identifier.end_with?(".capture") || bundle_id.get_capabilities.any? { |capability| capability.is_type?("SIRIKIT") }
             bundle_id.create_capability("SIRIKIT")
             UI.message("Enabled Siri for #{identifier}")
           end
@@ -46,7 +49,7 @@ platform :ios do
           project: File.join(native_directory, "TimeLedger.xcodeproj"), scheme: "TimeLedger", clean: true,
           output_directory: File.join(directory, "output"), export_method: "app-store",
           export_options: { signingStyle: "manual", provisioningProfiles: profiles },
-          xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp"
+          xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp LEDGER_WATCH_INTENTS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp.capture"
         )
         actual_build = get_ipa_info_plist_value(ipa: lane_context[SharedValues::IPA_OUTPUT_PATH], key: "CFBundleVersion")
         expected_build = ENV.fetch("BUILD_NUMBER", "1")

@@ -1,15 +1,19 @@
 import WatchKit
-import Intents
 
 final class SiriWatchDelegate: NSObject, WKApplicationDelegate {
     func applicationDidFinishLaunching() {
         NotificationScheduler.shared.configureActions()
     }
-    func handle(_ intent: INIntent, completionHandler: @escaping (INIntentResponse) -> Void) {
-        guard let note = intent as? INCreateNoteIntent else {
-            completionHandler(INCreateNoteIntentResponse(code: .failure, userActivity: nil))
-            return
+
+    func handle(_ backgroundTasks: Set<WKRefreshBackgroundTask>) {
+        let store = LedgerStore.shared; store.start()
+        for task in backgroundTasks {
+            if let connectivity = task as? WKWatchConnectivityRefreshBackgroundTask, let companion = store.companion {
+                companion.holdBackgroundTask(connectivity)
+            } else {
+                if task is WKIntentDidRunRefreshBackgroundTask { store.refresh() }
+                task.setTaskCompletedWithSnapshot(false)
+            }
         }
-        SiriCaptureHandler().handle(intent: note) { completionHandler($0) }
     }
 }

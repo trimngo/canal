@@ -227,10 +227,11 @@ public struct Ledger: Codable, Equatable, Sendable {
     }
 
     @discardableResult
-    public mutating func addCapture(text: String, writer: String, now: Date = Date()) throws -> Capture {
+    public mutating func addCapture(text: String, id: String = UUID().uuidString, writer: String, now: Date = Date()) throws -> Capture {
+        if let saved = captures.first(where: { $0.id == id }) { return saved }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty, cleaned.count <= 500 else { throw LedgerError.invalidActivity }
-        let capture = Capture(text: cleaned, createdAt: now, revision: nextRevision(writer: writer))
+        let capture = Capture(id: id, text: cleaned, createdAt: now, revision: nextRevision(writer: writer))
         captures.append(capture)
         return capture
     }

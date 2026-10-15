@@ -42,8 +42,12 @@ final class SiriCaptureHandler: NSObject, INCreateNoteIntentHandling {
         let text = Result { try Self.text(from: intent) }
         Task { @MainActor in
             do {
+                #if LEDGER_INTENTS_EXTENSION
+                let capture = try SiriCaptureQueue.enqueue(text.get(), at: receivedAt)
+                #else
                 let store = LedgerStore.shared; store.start()
                 let capture = try store.addCapture(text.get(), at: receivedAt)
+                #endif
                 let response = INCreateNoteIntentResponse(code: .success, userActivity: nil)
                 let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: capture.createdAt)
                 response.createdNote = INNote(title: INSpeakableString(spokenPhrase: capture.text),

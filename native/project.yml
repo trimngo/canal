@@ -68,6 +68,8 @@ targets:
       - Shared
     dependencies:
       - package: LedgerCore
+      - target: TimeLedgerWatchIntents
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.watchkitapp
@@ -91,12 +93,50 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)
         LedgerCloudContainer: $(LEDGER_CLOUD_CONTAINER)
+        LedgerCaptureAccessGroup: $(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp
     entitlements:
       path: Generated/Watch.entitlements
       properties:
         com.apple.developer.icloud-container-identifiers: [$(LEDGER_CLOUD_CONTAINER)]
         com.apple.developer.icloud-services: [CloudKit]
         com.apple.developer.siri: true
+        keychain-access-groups: [$(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp]
+  TimeLedgerWatchIntents:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - WatchIntents
+      - path: Shared/SiriCaptureHandler.swift
+      - path: Shared/SiriCaptureQueue.swift
+    dependencies:
+      - package: LedgerCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.watchkitapp.capture
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) LEDGER_INTENTS_EXTENSION
+        APPLICATION_EXTENSION_API_ONLY: YES
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(LEDGER_WATCH_INTENTS_PROFILE_NAME)
+    info:
+      path: Generated/WatchIntents-Info.plist
+      properties:
+        CFBundleDisplayName: Ledger Capture
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LedgerCaptureAccessGroup: $(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.intents-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).IntentHandler
+          NSExtensionAttributes:
+            IntentsSupported: [INCreateNoteIntent]
+            IntentsRestrictedWhileLocked: []
+    entitlements:
+      path: Generated/WatchIntents.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp]
   TimeLedgerUITests:
     type: bundle.ui-testing
     platform: iOS
