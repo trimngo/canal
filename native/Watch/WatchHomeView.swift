@@ -60,6 +60,10 @@ struct WatchHomeView: View {
                         }
                         Text("Of time since your first log").font(.caption2).foregroundStyle(.secondary)
                         Button("Sync") { store.refresh() }
+                        Text(store.companionStatus).font(.caption2).foregroundStyle(.secondary)
+                        if let diagnostic = store.companionDiagnostic {
+                            Text(diagnostic).font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }.tag(2)

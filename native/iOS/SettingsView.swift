@@ -84,6 +84,10 @@ struct SettingsView: View {
             }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)
+                Text(store.companionStatus).font(.footnote).accessibilityIdentifier("sync.companion.status")
+                if let diagnostic = store.companionDiagnostic {
+                    Text(diagnostic).font(.caption).foregroundStyle(.secondary)
+                }
                 Button("Sync now") { store.refresh() }
                 if let data = try? JSONEncoder().encode(store.ledger) {
                     ShareLink("Export a backup", item: LedgerExport(data: data), preview: SharePreview("Time Ledger backup"))

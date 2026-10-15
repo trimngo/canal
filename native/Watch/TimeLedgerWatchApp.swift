@@ -15,7 +15,7 @@ struct TimeLedgerWatchApp: App {
                     NotificationScheduler.shared.configureActions()
                 }
                 .onChange(of: scenePhase) { _, phase in if phase == .active { store.refresh() } }
-                .alert("Couldn’t save", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
+                .alert("Couldn’t complete that", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
                     Button("OK") { store.error = nil }
                 } message: { Text(store.error ?? "") }
         }

@@ -11,6 +11,8 @@ final class LedgerStore: ObservableObject {
     @Published var quickReplyDraft: String?
     @Published var error: String?
     @Published var syncStatus = "Saved on this device"
+    @Published var companionStatus = "Connecting to paired device…"
+    @Published var companionDiagnostic: String?
     @Published private(set) var storageAvailable = true
     @Published private(set) var canUndoGrouping = false
     private var groupingUndo: [(before: CheckIn, after: CheckIn)] = []
@@ -100,7 +102,7 @@ final class LedgerStore: ObservableObject {
         companion?.start(); cloud?.requestSync()
     }
 
-    func refresh() { start(); importSiriCaptures(); companion?.send(); cloud?.requestSync() }
+    func refresh() { start(); importSiriCaptures(); companion?.refresh(); cloud?.requestSync() }
 
     private func importSiriCaptures() {
         #if os(watchOS)

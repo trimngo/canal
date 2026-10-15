@@ -152,4 +152,21 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
     }
+
+    func testStartupHelperFailureDoesNotBlockLocalLoggingOrLoseItAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-companion-unavailable"]
+        app.launch()
+        XCTAssertTrue(element(app, "checkin.activity").waitForExistence(timeout: 10))
+        XCTAssertEqual(app.alerts.count, 0)
+        log("Saved while helper unavailable", in: app)
+        app.buttons["dashboard.more"].tap(); app.buttons["Settings"].tap()
+        let status = element(app, "sync.companion.status"); reveal(status, in: app)
+        XCTAssertEqual(status.label, "Saved on this device · sync waiting")
+        XCTAssertTrue(app.staticTexts["NSCocoaErrorDomain (4099)"].exists)
+        app.terminate(); app.launchArguments = ["--ui-companion-unavailable"]; app.launch()
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Saved while helper unavailable"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.alerts.count, 0)
+    }
 }
