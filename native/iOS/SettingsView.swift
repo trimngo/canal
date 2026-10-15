@@ -2,6 +2,7 @@ import SwiftUI
 import AppIntents
 import UniformTypeIdentifiers
 import LedgerCore
+import Intents
 
 struct LedgerExport: Transferable {
     var data: Data
@@ -17,6 +18,7 @@ struct SettingsView: View {
     @State private var managingGroups = false
     @State private var testSent = false
     @State private var saving = false
+    @State private var siriStatus = INPreferences.siriAuthorizationStatus()
     private let stepMinutes = Array(stride(from: 0, to: 1440, by: 15))
     var body: some View {
         Form {
@@ -89,6 +91,17 @@ struct SettingsView: View {
             }
             Section {
                 Text("Try one sentence on your Watch: ‘Siri, create a note in Ledger called try shorter lessons.’")
+                if siriStatus != .authorized {
+                    Button("Enable Siri capture") {
+                        INPreferences.requestSiriAuthorization { value in
+                            Task { @MainActor in siriStatus = value }
+                        }
+                    }.accessibilityIdentifier("settings.siri.enable")
+                    Text(siriStatus == .denied ? "Siri access is off. Allow Ledger in your iPhone’s Siri settings." : "Allow Siri access once to use note capture.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Label("Siri capture enabled", systemImage: "checkmark.circle").font(.footnote)
+                }
                 ShortcutsLink()
             } header: { Text("Siri & Shortcuts") } footer: {
                 Text("Siri notes save directly to your inbox with a timestamp. No app confirmation is required. Siri controls recognition and may ask for missing information. The Capture a thought shortcut remains available; personal shortcut names can be changed in Apple’s Shortcuts app.")

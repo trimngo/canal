@@ -27,7 +27,7 @@ struct InboxView: View {
                             .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
                         VStack(alignment: .leading, spacing: 6) {
                             Text(capture.text)
-                            Text(capture.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            Text("\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }.padding(.vertical, 4)
