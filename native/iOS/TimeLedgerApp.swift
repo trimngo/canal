@@ -46,12 +46,13 @@ struct TimeLedgerApp: App {
 }
 
 enum LedgerScreen: Hashable { case calendar, inbox, settings }
+private enum AppTab: Hashable { case today, inbox, settings }
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [LedgerScreen] = []
-    @State private var tab = 0
+    @State private var tab: AppTab = .today
     @State private var capturing = false
     @State private var wasBackgrounded = false
     var body: some View {
@@ -64,9 +65,9 @@ struct RootView: View {
                     case .settings: SettingsView()
                     }
                 }
-            }.tabItem { Label("Today", systemImage: "chart.pie") }.tag(0)
-            NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(1)
-            NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(2)
+            }.tabItem { Label("Today", systemImage: "chart.pie") }.tag(AppTab.today)
+            NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(AppTab.inbox)
+            NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(AppTab.settings)
         }
         .onAppear { showRequestedCapture() }
         .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
@@ -74,13 +75,13 @@ struct RootView: View {
             if phase == .background { wasBackgrounded = true }
             if phase == .active, wasBackgrounded {
                 wasBackgrounded = false
-                if !capturing { tab = 0; path.removeAll() }
+                if !capturing { tab = .today; path.removeAll() }
             }
         }
         .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
     }
     private func showRequestedCapture() {
         guard store.pendingLogRequest else { return }
-        tab = 0; path.removeAll(); capturing = true; store.pendingLogRequest = false
+        tab = .today; path.removeAll(); capturing = true; store.pendingLogRequest = false
     }
 }

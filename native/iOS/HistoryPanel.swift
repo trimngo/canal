@@ -6,7 +6,7 @@ struct HistoryPanel: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
     let select: (BreakdownRow) -> Void
-    @State private var page = 0
+    @State private var page: Int? = 0
     private func color(_ id: String) -> Color {
         if id == "remaining" { return .gray }
         if id == "uncategorized" { return .orange }
@@ -17,17 +17,29 @@ struct HistoryPanel: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text(["Breakdown", "Pie chart", "Daily trend"][page]).font(.subheadline.bold())
+                Text(["Breakdown", "Pie chart", "Daily trend"][page ?? 0]).font(.subheadline.bold())
                 Spacer()
-                Text("\(page + 1) / 3").font(.caption).foregroundStyle(.secondary)
+                Text("\((page ?? 0) + 1) / 3").font(.caption).foregroundStyle(.secondary)
             }
-            TabView(selection: $page) {
-                breakdown.tag(0)
-                pie.tag(1)
-                trend.tag(2)
-            }.tabViewStyle(.page(indexDisplayMode: .always))
-                .indexViewStyle(.page(backgroundDisplayMode: .always))
-                .frame(height: 270).accessibilityIdentifier("report.pages")
+            // A paging ScrollView avoids nesting UIPageViewController inside
+            // the app's TabView, which can draw over the other tabs on iOS.
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    breakdown.containerRelativeFrame(.horizontal).id(0)
+                    pie.containerRelativeFrame(.horizontal).id(1)
+                    trend.containerRelativeFrame(.horizontal).id(2)
+                }.scrollTargetLayout()
+            }.scrollTargetBehavior(.paging).scrollPosition(id: $page).scrollIndicators(.hidden)
+                .frame(height: page == 0 ? min(250, max(130, CGFloat(report.rows.count) * 60)) : 250)
+                .accessibilityIdentifier("report.pages")
+            HStack(spacing: 8) {
+                ForEach(0..<3) { index in
+                    Button { withAnimation { page = index } } label: {
+                        Circle().fill(index == (page ?? 0) ? Color.accentColor : Color.secondary.opacity(0.3)).frame(width: 6, height: 6)
+                            .frame(width: 24, height: 24)
+                    }.buttonStyle(.plain).accessibilityLabel("Show \(["breakdown", "pie chart", "daily trend"][index])")
+                }
+            }
         }
     }
     private var breakdown: some View {
@@ -47,7 +59,7 @@ struct HistoryPanel: View {
                         }
                     }.buttonStyle(.plain).disabled(row.id == "remaining").accessibilityIdentifier("dashboard.group.\(row.id)")
                 }
-            }.padding(.bottom, 30)
+            }.padding(.bottom, 8)
         }.accessibilityIdentifier("report.view.breakdown")
     }
     private var pie: some View {
@@ -69,7 +81,7 @@ struct HistoryPanel: View {
                         }.font(.caption)
                     }
                 }
-            }.padding(.bottom, 30)
+            }.padding(.bottom, 8)
         }.accessibilityIdentifier("report.view.pie")
     }
     private var trend: some View {
@@ -86,7 +98,7 @@ struct HistoryPanel: View {
                     .chartXScale(domain: report.start...max(report.end, report.start.addingTimeInterval(3600)))
                     .chartLegend(.hidden).chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
             }
-        }.padding(.bottom, 30).accessibilityIdentifier("report.view.trend")
+        }.padding(.bottom, 8).accessibilityIdentifier("report.view.trend")
     }
     private var empty: some View {
         Text("Log an activity to start this view.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 150)

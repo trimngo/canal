@@ -96,7 +96,7 @@ struct DayView: View {
                     }
                 }.accessibilityIdentifier("today.logs")
             }
-        }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.interactively)
+        }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.immediately)
     }
 }
 

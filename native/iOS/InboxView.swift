@@ -50,17 +50,12 @@ struct InboxView: View {
                     HStack(alignment: .top, spacing: 14) {
                         Button {
                             do { try store.setCaptureDone(capture, done: !capture.isDone) } catch { store.report(error) }
-                        } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3) }
+                        } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3).frame(width: 44, height: 44) }
                             .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
                         VStack(alignment: .leading, spacing: 6) {
                             Text(capture.text)
-                            HStack {
-                                if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { Text("#\(rank + 1)") }
-                                else if !showDone { Text("Waiting to rank") }
-                                Text("\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))")
-                            }.font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
+                            Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
                         Menu {
                             if !capture.isDone {
                                 Button("Re-rank this idea") {
@@ -68,7 +63,8 @@ struct InboxView: View {
                                 }
                             }
                             Button("Delete idea", role: .destructive) { remove(capture) }
-                        } label: { Image(systemName: "ellipsis.circle") }
+                        } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
+                            .buttonStyle(.borderless).accessibilityLabel("Idea actions")
                             .accessibilityIdentifier("inbox.actions.\(capture.id)")
                     }.padding(.vertical, 4)
                         .swipeActions { Button("Delete", role: .destructive) { remove(capture) } }
@@ -81,6 +77,11 @@ struct InboxView: View {
         }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
+    private func metadata(_ capture: Capture) -> String {
+        let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
+        if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { return "#\(rank + 1) · \(date)" }
+        return showDone ? date : "Waiting to rank · \(date)"
+    }
 }
 
 private struct RankingView: View {
@@ -88,7 +89,8 @@ private struct RankingView: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            ScrollView {
+              VStack(spacing: 24) {
                 let pair = store.ledger.rankingPair
                 if let pair,
                    let first = store.ledger.activeCaptures.first(where: { $0.id == pair.first }),
@@ -103,7 +105,8 @@ private struct RankingView: View {
                     Text("New ideas will wait for a few comparisons to find their place.").foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
                 Spacer(minLength: 0)
-            }.padding(24).navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
+              }.padding(24)
+            }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
                 .task { do { try store.prepareRanking() } catch { store.report(error) } }
                 .onChange(of: store.ledger.captures) { _, _ in do { try store.prepareRanking() } catch { store.report(error) } }

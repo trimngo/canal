@@ -1,17 +1,28 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    private func recordScreen(_ name: String, in app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Review-\(name).png"; attachment.lifetime = .keepAlways
+        add(attachment)
+    }
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
     private func reveal(_ target: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<6 {
-            if target.exists && target.isHittable { return }
-            app.swipeUp()
+            let top = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : app.frame.minY
+            var bottom = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
+            if app.keyboards.firstMatch.exists { bottom = min(bottom, app.keyboards.firstMatch.frame.minY) }
+            let frame = target.exists ? target.frame : .zero
+            if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
+            let content = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.tables.firstMatch
+            if content.exists {
+                if !frame.isEmpty, frame.maxY < top { content.swipeDown() } else { content.swipeUp() }
+            } else { app.swipeUp() }
         }
         XCTAssertTrue(target.waitForExistence(timeout: 5))
-        XCTAssertTrue(target.isHittable)
     }
 
     private func log(_ text: String, in app: XCUIApplication, confirmSuggestion: Bool = false) {
@@ -41,6 +52,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Inbox"].exists)
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
+        recordScreen("Dashboard", in: app)
     }
 
     func testUnconfirmedSuggestionStaysUncategorizedUntilAcceptedInReview() {
@@ -123,6 +135,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Where your time went"].isHittable)
         XCTAssertFalse(app.buttons["checkin.save"].isHittable)
+        recordScreen("NotificationCapture", in: app)
         field.tap(); field.typeText("Notification sample UI test")
         app.buttons["quicklog.save"].tap()
         let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["Close"])
@@ -187,8 +200,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Your time"].waitForExistence(timeout: 5))
         let pages = element(app, "report.pages"); pages.swipeLeft()
         XCTAssertTrue(app.staticTexts["Pie chart"].waitForExistence(timeout: 5))
+        recordScreen("Pie", in: app)
         pages.swipeLeft()
         XCTAssertTrue(app.staticTexts["Daily trend"].waitForExistence(timeout: 5))
+        recordScreen("Trend", in: app)
         period.tap(); app.buttons["All time"].tap()
         XCTAssertTrue(app.staticTexts["Daily trend"].exists)
         period.tap(); app.buttons["Custom"].tap()
@@ -199,7 +214,8 @@ final class TimeLedgerUITests: XCTestCase {
     func testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
         app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.rank"].tap()
-        XCTAssertTrue(app.buttons["ranking.second"].waitForExistence(timeout: 5)); app.buttons["ranking.second"].tap()
+        XCTAssertTrue(app.buttons["ranking.second"].waitForExistence(timeout: 5))
+        recordScreen("Ranking", in: app); app.buttons["ranking.second"].tap()
         app.buttons["Done"].tap(); app.terminate(); app.launchArguments = []; app.launch()
         app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.rank"].tap()
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5)); app.buttons["ranking.first"].tap()
@@ -214,6 +230,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testInboxDeletionHasUndoAndPersistsAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
         app.tabBars.buttons["Inbox"].tap()
+        recordScreen("Inbox", in: app)
         let menu = app.buttons["inbox.actions.a"]; reveal(menu, in: app); menu.tap()
         app.buttons["Delete idea"].tap()
         XCTAssertFalse(app.staticTexts["First idea"].exists)
@@ -234,6 +251,7 @@ final class TimeLedgerUITests: XCTestCase {
         let file = app.buttons.matching(identifier: "backup.file").firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 10)); file.tap()
         XCTAssertTrue(app.staticTexts["2 activity logs · 0 ideas"].waitForExistence(timeout: 5))
+        recordScreen("RestorePreview", in: app)
         app.buttons["backup.confirm-restore"].tap()
         XCTAssertTrue(app.staticTexts["Restored. Your newer edits and existing logs were kept."].waitForExistence(timeout: 5))
         app.tabBars.buttons["Today"].tap()
@@ -245,8 +263,12 @@ final class TimeLedgerUITests: XCTestCase {
     func testRemainingTimePreferenceSurvivesRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
         app.tabBars.buttons["Settings"].tap()
-        let toggle = app.switches["settings.remaining"]; reveal(toggle, in: app); toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "1")
+        let toggle = app.switches["settings.remaining"]; reveal(toggle, in: app)
+        recordScreen("Settings", in: app)
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
+        recordScreen("RemainingSetting", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Settings"].tap()
         let restored = app.switches["settings.remaining"]; reveal(restored, in: app)
         XCTAssertEqual(restored.value as? String, "1")
