@@ -83,6 +83,7 @@ struct HistoryPanel: View {
                         .accessibilityLabel("\(item.day.formatted(date: .abbreviated, time: .omitted)), \(item.name)")
                         .accessibilityValue(store.duration(item.minutes))
                 }.chartForegroundStyleScale(domain: ids, range: ids.map(color))
+                    .chartXScale(domain: report.start...max(report.end, report.start.addingTimeInterval(3600)))
                     .chartLegend(.hidden).chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
             }
         }.padding(.bottom, 30).accessibilityIdentifier("report.view.trend")

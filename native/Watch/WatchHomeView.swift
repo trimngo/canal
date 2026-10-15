@@ -52,13 +52,13 @@ struct WatchHomeView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Estimated today").font(.headline)
                         Button("Log now") { store.beginSample() }
-                        ForEach(store.ledger.breakdown(on: now, now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }) { row in
+                        ForEach(store.ledger.history(range: .today, now: now).rows) { row in
                             VStack(alignment: .leading) {
                                 Text(row.name)
                                 Text("\(row.percent, specifier: "%.0f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
                             }.font(.caption)
                         }
-                        Text("Of time since your first log").font(.caption2).foregroundStyle(.secondary)
+                        Text(store.ledger.settings.showRemainingTime ? "Tracked time + time until bedtime" : "Of time since your first log").font(.caption2).foregroundStyle(.secondary)
                         Button("Sync") { store.refresh() }
                         Text(store.companionStatus).font(.caption2).foregroundStyle(.secondary)
                         if let diagnostic = store.companionDiagnostic {

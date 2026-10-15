@@ -49,9 +49,11 @@ enum LedgerScreen: Hashable { case calendar, inbox, settings }
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var path: [LedgerScreen] = []
     @State private var tab = 0
     @State private var capturing = false
+    @State private var wasBackgrounded = false
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack(path: $path) {
@@ -68,6 +70,13 @@ struct RootView: View {
         }
         .onAppear { showRequestedCapture() }
         .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { wasBackgrounded = true }
+            if phase == .active, wasBackgrounded {
+                wasBackgrounded = false
+                if !capturing { tab = 0; path.removeAll() }
+            }
+        }
         .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
     }
     private func showRequestedCapture() {

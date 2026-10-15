@@ -138,7 +138,8 @@ final class TimeLedgerUITests: XCTestCase {
         let field = element(app, "inbox.text")
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("Follow up with a client UI test")
         let save = app.buttons["inbox.save"]; reveal(save, in: app); save.tap()
-        app.tabBars.buttons["Today"].tap()
+        XCUIDevice.shared.press(.home); app.activate()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["Follow up with a client UI test"].waitForExistence(timeout: 5))
     }
