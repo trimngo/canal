@@ -39,7 +39,14 @@ platform :ios do
           end
           UI.user_error!("Missing registered App ID: #{identifier}") unless bundle_id
           unless identifier.end_with?(".capture") || bundle_id.get_capabilities.any? { |capability| capability.is_type?("SIRIKIT") }
-            bundle_id.create_capability("SIRIKIT")
+            # Fastlane 2.228's helper adds a web-session-only `capability`
+            # relationship that Apple's JWT API rejects. Use its authenticated
+            # client with the documented public API request instead.
+            request = { data: { type: "bundleIdCapabilities",
+              attributes: { capabilityType: "SIRIKIT" },
+              relationships: { bundleId: { data: { type: "bundleIds", id: bundle_id.id } } } } }
+            Spaceship::ConnectAPI::Provisioning::Client.new(token: Spaceship::ConnectAPI.token)
+              .post("v1/bundleIdCapabilities", request)
             UI.message("Enabled Siri for #{identifier}")
           end
           get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, readonly: false, force: true)
