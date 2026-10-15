@@ -1,0 +1,35 @@
+name: Inspect history UI diagnostics
+on:
+  push:
+    branches: [feat/native-history-backup-inbox]
+    paths: [.github/workflows/history-debug.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 38802691954
+          name: native-simulator-results
+          path: results
+      - name: Export screenshots
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          xcrun xcresulttool export attachments --path results/UITests.xcresult --output-path attachments
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in Path('attachments').rglob('*.json'):
+              print(p.name, p.read_text()[:40000])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: history-ui-diagnostics
+          path: |
+            attachments/**/*.png
+            attachments/**/*.json
+          retention-days: 1
