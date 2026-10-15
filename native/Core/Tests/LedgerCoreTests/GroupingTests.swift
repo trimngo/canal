@@ -75,12 +75,16 @@ final class GroupingTests: XCTestCase {
         XCTAssertEqual(ledger, once)
     }
 
-    func testExistingCustomDefaultNameDoesNotCreateDuplicateGroup() {
+    func testExistingCustomDefaultNameDoesNotCreateDuplicateAndSurvivesRename() throws {
         var ledger = Ledger(); ledger.categories.removeAll { $0.id == "social" }
         ledger.categories.append(LedgerCategory(id: "custom-social", name: "Socializing"))
         ledger.ensureDefaultGroups(writer: "phone")
         XCTAssertEqual(ledger.categories.filter { $0.name == "Socializing" }.count, 1)
         XCTAssertEqual(ledger.suggestedCategory(for: "chatting"), "custom-social")
+        try ledger.saveCategory(id: "custom-social", name: "People", writer: "phone")
+        ledger.ensureDefaultGroups(writer: "phone")
+        XCTAssertEqual(ledger.suggestedCategory(for: "Dinner with friends"), "custom-social")
+        XCTAssertFalse(ledger.categories.contains { $0.id == "social" })
     }
 
     func testPhoneAndWatchMergesShareRememberedChoices() throws {

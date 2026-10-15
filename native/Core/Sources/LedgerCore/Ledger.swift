@@ -26,10 +26,12 @@ public struct Revision: Codable, Equatable, Comparable, Sendable {
 }
 
 public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
+    public var automaticRole: String?
     public var id: String
     public var name: String
     public var revision: Revision
-    public init(id: String = UUID().uuidString, name: String, revision: Revision = Revision()) {
+    public init(id: String = UUID().uuidString, name: String, revision: Revision = Revision(), automaticRole: String? = nil) {
+        self.automaticRole = automaticRole
         self.id = id; self.name = name; self.revision = revision
     }
 }

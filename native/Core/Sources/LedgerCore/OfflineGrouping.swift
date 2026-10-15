@@ -5,7 +5,7 @@ public enum OfflineGrouping {
     public static var defaultGroups: [LedgerCategory] {
         [("work", "Work"), ("personal", "Personal Needs"), ("rest", "Rest"),
          ("social", "Socializing"), ("household", "Household & Errands"),
-         ("leisure", "Leisure"), ("travel", "Travel")].map { LedgerCategory(id: $0.0, name: $0.1) }
+         ("leisure", "Leisure"), ("travel", "Travel")].map { LedgerCategory(id: $0.0, name: $0.1, automaticRole: $0.0) }
     }
 
     public static func normalized(_ text: String) -> String {
@@ -30,7 +30,7 @@ public enum OfflineGrouping {
             // IDs survive renames. Existing custom groups with a default name
             // can also be used without introducing a duplicate group.
             guard let defaultName = defaultGroups.first(where: { $0.id == id })?.name else { continue }
-            guard let group = groups.first(where: { $0.id == id }) ?? groups.first(where: { normalized($0.name) == normalized(defaultName) }) else { continue }
+            guard let group = groups.first(where: { $0.automaticRole == id || $0.id == id }) ?? groups.first(where: { normalized($0.name) == normalized(defaultName) }) else { continue }
             for phrase in choices {
                 let phrase = normalized(phrase)
                 guard value.contains(" " + phrase + " "), !value.contains(" not " + phrase + " ") else { continue }
@@ -65,7 +65,14 @@ extension Ledger {
 
     public mutating func ensureDefaultGroups(writer: String) {
         for group in OfflineGrouping.defaultGroups {
-            guard !categories.contains(where: { $0.id == group.id || OfflineGrouping.normalized($0.name) == OfflineGrouping.normalized(group.name) }) else { continue }
+            if let index = categories.firstIndex(where: { $0.id == group.id || $0.automaticRole == group.id })
+                ?? categories.firstIndex(where: { OfflineGrouping.normalized($0.name) == OfflineGrouping.normalized(group.name) }) {
+                if categories[index].automaticRole == nil {
+                    let revision = nextRevision(writer: writer)
+                    categories[index].automaticRole = group.id; categories[index].revision = revision
+                }
+                continue
+            }
             var added = group; added.revision = nextRevision(writer: writer); categories.append(added)
         }
     }
