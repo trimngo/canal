@@ -7,7 +7,7 @@ struct WatchHomeView: View {
     @State private var categoryID = ""
     @State private var capture = ""
     @State private var saved = false
-    @State private var tab = 0
+    @State private var tab = 2
     var body: some View {
         TabView(selection: $tab) {
             ScrollView {
@@ -38,11 +38,13 @@ struct WatchHomeView: View {
                     Text("You can review it on your phone.").font(.caption).foregroundStyle(.secondary)
                 }
             }.tag(1)
-            TimelineView(.periodic(from: Date(), by: 60)) { context in
+            TimelineView(.periodic(from: Date(), by: 60)) { _ in
+                let now = Date()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Estimated today").font(.headline)
-                        ForEach(store.ledger.breakdown(on: context.date, now: context.date).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }) { row in
+                        Button("Log now") { store.beginSample() }
+                        ForEach(store.ledger.breakdown(on: now, now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }) { row in
                             VStack(alignment: .leading) {
                                 Text(row.name)
                                 Text("\(row.percent, specifier: "%.0f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)

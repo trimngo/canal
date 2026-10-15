@@ -39,7 +39,7 @@ struct CheckInEditor: View {
             TextField("Preparing classes, walking, resting…", text: $activity, axis: .vertical)
                 .lineLimit(3...6).padding(16).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 18))
                 .focused($focused).accessibilityIdentifier("checkin.activity")
-            Picker("Category", selection: $categoryID) {
+            Picker("Group", selection: $categoryID) {
                 Text("Automatic").tag("")
                 ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
             }.pickerStyle(.menu).accessibilityIdentifier("checkin.category")

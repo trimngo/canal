@@ -19,19 +19,20 @@ struct DayView: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { context in
+        TimelineView(.periodic(from: Date(), by: 60)) { _ in
+            let now = Date()
             VStack(spacing: 0) {
                 VStack(spacing: 10) {
-                    DatePicker("Day", selection: $day, in: ...context.date, displayedComponents: [.date])
+                    DatePicker("Day", selection: $day, in: ...now, displayedComponents: [.date])
                     Picker("View", selection: $mode) {
                         Text("Summary").tag(0)
                         Text("Calendar").tag(1)
                     }.pickerStyle(.segmented).accessibilityIdentifier("day.mode")
                 }.padding(.horizontal).padding(.vertical, 12)
                 if mode == 1 {
-                    DayCalendarView(day: day, now: context.date)
+                    DayCalendarView(day: day, now: now)
                 } else {
-                    summary(now: context.date)
+                    summary(now: now)
                 }
             }
         }.navigationTitle(Calendar.current.isDateInToday(day) ? "Today" : "My day")

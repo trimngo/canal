@@ -101,6 +101,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["checkin.save"].tap()
         XCTAssertTrue(app.staticTexts["Saved. You can change it anytime."].waitForExistence(timeout: 5))
         app.tabBars.buttons["My day"].tap()
+        XCTAssertTrue(app.buttons["dashboard.group.work"].waitForExistence(timeout: 5))
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Preparing classes UI test"].waitForExistence(timeout: 5))
     }
