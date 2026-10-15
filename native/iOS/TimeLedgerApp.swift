@@ -33,16 +33,21 @@ struct TimeLedgerApp: App {
     }
 }
 
+enum LedgerScreen: Hashable { case calendar, inbox, settings }
+
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
-    @State private var tab = 1
+    @State private var path: [LedgerScreen] = []
     var body: some View {
-        TabView(selection: $tab) {
-            NavigationStack { CheckInView() }.tabItem { Label("Check in", systemImage: "clock") }.tag(0)
-            NavigationStack { DayView() }.tabItem { Label("My day", systemImage: "chart.pie") }.tag(1)
-            NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(2)
-            NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(3)
+        NavigationStack(path: $path) {
+            DayView().navigationDestination(for: LedgerScreen.self) { screen in
+                switch screen {
+                case .calendar: CalendarHistoryView()
+                case .inbox: InboxView()
+                case .settings: SettingsView()
+                }
+            }
         }
-        .onChange(of: store.sampleRequestID) { _, _ in tab = 0 }
+        .onChange(of: store.sampleRequestID) { _, _ in path.removeAll() }
     }
 }

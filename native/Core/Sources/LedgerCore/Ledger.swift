@@ -36,6 +36,8 @@ public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+// "automatic" is retained for compatibility with older phone/Watch data.
+// It now represents an unconfirmed suggestion and never a confirmed group.
 public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
 
 public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
@@ -176,7 +178,7 @@ public struct Ledger: Codable, Equatable, Sendable {
             else if rule == .carryForward { end = distinct[index + 1].end }
             else { end = midpoint(sample.end, distinct[index + 1].end) }
             guard end > start else { return nil }
-            return InferredSegment(sampleID: sample.id, start: start, end: end, categoryID: sample.categoryID)
+            return InferredSegment(sampleID: sample.id, start: start, end: end, categoryID: confirmedCategoryID(for: sample))
         }
     }
 
@@ -208,10 +210,8 @@ public struct Ledger: Codable, Equatable, Sendable {
         let sampleID = id ?? UUID().uuidString
         entries.removeAll { $0.id == sampleID }
         let assignment: CategoryAssignment = categoryID == nil ? .automatic : .manual
-        let resolved = categoryID ?? suggestedCategory(for: text)
-        let entry = CheckIn(end: timestamp, activity: text, categoryID: resolved, revision: revision, sampleID: sampleID, categoryAssignment: assignment)
+        let entry = CheckIn(end: timestamp, activity: text, categoryID: categoryID, revision: revision, sampleID: sampleID, categoryAssignment: assignment)
         entries.append(entry)
-        recategorizeAutomatically(writer: writer)
     }
 
     public mutating func saveCategory(id: String?, name: String, writer: String) throws {

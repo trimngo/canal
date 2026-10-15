@@ -6,21 +6,12 @@ struct CheckInView: View {
     @State private var saved = false
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("One moment at a time.").font(.subheadline).foregroundStyle(.secondary)
-                Text("What are you doing right now?").font(.largeTitle.bold())
+            VStack(alignment: .leading, spacing: 20) {
+                Text("What are you doing now?").font(.title2.bold())
                 CheckInEditor { saved = true }.id(store.sampleRequestID)
-                if saved {
-                    Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
-                    Button("Log another moment") { store.beginSample() }
-                }
-                Text("Log whenever you want. Each sample records one moment; your day’s time is estimated from those samples.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }.padding(24)
-        }.scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Check in").navigationBarTitleDisplayMode(.inline)
-            .disabled(!store.storageAvailable)
-            .onChange(of: store.sampleRequestID) { _, _ in saved = false }
+                if saved { Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint) }
+            }.padding(20)
+        }.navigationTitle("Log").navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -34,44 +25,66 @@ struct CheckInEditor: View {
     @State private var timestamp = Date()
     @State private var saving = false
     @FocusState private var focused: Bool
+    private var prefix: String { entry == nil ? "checkin" : "edit" }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            TextField("Preparing classes, walking, resting…", text: $activity, axis: .vertical)
-                .lineLimit(3...6).padding(16).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 18))
-                .focused($focused).accessibilityIdentifier("checkin.activity")
-            Picker("Group", selection: $categoryID) {
-                Text("Automatic").tag("")
-                ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
-            }.pickerStyle(.menu).accessibilityIdentifier("checkin.category")
-            if categoryID.isEmpty {
-                Text(store.ledger.suggestedCategory(for: activity).map { "Will group as \(store.categoryName($0))" } ?? "Unrecognized activities can be grouped later from My day.")
+        VStack(alignment: .leading, spacing: 14) {
+            TextField("What are you doing now?", text: $activity, axis: .vertical)
+                .lineLimit(1...3).padding(12)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+                .focused($focused).accessibilityIdentifier("\(prefix).activity")
+            if let suggested = store.ledger.suggestedCategory(for: activity) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("Suggested: \(store.categoryName(suggested))").font(.subheadline)
+                        Spacer()
+                        if categoryID == suggested {
+                            Label("Confirmed", systemImage: "checkmark").font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Button("Use \(store.categoryName(suggested))") { categoryID = suggested }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .accessibilityIdentifier("\(prefix).confirm-suggestion")
+                        }
+                    }
+                    Text(categoryID.isEmpty ? "Uncategorized until you confirm a group." : "Your chosen group will be saved.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else if !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("No suggestion yet. You can choose a group or save as Uncategorized.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Toggle("Use current time", isOn: $recordNow)
-                .onChange(of: recordNow) { _, value in if !value, entry == nil { timestamp = Date() } }
-            if !recordNow {
-                DatePicker("Sample time", selection: $timestamp, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
-            }
+            Picker("Group", selection: $categoryID) {
+                Text("Uncategorized").tag("")
+                ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
+            }.pickerStyle(.menu).accessibilityIdentifier("\(prefix).category")
+            DisclosureGroup("Time") {
+                Toggle("Use current time", isOn: $recordNow)
+                    .onChange(of: recordNow) { _, value in if !value, entry == nil { timestamp = Date() } }
+                if !recordNow {
+                    DatePicker("Sample time", selection: $timestamp, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+                }
+            }.font(.subheadline)
             Button {
                 guard !saving else { return }
-                saving = true
-                focused = false
+                saving = true; focused = false
                 do {
                     try store.saveSample(id: entry?.id, at: recordNow ? Date() : timestamp,
                                          activity: activity, categoryID: categoryID.isEmpty ? nil : categoryID)
-                    if entry == nil { activity = "" }
+                    if entry == nil { activity = ""; categoryID = "" }
                     onSave()
                 } catch { store.report(error) }
                 saving = false
-            } label: { Text(saving ? "Saving…" : "Save sample").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10) }
+            } label: { Text(saving ? "Saving…" : "Save log").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 7) }
                 .buttonStyle(.borderedProminent)
                 .disabled(saving || activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
-                .accessibilityIdentifier("checkin.save")
+                .accessibilityIdentifier("\(prefix).save")
         }.onAppear {
             if let entry {
-                activity = entry.activity; categoryID = entry.categoryAssignment == .automatic ? "" : entry.categoryID ?? ""
+                activity = entry.activity; categoryID = store.ledger.confirmedCategoryID(for: entry) ?? ""
                 timestamp = entry.end; recordNow = false
             }
+        }.onChange(of: activity) { old, new in
+            if entry == nil, OfflineGrouping.normalized(old) != OfflineGrouping.normalized(new) { categoryID = "" }
         }
     }
 }

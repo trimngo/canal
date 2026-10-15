@@ -9,13 +9,19 @@ website is separate and remains available.
 - Log an instantaneous sample anytime, or respond to prompts every 15 minutes
   during a configurable same-day window; default 7 AM–10 PM. A response records
   what is happening at its saved timestamp, not a fixed 15-minute interval.
-- The dashboard opens first with hours and percentages by activity group. Tap
-  Uncategorized to assign an existing group or create one directly. Rename groups
-  from the dashboard or Settings; original log text and stable group IDs are kept.
-- Offline phrase matching groups common activities, and explicit corrections teach
-  future matching descriptions. Unknowns remain Uncategorized. Manually assigned
-  entries are preserved. Matching automatic entries update, with a device-local
-  Undo for the latest categorization. Existing logs are backed up before grouping.
+- Today shows the time breakdown first, then an inline logging form. There are no
+  tabs or Summary/Calendar selector. Calendar has its own navigation button;
+  Inbox and Settings remain accessible through More. Notifications open logging.
+- Offline phrase matching and previous confirmations suggest groups. Every new
+  log stays Uncategorized until the user accepts a suggestion or chooses a group.
+  Suggestions are visible during logging and review. Explicit batch confirmation
+  can group matching pending descriptions; other confirmed choices stay intact.
+- Tap the Uncategorized queue to confirm a suggestion, choose an existing group,
+  or create one. Groups can be renamed from Today or Settings. Device-local Undo
+  covers the latest categorization, including batch confirmations.
+- Earlier automatic assignments return to Uncategorized with suggestions;
+  explicit choices, original descriptions, and timestamps are preserved. The
+  original local file is backed up before this migration.
 - Estimate daily time with midpoint interpolation (default) or carry-forward.
   Midpoint puts activity changes halfway between observations. Percentages cover
   the first log until now today, and the first to last log on closed days. There
@@ -25,7 +31,7 @@ website is separate and remains available.
   methods. Upgrade schema-1 logs with a local backup before writing schema 2.
 - iPhone inbox for thoughts/tasks, completion and reopening. Captures do not count
   as time spent. Timed task reminders are a later feature.
-- Watch: dictate check-ins and captures, use automatic groups, and view hours and
+- Watch: dictate check-ins and captures, confirm suggested groups, and view hours and
   percentages. Expanded Watch notifications use available local logs. Phone
   banners show a dated summary snapshot, refreshed when logs or groups change;
   offline background delivery does not imply a freshly recomputed summary.

@@ -32,14 +32,15 @@ struct DayCalendarView: View {
         var result: [CalendarActivity] = []
         for segment in store.ledger.inferredSegments(on: day, now: now) {
             guard let sample = observations[segment.sampleID] else { continue }
+            let groupID = store.ledger.confirmedCategoryID(for: sample)
             if let last = result.last, last.end == segment.start,
-               last.categoryID == sample.categoryID,
+               last.categoryID == groupID,
                last.activity.caseInsensitiveCompare(sample.activity) == .orderedSame {
                 result[result.count - 1].end = segment.end
                 result[result.count - 1].samples.append(sample)
             } else {
                 result.append(CalendarActivity(id: sample.id, start: segment.start, end: segment.end,
-                                               activity: sample.activity, categoryID: sample.categoryID, samples: [sample]))
+                                               activity: sample.activity, categoryID: groupID, samples: [sample]))
             }
         }
         return result

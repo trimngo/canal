@@ -78,7 +78,7 @@ struct SettingsView: View {
             Section {
                 Button("Manage groups") { managingGroups = true }
             } header: { Text("Activity groups") } footer: {
-                Text("Phrase matching and your corrections group activities offline. You can create and rename groups anytime. Existing manual choices stay intact.")
+                Text("Offline suggestions use activity words and confirmed choices. A suggestion never assigns a group until you confirm it. Create and rename groups anytime.")
             }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)

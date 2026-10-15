@@ -44,6 +44,17 @@ public enum OfflineGrouping {
 }
 
 extension Ledger {
+    public func confirmedCategoryID(for entry: CheckIn) -> String? {
+        guard entry.categoryAssignment != .automatic,
+              let id = entry.categoryID, categories.contains(where: { $0.id == id }) else { return nil }
+        return id
+    }
+
+    public func unconfirmedMatches(for activity: String) -> [CheckIn] {
+        let key = OfflineGrouping.normalized(activity)
+        return entries.filter { confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key }
+    }
+
     public func suggestedCategory(for activity: String) -> String? {
         let key = OfflineGrouping.normalized(activity)
         guard !key.isEmpty else { return nil }
@@ -77,24 +88,31 @@ extension Ledger {
         }
     }
 
-    public mutating func recategorizeAutomatically(writer: String) {
-        let remembered = rememberedChoices()
-        var attempted = Set<String>()
-        var resolved: [String: String] = [:]
+    public mutating func prepareGroupSuggestions(writer: String) {
         var counter = nextRevision(writer: writer).counter
         for index in entries.indices {
             let entry = entries[index]
-            guard entry.categoryAssignment == .automatic || (entry.categoryAssignment == nil && entry.categoryID == nil) else { continue }
-            let key = OfflineGrouping.normalized(entry.activity)
-            if attempted.insert(key).inserted {
-                resolved[key] = remembered[key]?.categoryID ?? OfflineGrouping.category(for: entry.activity, groups: categories)
-            }
-            let proposed = resolved[key]
-            guard proposed != entry.categoryID else { continue }
-            entries[index].categoryID = proposed
-            entries[index].categoryAssignment = .automatic
+            // Clear cached automatic assignments from previous versions or an
+            // older paired device. Suggestions are computed only for display.
+            guard entry.categoryAssignment == .automatic && entry.categoryID != nil else { continue }
+            entries[index].categoryID = nil
             entries[index].revision = Revision(counter: counter, writer: writer)
             counter += 1
+        }
+    }
+
+    public mutating func confirmCategory(for id: String, categoryID: String?, includeMatching: Bool = false, writer: String) throws {
+        if let categoryID, !categories.contains(where: { $0.id == categoryID }) { throw LedgerError.invalidCategory }
+        guard let chosen = entries.first(where: { $0.id == id }) else { return }
+        let key = OfflineGrouping.normalized(chosen.activity)
+        let selected = Set(entries.filter {
+            $0.id == id || (includeMatching && categoryID != nil && confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key)
+        }.map(\.id))
+        var counter = nextRevision(writer: writer).counter
+        for index in entries.indices where selected.contains(entries[index].id) {
+            entries[index].categoryID = categoryID
+            entries[index].categoryAssignment = categoryID == nil ? .automatic : .manual
+            entries[index].revision = Revision(counter: counter, writer: writer); counter += 1
         }
     }
 }

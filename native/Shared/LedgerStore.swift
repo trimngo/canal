@@ -7,6 +7,7 @@ final class LedgerStore: ObservableObject {
     static let shared = LedgerStore()
     @Published private(set) var ledger = Ledger()
     @Published var sampleRequestID = UUID()
+    @Published var pendingLogRequest = false
     @Published var error: String?
     @Published var syncStatus = "Saved on this device"
     @Published private(set) var storageAvailable = true
@@ -28,6 +29,9 @@ final class LedgerStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
+                try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-legacy-ledger") {
                 var fixture = Ledger(); fixture.schemaVersion = 1
                 fixture.entries = [CheckIn(end: Ledger.slotEnd(at: Date()), activity: "Legacy sample UI fixture", categoryID: "work", revision: Revision(counter: 1, writer: "fixture"))]
@@ -36,7 +40,7 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") {
                 var fixture = Ledger()
                 let now = Date()
-                try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: nil, writer: "fixture", now: now)
+                try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
@@ -65,9 +69,9 @@ final class LedgerStore: ObservableObject {
         do {
             var draft = ledger
             draft.ensureDefaultGroups(writer: writer)
-            draft.recategorizeAutomatically(writer: writer)
+            draft.prepareGroupSuggestions(writer: writer)
             if draft != ledger {
-                let backup = file.deletingLastPathComponent().appendingPathComponent("ledger-before-offline-grouping.json")
+                let backup = file.deletingLastPathComponent().appendingPathComponent("ledger-before-confirmed-grouping.json")
                 if FileManager.default.fileExists(atPath: file.path), !FileManager.default.fileExists(atPath: backup.path) {
                     try Data(contentsOf: file).write(to: backup, options: [.atomic])
                 }
@@ -106,11 +110,11 @@ final class LedgerStore: ObservableObject {
     func merge(_ incoming: Ledger) throws {
         guard (1...2).contains(incoming.schemaVersion) else { throw StoreError.unsupportedVersion }
         var draft = ledger; draft.merge(incoming)
-        draft.recategorizeAutomatically(writer: writer)
+        draft.prepareGroupSuggestions(writer: writer)
         if draft != ledger { try commit(draft) }
     }
 
-    func beginSample() { sampleRequestID = UUID() }
+    func beginSample() { pendingLogRequest = true; sampleRequestID = UUID() }
 
     func saveSample(id: String? = nil, at timestamp: Date = Date(), activity: String, categoryID: String?) throws {
         var draft = ledger
@@ -130,7 +134,7 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer); try commit(draft)
     }
 
-    func categorize(_ entry: CheckIn, categoryID: String?, newGroupName: String? = nil) throws {
+    func categorize(_ entry: CheckIn, categoryID: String?, newGroupName: String? = nil, includeMatching: Bool = false) throws {
         var draft = ledger
         var destination = categoryID
         if let newGroupName {
@@ -138,7 +142,7 @@ final class LedgerStore: ObservableObject {
             destination = draft.categories.last?.id
         }
         guard let current = draft.entries.first(where: { $0.id == entry.id }) else { return }
-        try draft.saveSample(id: current.id, at: current.end, activity: current.activity, categoryID: destination, writer: writer)
+        try draft.confirmCategory(for: current.id, categoryID: destination, includeMatching: includeMatching, writer: writer)
         let changed = draft.entries.compactMap { updated -> (before: CheckIn, after: CheckIn)? in
             guard let original = ledger.entries.first(where: { $0.id == updated.id }),
                   original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment else { return nil }
@@ -159,7 +163,7 @@ final class LedgerStore: ObservableObject {
                 draft.entries[index].categoryAssignment = change.before.categoryAssignment
                 draft.entries[index].revision = revision
             }
-            draft.recategorizeAutomatically(writer: writer)
+            draft.prepareGroupSuggestions(writer: writer)
             try commit(draft)
             groupingUndo = []; canUndoGrouping = false
         } catch { report(error) }

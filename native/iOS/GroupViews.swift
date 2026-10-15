@@ -18,10 +18,9 @@ struct GroupEntriesView: View {
         _allDays = State(initialValue: groupID == "uncategorized")
     }
     private var entries: [CheckIn] {
-        let known = Set(store.ledger.categories.map(\.id))
         let source = allDays ? store.ledger.entries.sorted { $0.end > $1.end } : store.ledger.entries(on: day)
         return source.filter {
-            $0.end <= Date() && (groupID == "uncategorized" ? !known.contains($0.categoryID ?? "") : $0.categoryID == groupID)
+            $0.end <= Date() && (groupID == "uncategorized" ? store.ledger.confirmedCategoryID(for: $0) == nil : store.ledger.confirmedCategoryID(for: $0) == groupID)
         }
     }
     var body: some View {
@@ -43,6 +42,9 @@ struct GroupEntriesView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }.buttonStyle(.plain)
+                        Text("Group: \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
+                            .font(.caption).foregroundStyle(.secondary)
+                        suggestion(for: entry)
                         Menu {
                             ForEach(store.ledger.categories) { group in
                                 Button(group.name) {
@@ -51,8 +53,8 @@ struct GroupEntriesView: View {
                             }
                             Divider()
                             Button("Create new group…", systemImage: "plus") { groupName = ""; creatingFor = entry; showingNewGroup = true }
-                            if entry.categoryID != nil {
-                                Button("Use automatic grouping") {
+                            if store.ledger.confirmedCategoryID(for: entry) != nil {
+                                Button("Move to Uncategorized") {
                                     do { try store.categorize(entry, categoryID: nil) } catch { self.error = error.localizedDescription }
                                 }
                             }
@@ -66,7 +68,7 @@ struct GroupEntriesView: View {
                 }
                 if let error { Text(error).foregroundStyle(.red) }
                 Section {
-                    Text("Choosing a group teaches the app to recognize this description next time. Matching automatic entries update too; entries you’ve grouped manually keep your choices.")
+                    Text("Suggestions work offline and learn from confirmed choices. Every log stays Uncategorized until you confirm its group.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }.navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
@@ -88,6 +90,29 @@ struct GroupEntriesView: View {
                 }
         }
     }
+
+    @ViewBuilder
+    private func suggestion(for entry: CheckIn) -> some View {
+        if let id = store.ledger.suggestedCategory(for: entry.activity) {
+            let name = store.categoryName(id)
+            let matches = store.ledger.unconfirmedMatches(for: entry.activity).count
+            if store.ledger.confirmedCategoryID(for: entry) == id {
+                Label("\(name) confirmed", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Suggested: \(name)").font(.subheadline)
+                Button("Use \(name)") {
+                    do { try store.categorize(entry, categoryID: id); error = nil } catch { self.error = error.localizedDescription }
+                }.buttonStyle(.bordered).accessibilityIdentifier("group.confirm.\(entry.id)")
+                if matches > 1 && store.ledger.confirmedCategoryID(for: entry) == nil {
+                    Button("Confirm \(name) for \(matches) matching logs") {
+                        do { try store.categorize(entry, categoryID: id, includeMatching: true); error = nil } catch { self.error = error.localizedDescription }
+                    }.font(.caption).buttonStyle(.borderless).accessibilityIdentifier("group.confirm-matching.\(entry.id)")
+                }
+            }
+        } else {
+            Text("No suggestion yet").font(.caption).foregroundStyle(.secondary)
+        }
+    }
 }
 
 struct GroupManagerView: View {
@@ -107,7 +132,7 @@ struct GroupManagerView: View {
                         }.accessibilityIdentifier("groups.rename.\(group.id)")
                     }
                     Button("Create group", systemImage: "plus") { name = ""; editing = LedgerCategory(id: "", name: ""); showingEditor = true }
-                } footer: { Text("Tap a group to rename it everywhere. Log text and assignments stay intact. Offline grouping keeps working after a rename.") }
+                } footer: { Text("Tap a group to rename it everywhere. Log text and confirmed choices stay intact. Offline suggestions keep working after a rename.") }
                 if let error { Text(error).foregroundStyle(.red) }
             }.navigationTitle("Groups").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }

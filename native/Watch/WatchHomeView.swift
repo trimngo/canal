@@ -15,14 +15,22 @@ struct WatchHomeView: View {
                     Text("What are you doing now?").font(.headline)
                     Text("Record a moment in your day.").font(.caption).foregroundStyle(.secondary)
                     TextField("Dictate an answer", text: $activity)
-                    Picker("Category", selection: $categoryID) {
-                        Text("Automatic").tag("")
+                    if let suggestion = store.ledger.suggestedCategory(for: activity) {
+                        Text("Suggested: \(store.categoryName(suggestion))").font(.caption)
+                        if categoryID != suggestion {
+                            Button("Use \(store.categoryName(suggestion))") { categoryID = suggestion }
+                        } else {
+                            Text("Confirmed").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Picker("Group", selection: $categoryID) {
+                        Text("Uncategorized").tag("")
                         ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
                     }
                     Button(saved ? "Saved ✓" : "Save sample") {
                         do {
                             try store.saveSample(activity: activity, categoryID: categoryID.isEmpty ? nil : categoryID)
-                            activity = ""; saved = true
+                            activity = ""; categoryID = ""; saved = true
                         } catch { store.report(error) }
                     }.buttonStyle(.borderedProminent).disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                     Button("New sample") { store.beginSample() }.font(.caption)
@@ -56,7 +64,10 @@ struct WatchHomeView: View {
                 }
             }.tag(2)
         }.tabViewStyle(.verticalPage)
-            .onChange(of: activity) { _, value in if !value.isEmpty { saved = false } }
+            .onChange(of: activity) { old, value in
+                if !value.isEmpty { saved = false }
+                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryID = "" }
+            }
             .onChange(of: store.sampleRequestID) { _, _ in
                 tab = 0; activity = ""; categoryID = ""; saved = false
             }
