@@ -1,4 +1,4 @@
-name: Inspect history UI diagnostics
+name: Review history screens
 on:
   push:
     branches: [feat/native-history-backup-inbox]
@@ -14,26 +14,26 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
-          run-id: 38802691954
+          run-id: 38805750238
           name: native-simulator-results
           path: results
-      - name: Export screenshots
+      - name: Export app screenshots
         run: |
           sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
           xcrun xcresulttool export attachments --path results/UITests.xcresult --output-path attachments
           python3 - <<'PY'
           from pathlib import Path
-          import shutil
+          import shutil, json
           Path('review').mkdir()
-          for p in Path('attachments').rglob('*'):
-              if p.is_file() and (p.suffix != '.mp4' or p.name == '4A2AF0E5-CF5A-45AD-AC53-EFA057DD1305.mp4'):
-                  shutil.copyfile(p, Path('review') / p.name)
-          for p in Path('attachments').rglob('*.json'):
-              print(p.name, p.read_text()[:40000])
+          for test in json.loads(Path('attachments/manifest.json').read_text()):
+              for item in test['attachments']:
+                  name = item.get('suggestedHumanReadableName', '')
+                  if name.startswith('Review-'):
+                      shutil.copyfile(Path('attachments') / item['exportedFileName'], Path('review') / Path(name).name)
+                      print(name)
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: history-ui-diagnostics
-          path: |
-            review/**
+          name: history-screen-review
+          path: review/**
           retention-days: 1
