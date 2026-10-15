@@ -1,0 +1,47 @@
+name: Inspect Watch sync regression diagnostics
+on:
+  push:
+    branches: [feat/native-watch-sync-recovery]
+    paths: [.github/workflows/watch-debug.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostics:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 38779396868
+          name: native-simulator-results
+          path: results
+      - name: Export simulator test diagnostics
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          xcrun xcresulttool export diagnostics --path results/UITests.xcresult --output-path diagnostics
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile, json
+          root = Path('diagnostics')
+          for archive in list(root.rglob('*.zip')):
+              with zipfile.ZipFile(archive) as z:
+                  z.extractall(archive.parent / archive.stem)
+          for p in root.rglob('*'):
+              if p.suffix in ('.ips', '.crash') and 'TimeLedger' in p.name:
+                  text = p.read_text(errors='replace')
+                  print('REPORT', p.name)
+                  if p.suffix == '.ips':
+                      try:
+                          report = json.loads(text.split('\n', 1)[1])
+                          print(json.dumps({k: report.get(k) for k in ['exception', 'termination', 'asi', 'lastExceptionBacktrace']}, indent=2))
+                          for t in report.get('threads', []):
+                              if t.get('triggered'):
+                                  print(json.dumps(t, indent=2))
+                          print(json.dumps(report.get('usedImages', []), indent=2))
+                      except Exception:
+                          print(text[:20000])
+                  else:
+                      print(text[:24000])
+          PY
