@@ -20,8 +20,8 @@ final class SiriCaptureHandler: NSObject, INCreateNoteIntentHandling {
     }
 
     func resolveContent(for intent: INCreateNoteIntent, with completion: @escaping (INNoteContentResolutionResult) -> Void) {
-        if let content = intent.content as? INTextNoteContent,
-           !content.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let content = intent.content as? INTextNoteContent, let text = content.text,
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             completion(.success(with: content))
         } else if (try? Self.text(from: intent)) != nil { completion(.notRequired()) }
         else { completion(.needsValue()) }
