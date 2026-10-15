@@ -76,13 +76,18 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         await refreshStatus()
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        guard response.notification.request.content.categoryIdentifier == "CHECKIN" else { return }
-        await MainActor.run { self.presentSample() }
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let opensSample = response.notification.request.content.categoryIdentifier == "CHECKIN"
+        // Complete every system callback once, without carrying its Objective-C
+        // completion block across an actor boundary. UI work belongs on main.
+        if opensSample { Task { @MainActor in self.presentSample() } }
+        completionHandler()
     }
 
     func presentSample() { LedgerStore.shared.beginSample() }

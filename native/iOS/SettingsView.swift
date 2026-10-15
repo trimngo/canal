@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 import UniformTypeIdentifiers
 import LedgerCore
 
@@ -87,6 +88,12 @@ struct SettingsView: View {
                 if let data = try? JSONEncoder().encode(store.ledger) {
                     ShareLink("Export a backup", item: LedgerExport(data: data), preview: SharePreview("Time Ledger backup"))
                 }
+            }
+            Section {
+                Text("Say ‘Siri, capture in Ledger,’ then say your task when Siri asks.")
+                ShortcutsLink()
+            } header: { Text("Siri & Shortcuts") } footer: {
+                Text("For a shorter command, create a personal shortcut using Capture a thought and rename it in Apple’s Shortcuts app. Siri controls spoken recognition; this app cannot change a command name in Settings or guarantee free-form task text in a single utterance.")
             }
         }.navigationTitle("Settings")
             .task { settings = store.ledger.settings; await notifications.refreshStatus() }

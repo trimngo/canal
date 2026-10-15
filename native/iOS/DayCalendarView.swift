@@ -16,7 +16,10 @@ struct DayCalendarView: View {
     let now: Date
     @State private var selected: CalendarActivity?
     private let hourHeight: CGFloat = 72
-    private var bounds: DateInterval { Calendar.current.dateInterval(of: .day, for: day)! }
+    private var bounds: DateInterval {
+        Calendar.current.dateInterval(of: .day, for: day)
+            ?? DateInterval(start: Calendar.current.startOfDay(for: day), duration: 86400)
+    }
     private var cutoff: Date { max(bounds.start, min(bounds.end, now)) }
     private var height: CGFloat { CGFloat(bounds.duration / 3600) * hourHeight }
     private func y(_ date: Date) -> CGFloat { CGFloat(date.timeIntervalSince(bounds.start) / 3600) * hourHeight }

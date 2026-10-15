@@ -9,6 +9,10 @@ struct CaptureThoughtIntent: AppIntent {
     @Parameter(title: "What do you want to capture?")
     var text: String
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("Capture \(\.$text)")
+    }
+
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = LedgerStore.shared; store.start()
@@ -20,7 +24,8 @@ struct CaptureThoughtIntent: AppIntent {
 struct LedgerShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: CaptureThoughtIntent(), phrases: [
-            "Capture in \(.applicationName)", "Add a thought to \(.applicationName)"
+            "Capture in \(.applicationName)", "Add a thought to \(.applicationName)",
+            "Create a \(.applicationName) task"
         ], shortTitle: "Capture a thought", systemImageName: "tray.and.arrow.down")
     }
 }
