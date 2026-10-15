@@ -18,7 +18,7 @@ struct SettingsView: View {
     @State private var managingGroups = false
     @State private var testSent = false
     @State private var saving = false
-    @State private var siriStatus = INPreferences.siriAuthorizationStatus()
+    @State private var siriStatus: INSiriAuthorizationStatus = .notDetermined
     private let stepMinutes = Array(stride(from: 0, to: 1440, by: 15))
     var body: some View {
         Form {
@@ -95,6 +95,11 @@ struct SettingsView: View {
             }
             Section {
                 Text("Try one sentence on your Watch: ‘Siri, create a note in Ledger called try shorter lessons.’")
+                #if targetEnvironment(simulator)
+                // Unsigned simulator apps have no Siri entitlement. Calling
+                // INPreferences there raises an Objective-C exception.
+                Text("Siri capture is available on your iPhone and Watch.").font(.footnote)
+                #else
                 if siriStatus != .authorized {
                     Button("Enable Siri capture") {
                         INPreferences.requestSiriAuthorization { value in
@@ -106,12 +111,19 @@ struct SettingsView: View {
                 } else {
                     Label("Siri capture enabled", systemImage: "checkmark.circle").font(.footnote)
                 }
+                #endif
                 ShortcutsLink()
             } header: { Text("Siri & Shortcuts") } footer: {
                 Text("Siri notes save directly to your inbox with a timestamp. No app confirmation is required. Siri controls recognition and may ask for missing information. The Capture a thought shortcut remains available; personal shortcut names can be changed in Apple’s Shortcuts app.")
             }
         }.navigationTitle("Settings")
-            .task { settings = store.ledger.settings; await notifications.refreshStatus() }
+            .task {
+                settings = store.ledger.settings
+                #if !targetEnvironment(simulator)
+                siriStatus = INPreferences.siriAuthorizationStatus()
+                #endif
+                await notifications.refreshStatus()
+            }
             .sheet(isPresented: $managingGroups) { GroupManagerView() }
     }
     private func minuteLabel(_ minutes: Int) -> String {
