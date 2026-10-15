@@ -30,14 +30,15 @@ final class TimeLedgerUITests: XCTestCase {
         let logs = element(app, "today.logs"); reveal(logs, in: app); logs.tap()
     }
 
-    func testHomePutsTimeBreakdownBeforeInlineLoggingWithoutTabs() {
+    func testHomePutsBreakdownBeforeLoggingAndProvidesInboxTab() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let header = element(app, "dashboard.breakdown-title")
         let field = element(app, "checkin.activity")
         XCTAssertTrue(header.waitForExistence(timeout: 10))
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertLessThan(header.frame.minY, field.frame.minY)
-        XCTAssertEqual(app.tabBars.count, 0)
+        XCTAssertEqual(app.tabBars.count, 1)
+        XCTAssertTrue(app.tabBars.buttons["Inbox"].exists)
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
     }
@@ -117,20 +118,27 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testNotificationOpenedLogCanBeSavedAndSurvivesRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-notification-checkin"]; app.launch()
-        log("Notification sample UI test", in: app)
+        let field = element(app, "quicklog.activity")
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Where your time went"].isHittable)
+        XCTAssertFalse(app.buttons["checkin.save"].isHittable)
+        field.tap(); field.typeText("Notification sample UI test")
+        app.buttons["quicklog.save"].tap()
+        XCTAssertTrue(app.staticTexts["Saved"].waitForExistence(timeout: 5))
         app.terminate(); app.launchArguments = []; app.launch()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Notification sample UI test"].waitForExistence(timeout: 5))
     }
 
-    func testInboxRemainsAccessibleFromMore() {
+    func testInboxIsADirectTabAndCapturesPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
-        app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
+        app.tabBars.buttons["Inbox"].tap()
         let field = element(app, "inbox.text")
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("Follow up with a client UI test")
         let save = app.buttons["inbox.save"]; reveal(save, in: app); save.tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
+        app.tabBars.buttons["Today"].tap()
+        app.tabBars.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["Follow up with a client UI test"].waitForExistence(timeout: 5))
     }
 
@@ -146,10 +154,10 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testSiriNoteHandlerSavesTitleOnlyWithoutOpeningAnEditorAndPersists() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-capture"]; app.launch()
-        app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
+        app.tabBars.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
         app.terminate(); app.launchArguments = []; app.launch()
-        app.buttons["dashboard.more"].tap(); app.buttons["Inbox"].tap()
+        app.tabBars.buttons["Inbox"].tap()
         XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
     }
 
@@ -160,7 +168,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(element(app, "checkin.activity").waitForExistence(timeout: 10))
         XCTAssertEqual(app.alerts.count, 0)
         log("Saved while helper unavailable", in: app)
-        app.buttons["dashboard.more"].tap(); app.buttons["Settings"].tap()
+        app.tabBars.buttons["Settings"].tap()
         let status = element(app, "sync.companion.status"); reveal(status, in: app)
         XCTAssertEqual(status.label, "Saved on this device · sync waiting")
         XCTAssertTrue(app.staticTexts["NSCocoaErrorDomain (4099)"].exists)
@@ -168,5 +176,76 @@ final class TimeLedgerUITests: XCTestCase {
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Saved while helper unavailable"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.alerts.count, 0)
+    }
+
+    func testHistoryRangesAndSwipeablePieAndTrend() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
+        let period = element(app, "report.range")
+        XCTAssertTrue(period.waitForExistence(timeout: 10)); period.tap(); app.buttons["Past 7 days"].tap()
+        XCTAssertTrue(app.navigationBars["Your time"].waitForExistence(timeout: 5))
+        let pages = element(app, "report.pages"); pages.swipeLeft()
+        XCTAssertTrue(app.staticTexts["Pie chart"].waitForExistence(timeout: 5))
+        pages.swipeLeft()
+        XCTAssertTrue(app.staticTexts["Daily trend"].waitForExistence(timeout: 5))
+        period.tap(); app.buttons["All time"].tap()
+        XCTAssertTrue(app.staticTexts["Daily trend"].exists)
+        period.tap(); app.buttons["Custom"].tap()
+        XCTAssertTrue(element(app, "report.from").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "report.through").exists)
+    }
+
+    func testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.rank"].tap()
+        XCTAssertTrue(app.buttons["ranking.second"].waitForExistence(timeout: 5)); app.buttons["ranking.second"].tap()
+        app.buttons["Done"].tap(); app.terminate(); app.launchArguments = []; app.launch()
+        app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.rank"].tap()
+        XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5)); app.buttons["ranking.first"].tap()
+        app.buttons["ranking.second"].tap()
+        XCTAssertTrue(app.staticTexts["All ideas ranked"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        let field = element(app, "inbox.text"); field.tap(); field.typeText("New idea")
+        app.buttons["inbox.save"].tap()
+        XCTAssertTrue(app.staticTexts["3 ranked · 1 waiting to rank"].waitForExistence(timeout: 5))
+    }
+
+    func testInboxDeletionHasUndoAndPersistsAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        app.tabBars.buttons["Inbox"].tap()
+        let menu = app.buttons["inbox.actions.a"]; reveal(menu, in: app); menu.tap()
+        app.buttons["Delete idea"].tap()
+        XCTAssertFalse(app.staticTexts["First idea"].exists)
+        app.buttons["inbox.undo-delete"].tap()
+        XCTAssertTrue(app.staticTexts["First idea"].waitForExistence(timeout: 5))
+        let restored = app.buttons["inbox.actions.a"]; reveal(restored, in: app); restored.tap()
+        app.buttons["Delete idea"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Inbox"].tap()
+        XCTAssertFalse(app.staticTexts["First idea"].exists)
+        XCTAssertTrue(app.staticTexts["Third idea"].exists)
+    }
+
+    func testBackupPreviewAndRestoreRecoverOlderLogsIntoHistory() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-local-backup", "--ui-backup-fixture"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        let restore = app.buttons["backup.restore"]; reveal(restore, in: app); restore.tap()
+        let file = app.buttons.matching(identifier: "backup.file").firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 10)); file.tap()
+        XCTAssertTrue(app.staticTexts["2 activity logs · 0 ideas"].waitForExistence(timeout: 5))
+        app.buttons["backup.confirm-restore"].tap()
+        XCTAssertTrue(app.staticTexts["Restored. Your newer edits and existing logs were kept."].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Today"].tap()
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Restored older activity"].waitForExistence(timeout: 5))
+    }
+
+    func testRemainingTimePreferenceSurvivesRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        let toggle = app.switches["settings.remaining"]; reveal(toggle, in: app); toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Settings"].tap()
+        let restored = app.switches["settings.remaining"]; reveal(restored, in: app)
+        XCTAssertEqual(restored.value as? String, "1")
     }
 }

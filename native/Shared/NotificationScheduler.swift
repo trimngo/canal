@@ -12,7 +12,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     @Published var status = "Not enabled"
     private let center = UNUserNotificationCenter.current()
     private var applied: Settings?
-    private let promptBody = "Dictate what you’re doing. It saves when you finish."
+    private let promptBody = "Tap to type or dictate what you’re doing now."
     private override init() { super.init(); center.delegate = self }
 
     func configureActions() {

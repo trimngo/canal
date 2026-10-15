@@ -13,6 +13,12 @@ final class LedgerStore: ObservableObject {
     @Published var syncStatus = "Saved on this device"
     @Published var companionStatus = "Connecting to paired device…"
     @Published var companionDiagnostic: String?
+    @Published var backupStatus = "Automatic backup starts on iPhone"
+    @Published private(set) var canUndoCaptureDeletion = false
+    private var captureDeletion: Capture?
+    #if os(iOS)
+    private(set) var backup: AutomaticBackup?
+    #endif
     @Published private(set) var storageAvailable = true
     @Published private(set) var canUndoGrouping = false
     private var groupingUndo: [(before: CheckIn, after: CheckIn)] = []
@@ -46,6 +52,24 @@ final class LedgerStore: ObservableObject {
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-inbox-fixture") {
+                var fixture = Ledger()
+                for (i, item) in [("c", "Third idea"), ("a", "First idea"), ("b", "Second idea")].enumerated() {
+                    try fixture.addCapture(text: item.1, id: item.0, writer: "fixture", now: Date().addingTimeInterval(Double(i - 10)))
+                }
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-backup-fixture") {
+                var fixture = Ledger()
+                let earlier = Date().addingTimeInterval(-2 * 86400)
+                try fixture.saveSample(at: earlier.addingTimeInterval(-3600), activity: "Restored older activity", categoryID: "work", writer: "fixture")
+                try fixture.saveSample(at: earlier, activity: "Restored second activity", categoryID: "work", writer: "fixture")
+                let backups = directory.appendingPathComponent("UITestBackups")
+                try FileManager.default.createDirectory(at: backups, withIntermediateDirectories: true)
+                let url = backups.appendingPathComponent("restore-fixture.json")
+                try LedgerBackup(ledger: fixture).encoded().write(to: url, options: [.atomic])
+                try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: url.path)
             }
             #endif
             if FileManager.default.fileExists(atPath: file.path) {
@@ -85,13 +109,17 @@ final class LedgerStore: ObservableObject {
         let cloudFlag = Bundle.main.object(forInfoDictionaryKey: "LedgerCloudEnabled")
         if cloudFlag as? Bool == true || (cloudFlag as? String)?.uppercased() == "YES" {
             cloud = CloudSync(store: self)
-        } else { syncStatus = "Device + paired Watch · iCloud setup pending" }
+        } else { syncStatus = "Saved on this device" }
+        #if os(iOS)
+        backup = AutomaticBackup(store: self, writer: writer)
+        #endif
         saveObserver = { [weak self] in
             // Leave the editor's save transaction before starting device sync.
             Task { @MainActor [weak self] in
                 self?.companion?.send()
                 self?.cloud?.requestSync()
                 #if os(iOS)
+                if let self { self.backup?.request(self.ledger) }
                 if let self {
                     do { try await NotificationScheduler.shared.apply(self.ledger.settings) } catch { self.report(error) }
                 }
@@ -100,9 +128,17 @@ final class LedgerStore: ObservableObject {
         }
         importSiriCaptures()
         companion?.start(); cloud?.requestSync()
+        #if os(iOS)
+        backup?.request(ledger)
+        #endif
     }
 
-    func refresh() { start(); importSiriCaptures(); companion?.refresh(); cloud?.requestSync() }
+    func refresh() {
+        start(); importSiriCaptures(); companion?.refresh(); cloud?.requestSync()
+        #if os(iOS)
+        backup?.request(ledger)
+        #endif
+    }
 
     private func importSiriCaptures() {
         #if os(watchOS)
@@ -160,6 +196,41 @@ final class LedgerStore: ObservableObject {
 
     func setCaptureDone(_ capture: Capture, done: Bool) throws {
         var draft = ledger; draft.setCaptureDone(id: capture.id, done: done, writer: writer); try commit(draft)
+    }
+
+    func deleteCapture(_ capture: Capture) throws {
+        var draft = ledger; draft.setCaptureDeleted(capture.id, deleted: true, writer: writer)
+        try commit(draft)
+        captureDeletion = draft.captures.first { $0.id == capture.id }; canUndoCaptureDeletion = true
+    }
+
+    func undoCaptureDeletion() {
+        do {
+            guard let deleted = captureDeletion,
+                  ledger.captures.first(where: { $0.id == deleted.id })?.revision == deleted.revision else {
+                canUndoCaptureDeletion = false; return
+            }
+            var draft = ledger; draft.setCaptureDeleted(deleted.id, deleted: false, writer: writer)
+            try commit(draft); captureDeletion = nil; canUndoCaptureDeletion = false
+        } catch { report(error) }
+    }
+
+    func prepareRanking() throws { var draft = ledger; draft.prepareRanking(writer: writer); if draft != ledger { try commit(draft) } }
+    func chooseCapture(_ preferred: String, pair: RankingPair) throws {
+        var draft = ledger; draft.chooseCapture(preferred, from: pair, writer: writer); try commit(draft)
+    }
+    func rerankCapture(_ id: String) throws { var draft = ledger; draft.rerankCapture(id, writer: writer); try commit(draft) }
+
+    func restoreBackup(_ data: Data) throws {
+        let saved = try LedgerBackup.decode(data)
+        let recovery = file.deletingLastPathComponent().appendingPathComponent("ledger-before-restore-\(UUID().uuidString).json")
+        if FileManager.default.fileExists(atPath: file.path) { try Data(contentsOf: file).write(to: recovery, options: [.atomic]) }
+        var draft = ledger; draft.merge(saved.ledger); draft.prepareGroupSuggestions(writer: writer)
+        // An explicitly selected backup can recover an unreadable ledger while
+        // retaining its original bytes in a separate recovery file.
+        try JSONEncoder().encode(draft).write(to: file, options: [.atomic])
+        ledger = draft; storageAvailable = true; error = nil
+        start(); refresh()
     }
 
     func saveCategory(id: String?, name: String) throws {

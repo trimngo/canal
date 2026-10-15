@@ -54,11 +54,17 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)
         LedgerCloudContainer: $(LEDGER_CLOUD_CONTAINER)
+        NSUbiquitousContainers:
+          iCloud.com.trimngo.TimeLedger:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: Ledger
+            NSUbiquitousContainerSupportedFolderLevels: Any
     entitlements:
       path: Generated/iOS.entitlements
       properties:
         com.apple.developer.icloud-container-identifiers: [$(LEDGER_CLOUD_CONTAINER)]
-        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.developer.icloud-services: [CloudKit, CloudDocuments]
+        com.apple.developer.ubiquity-container-identifiers: [$(LEDGER_CLOUD_CONTAINER)]
         com.apple.developer.siri: true
   TimeLedgerWatch:
     type: application

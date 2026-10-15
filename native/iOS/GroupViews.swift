@@ -7,18 +7,24 @@ struct GroupEntriesView: View {
     let day: Date
     let groupID: String
     let initialName: String
+    let rangeStart: Date?
+    let rangeEnd: Date?
     @State private var allDays: Bool
     @State private var creatingFor: CheckIn?
     @State private var showingNewGroup = false
     @State private var groupName = ""
     @State private var editing: CheckIn?
     @State private var error: String?
-    init(day: Date, groupID: String, initialName: String) {
+    init(day: Date, groupID: String, initialName: String, rangeStart: Date? = nil, rangeEnd: Date? = nil) {
         self.day = day; self.groupID = groupID; self.initialName = initialName
+        self.rangeStart = rangeStart; self.rangeEnd = rangeEnd
         _allDays = State(initialValue: groupID == "uncategorized")
     }
     private var entries: [CheckIn] {
-        let source = allDays ? store.ledger.entries.sorted { $0.end > $1.end } : store.ledger.entries(on: day)
+        let source: [CheckIn]
+        if allDays { source = store.ledger.entries.sorted { $0.end > $1.end } }
+        else if let rangeStart, let rangeEnd { source = store.ledger.entries.filter { $0.end >= rangeStart && $0.end <= rangeEnd }.sorted { $0.end > $1.end } }
+        else { source = store.ledger.entries(on: day) }
         return source.filter {
             $0.end <= Date() && (groupID == "uncategorized" ? store.ledger.confirmedCategoryID(for: $0) == nil : store.ledger.confirmedCategoryID(for: $0) == groupID)
         }
@@ -28,7 +34,7 @@ struct GroupEntriesView: View {
             List {
                 if groupID == "uncategorized" {
                     Picker("Review", selection: $allDays) {
-                        Text("Selected day").tag(false)
+                        Text(rangeStart == nil ? "Selected day" : "Selected range").tag(false)
                         Text("All days").tag(true)
                     }.pickerStyle(.segmented)
                 }
@@ -38,7 +44,7 @@ struct GroupEntriesView: View {
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(entry.activity).foregroundStyle(.primary)
-                                Text(allDays ? "\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end))" : store.time(entry.end))
+                                Text(allDays || rangeStart != nil ? "\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end))" : store.time(entry.end))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }.buttonStyle(.plain)

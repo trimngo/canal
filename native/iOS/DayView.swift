@@ -4,7 +4,8 @@ import LedgerCore
 private struct SelectedGroup: Identifiable {
     var id: String
     var name: String
-    var day = Date()
+    var start: Date?
+    var end: Date?
 }
 
 struct DayView: View {
@@ -13,40 +14,24 @@ struct DayView: View {
     @State private var selectedGroup: SelectedGroup?
     @State private var managingGroups = false
     @State private var saved = false
-    @State private var visible = false
-    private var entries: [CheckIn] { store.ledger.entries(on: Date()).filter { $0.end <= Date() } }
-    private var uncategorizedCount: Int { entries.filter { store.ledger.confirmedCategoryID(for: $0) == nil }.count }
-    private var totalUncategorizedCount: Int {
-        store.ledger.entries.filter { $0.end <= Date() && store.ledger.confirmedCategoryID(for: $0) == nil }.count
-    }
+    @State private var range: HistoryRange = .today
+    @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
+    @State private var end = Date()
+    private var ungrouped: Int { store.ledger.entries.filter { $0.end <= Date() && store.ledger.confirmedCategoryID(for: $0) == nil }.count }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            TimelineView(.periodic(from: Date(), by: 60)) { _ in
-                content(now: Date())
-            }
-            .onAppear { visible = true; openRequestedLog(using: proxy) }
-            .onDisappear { visible = false }
-            .onChange(of: store.sampleRequestID) { _, _ in
-                saved = false; editing = nil; selectedGroup = nil; managingGroups = false
-                if visible { openRequestedLog(using: proxy) }
-            }
-        }.navigationTitle("Today").navigationBarTitleDisplayMode(.inline)
+        TimelineView(.periodic(from: Date(), by: 60)) { _ in content(now: Date()) }
+            .navigationTitle(range == .today ? "Today" : "Your time").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     NavigationLink(value: LedgerScreen.calendar) { Label("Calendar", systemImage: "calendar") }
                         .accessibilityIdentifier("dashboard.calendar")
                     Button("Groups") { managingGroups = true }.accessibilityIdentifier("dashboard.groups")
-                    Menu {
-                        NavigationLink("Inbox", value: LedgerScreen.inbox)
-                        NavigationLink("Settings", value: LedgerScreen.settings)
-                    } label: { Label("More", systemImage: "ellipsis.circle") }
-                        .accessibilityIdentifier("dashboard.more")
                 }
             }
             .sheet(isPresented: $managingGroups) { GroupManagerView() }
             .sheet(item: $selectedGroup) { group in
-                GroupEntriesView(day: group.day, groupID: group.id, initialName: group.name)
+                GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end)
             }
             .sheet(item: $editing) { entry in
                 NavigationStack {
@@ -57,72 +42,61 @@ struct DayView: View {
             }
     }
 
-    private func openRequestedLog(using proxy: ScrollViewProxy) {
-        guard store.pendingLogRequest else { return }
-        DispatchQueue.main.async {
-            withAnimation { proxy.scrollTo("today.logging", anchor: .top) }
-            store.pendingLogRequest = false
-        }
-    }
-
     private func content(now: Date) -> some View {
-        let rows = store.ledger.breakdown(on: now, now: now)
-            .filter { $0.minutes > 0 || ($0.id == "uncategorized" && uncategorizedCount > 0) }
-            .sorted { $0.minutes == $1.minutes ? $0.name < $1.name : $0.minutes > $1.minutes }
-        let tracked = rows.reduce(0) { $0 + $1.minutes }
+        let report = store.ledger.history(range: range, start: start, end: end, now: now)
         return List {
             Section {
-                if rows.isEmpty { Text("Log your first activity to start today’s breakdown.").foregroundStyle(.secondary) }
-                ForEach(rows) { row in
-                    Button { selectedGroup = SelectedGroup(id: row.id, name: row.name) } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(row.name).foregroundStyle(.primary)
-                                Spacer()
-                                Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))")
-                                    .font(.subheadline).foregroundStyle(.secondary)
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-                            }
-                            ProgressView(value: min(1, row.percent / 100))
-                        }.padding(.vertical, 3)
-                    }.accessibilityIdentifier("dashboard.group.\(row.id)")
+                Picker("Period", selection: $range) {
+                    ForEach(HistoryRange.allCases) { Text($0.name).tag($0) }
+                }.pickerStyle(.menu).accessibilityIdentifier("report.range")
+                if range == .custom {
+                    DatePicker("From", selection: $start, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.from")
+                    DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
-                if totalUncategorizedCount > 0 {
-                    Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized") } label: {
-                        Label("\(totalUncategorizedCount) logs to group", systemImage: "tray")
-                    }.accessibilityIdentifier("dashboard.review.uncategorized")
-                }
-                if store.canUndoGrouping {
-                    Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("dashboard.undo")
-                }
+                HistoryPanel(report: report) { row in
+                    guard row.id != "remaining" else { return }
+                    selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
+                }.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             } header: {
                 Text("Where your time went").font(.headline).textCase(nil).accessibilityIdentifier("dashboard.breakdown-title")
             } footer: {
-                if let first = entries.last {
-                    Text("Since \(store.time(first.end)) · \(store.duration(tracked)) tracked · \(entries.count) logs")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
+                    if report.remainingMinutes > 0 { Text("Percentages include time remaining until bedtime.") }
+                    else { Text("Percentages use tracked waking time.") }
+                    Text("Swipe the chart for breakdown, pie, and trend.")
+                }
+            }
+            if ungrouped > 0 || store.canUndoGrouping {
+                Section {
+                    if ungrouped > 0 {
+                        Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized") } label: {
+                            Label("\(ungrouped) logs to group", systemImage: "tray")
+                        }.accessibilityIdentifier("dashboard.review.uncategorized")
+                    }
+                    if store.canUndoGrouping {
+                        Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("dashboard.undo")
+                    }
                 }
             }
             Section {
-                CheckInEditor { saved = true }.id(store.sampleRequestID).id("today.logging")
-                if saved {
-                    Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
-                }
+                CheckInEditor { saved = true }.id(store.sampleRequestID)
+                if saved { Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint) }
             } header: { Text("Log what I’m doing").font(.headline).textCase(nil) }
             Section {
-                DisclosureGroup("Today’s logs (\(entries.count))") {
-                    ForEach(entries) { entry in
+                DisclosureGroup(range == .today ? "Today’s logs (\(report.samples.count))" : "Logs in this range (\(report.samples.count))") {
+                    ForEach(report.samples.sorted { $0.end > $1.end }) { entry in
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(entry.activity).foregroundStyle(.primary)
-                                Text("\(store.time(entry.end)) · \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
+                                Text("\(range == .today ? "" : entry.end.formatted(date: .abbreviated, time: .omitted) + " · ")\(store.time(entry.end)) · \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
                 }.accessibilityIdentifier("today.logs")
             }
-        }.listStyle(.insetGrouped).listSectionSpacing(16)
-            .scrollDismissesKeyboard(.interactively)
+        }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.interactively)
     }
 }
 

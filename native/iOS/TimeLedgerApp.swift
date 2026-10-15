@@ -50,16 +50,28 @@ enum LedgerScreen: Hashable { case calendar, inbox, settings }
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
     @State private var path: [LedgerScreen] = []
+    @State private var tab = 0
+    @State private var capturing = false
     var body: some View {
-        NavigationStack(path: $path) {
-            DayView().navigationDestination(for: LedgerScreen.self) { screen in
-                switch screen {
-                case .calendar: CalendarHistoryView()
-                case .inbox: InboxView()
-                case .settings: SettingsView()
+        TabView(selection: $tab) {
+            NavigationStack(path: $path) {
+                DayView().navigationDestination(for: LedgerScreen.self) { screen in
+                    switch screen {
+                    case .calendar: CalendarHistoryView()
+                    case .inbox: InboxView()
+                    case .settings: SettingsView()
+                    }
                 }
-            }
+            }.tabItem { Label("Today", systemImage: "chart.pie") }.tag(0)
+            NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(1)
+            NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(2)
         }
-        .onChange(of: store.sampleRequestID) { _, _ in path.removeAll() }
+        .onAppear { showRequestedCapture() }
+        .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
+        .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
+    }
+    private func showRequestedCapture() {
+        guard store.pendingLogRequest else { return }
+        tab = 0; path.removeAll(); capturing = true; store.pendingLogRequest = false
     }
 }

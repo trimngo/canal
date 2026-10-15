@@ -57,6 +57,7 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {
+    public var deletedAt: Date?
     public var id: String
     public var text: String
     public var createdAt: Date
@@ -79,6 +80,8 @@ public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashab
 }
 
 public struct Settings: Codable, Equatable, Sendable {
+    public var showRemainingTime = false
+    public var bedtimeMinute = 22 * 60
     public var notificationsEnabled = false
     public var startMinute = 7 * 60
     public var endMinute = 22 * 60
@@ -87,7 +90,7 @@ public struct Settings: Codable, Equatable, Sendable {
     public var revision = Revision()
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision
+        case notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision, showRemainingTime, bedtimeMinute
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -97,6 +100,8 @@ public struct Settings: Codable, Equatable, Sendable {
         use24HourTime = try values.decodeIfPresent(Bool.self, forKey: .use24HourTime) ?? false
         inferenceMethod = try values.decodeIfPresent(InferenceMethod.self, forKey: .inferenceMethod) ?? .midpoint
         revision = try values.decodeIfPresent(Revision.self, forKey: .revision) ?? Revision()
+        showRemainingTime = try values.decodeIfPresent(Bool.self, forKey: .showRemainingTime) ?? false
+        bedtimeMinute = try values.decodeIfPresent(Int.self, forKey: .bedtimeMinute) ?? 1320
     }
     public func notificationMinutes() throws -> [Int] {
         guard startMinute >= 0, endMinute < 1440, endMinute > startMinute,
@@ -123,6 +128,7 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var inboxRanking: InboxRanking?
     public var schemaVersion = 2
     public var categories: [LedgerCategory] = OfflineGrouping.defaultGroups
     public var entries: [CheckIn] = []
@@ -131,7 +137,7 @@ public struct Ledger: Codable, Equatable, Sendable {
     public init() {}
 
     public func nextRevision(writer: String) -> Revision {
-        let values = categories.map(\.revision.counter) + entries.map(\.revision.counter) + captures.map(\.revision.counter) + [settings.revision.counter]
+        let values = categories.map(\.revision.counter) + entries.map(\.revision.counter) + captures.map(\.revision.counter) + [settings.revision.counter, inboxRanking?.revision.counter ?? 0]
         return Revision(counter: (values.max() ?? 0) + 1, writer: writer)
     }
 
@@ -244,6 +250,7 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public mutating func saveSettings(_ value: Settings, writer: String) throws {
         _ = try value.notificationMinutes()
+        guard (0..<1440).contains(value.bedtimeMinute) else { throw LedgerError.invalidSchedule }
         var revised = value; revised.revision = nextRevision(writer: writer); settings = revised
     }
 
@@ -259,6 +266,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         categories = merged(categories, other.categories, revision: { $0.revision })
         entries = merged(entries, other.entries, revision: { $0.revision })
         captures = merged(captures, other.captures, revision: { $0.revision })
+        if let ranking = other.inboxRanking, inboxRanking == nil || inboxRanking!.revision < ranking.revision { inboxRanking = ranking }
         if settings.revision < other.settings.revision { settings = other.settings }
     }
 }

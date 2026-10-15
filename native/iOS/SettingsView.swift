@@ -66,6 +66,18 @@ struct SettingsView: View {
                     var current = store.ledger.settings; current.use24HourTime = value
                     do { try store.saveSettings(current); settings.use24HourTime = value } catch { store.report(error) }
                 }))
+                Toggle("Show time remaining today", isOn: Binding(get: { store.ledger.settings.showRemainingTime }, set: { value in
+                    var current = store.ledger.settings; current.showRemainingTime = value
+                    do { try store.saveSettings(current) } catch { store.report(error) }
+                })).accessibilityIdentifier("settings.remaining")
+                Picker("Bedtime", selection: Binding(get: { store.ledger.settings.bedtimeMinute }, set: { value in
+                    var current = store.ledger.settings; current.bedtimeMinute = value
+                    do { try store.saveSettings(current) } catch { store.report(error) }
+                })) {
+                    ForEach(stepMinutes, id: \.self) { Text(minuteLabel($0)).tag($0) }
+                }.accessibilityIdentifier("settings.bedtime")
+                Text("When enabled, Today’s breakdown and pie include the time from now until bedtime. Percentages use tracked time plus that remaining time.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             Section {
                 Picker("Method", selection: Binding(get: { store.ledger.settings.inferenceMethod }, set: { value in
@@ -92,6 +104,13 @@ struct SettingsView: View {
                 if let data = try? JSONEncoder().encode(store.ledger) {
                     ShareLink("Export a backup", item: LedgerExport(data: data), preview: SharePreview("Time Ledger backup"))
                 }
+            }
+            Section {
+                Text(store.backupStatus).font(.footnote).accessibilityIdentifier("backup.status")
+                Button("Back up now") { store.refresh() }.accessibilityIdentifier("backup.now")
+                NavigationLink("Restore a backup") { RestoreBackupView() }.accessibilityIdentifier("backup.restore")
+            } header: { Text("Automatic backup") } footer: {
+                Text("Your iPhone saves a daily backup in your iCloud Drive after changes, including Watch logs once they sync. Older daily copies are kept. Enable iCloud Drive for Ledger in iPhone Settings. An upload-pending backup is still waiting to reach iCloud.")
             }
             Section {
                 Text("Try one sentence on your Watch: ‘Siri, create a note in Ledger called try shorter lessons.’")
