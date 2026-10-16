@@ -9,16 +9,20 @@ struct GroupEntriesView: View {
     let initialName: String
     let rangeStart: Date?
     let rangeEnd: Date?
+    let management: Bool
     @State private var allDays: Bool
     @State private var creatingFor: CheckIn?
     @State private var showingNewGroup = false
     @State private var groupName = ""
     @State private var editing: CheckIn?
     @State private var error: String?
-    init(day: Date, groupID: String, initialName: String, rangeStart: Date? = nil, rangeEnd: Date? = nil) {
+    @State private var renaming = false
+    @State private var confirmingDeletion = false
+    init(day: Date, groupID: String, initialName: String, rangeStart: Date? = nil, rangeEnd: Date? = nil, allTime: Bool = false, management: Bool = false) {
         self.day = day; self.groupID = groupID; self.initialName = initialName
         self.rangeStart = rangeStart; self.rangeEnd = rangeEnd
-        _allDays = State(initialValue: groupID == "uncategorized")
+        self.management = management
+        _allDays = State(initialValue: allTime || groupID == "uncategorized")
     }
     private var entries: [CheckIn] {
         let source: [CheckIn]
@@ -32,13 +36,24 @@ struct GroupEntriesView: View {
     var body: some View {
         NavigationStack {
             List {
-                if groupID == "uncategorized" {
+                if management {
+                    Section {
+                        HStack { Text("All-time logs"); Spacer(); Text("\(entries.count)").foregroundStyle(.secondary) }
+                            .accessibilityIdentifier("group.all-time-count")
+                        Button("Rename group") {
+                            groupName = store.categoryName(groupID); renaming = true
+                        }.accessibilityIdentifier("group.rename")
+                        Button("Delete group", role: .destructive) { confirmingDeletion = true }
+                            .accessibilityIdentifier("group.delete")
+                    } footer: { Text("Deleting this group moves its logs to Uncategorized. Your activity text and timestamps are kept.") }
+                }
+                if groupID == "uncategorized", !management {
                     Picker("Review", selection: $allDays) {
                         Text(rangeStart == nil ? "Selected day" : "Selected range").tag(false)
                         Text("All days").tag(true)
                     }.pickerStyle(.segmented)
                 }
-                if entries.isEmpty { Text("All sorted. There are no entries in this view.").foregroundStyle(.secondary) }
+                if entries.isEmpty { Text("There are no logs in this group for this view.").foregroundStyle(.secondary) }
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 10) {
                         Button { editing = entry } label: {
@@ -80,6 +95,19 @@ struct GroupEntriesView: View {
             }.navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+                .alert("Rename group", isPresented: $renaming) {
+                    TextField("Group name", text: $groupName)
+                    Button("Save") {
+                        do { try store.saveCategory(id: groupID, name: groupName); error = nil } catch { self.error = error.localizedDescription }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+                .confirmationDialog("Delete \(store.categoryName(groupID))?", isPresented: $confirmingDeletion, titleVisibility: .visible) {
+                    Button("Delete group", role: .destructive) {
+                        do { try store.deleteCategory(id: groupID); dismiss() } catch { self.error = error.localizedDescription }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: { Text("All \(entries.count) logs will be kept and moved to Uncategorized.") }
                 .alert("New group", isPresented: $showingNewGroup, presenting: creatingFor) { entry in
                     TextField("Group name", text: $groupName)
                     Button("Create & categorize") {
@@ -124,7 +152,7 @@ struct GroupEntriesView: View {
 struct GroupManagerView: View {
     @EnvironmentObject var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
-    @State private var editing: LedgerCategory?
+    @State private var selected: LedgerCategory?
     @State private var showingEditor = false
     @State private var name = ""
     @State private var error: String?
@@ -132,20 +160,31 @@ struct GroupManagerView: View {
         NavigationStack {
             List {
                 Section {
+                    let counts = store.ledger.groupEntryCounts()
                     ForEach(store.ledger.categories) { group in
-                        Button { name = group.name; editing = group; showingEditor = true } label: {
-                            HStack { Text(group.name); Spacer(); Image(systemName: "pencil").foregroundStyle(.secondary) }
-                        }.accessibilityIdentifier("groups.rename.\(group.id)")
+                        Button { selected = group } label: {
+                            HStack {
+                                Text(group.name).foregroundStyle(.primary)
+                                Text("\(counts[group.id, default: 0])").foregroundStyle(.secondary)
+                                Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }.accessibilityIdentifier("groups.open.\(group.id)")
                     }
-                    Button("Create group", systemImage: "plus") { name = ""; editing = LedgerCategory(id: "", name: ""); showingEditor = true }
-                } footer: { Text("Tap a group to rename it everywhere. Log text and confirmed choices stay intact. Offline suggestions keep working after a rename.") }
+                    Button { selected = LedgerCategory(id: "uncategorized", name: "Uncategorized") } label: {
+                        HStack { Text("Uncategorized"); Text("\(counts["uncategorized", default: 0])").foregroundStyle(.secondary); Spacer(); Image(systemName: "chevron.right").font(.caption) }
+                    }.accessibilityIdentifier("groups.open.uncategorized")
+                    Button("Create group", systemImage: "plus") { name = ""; showingEditor = true }
+                } footer: { Text("Counts include all-time logs. Tap a group to see its logs, rename it, or delete it.") }
                 if let error { Text(error).foregroundStyle(.red) }
             }.navigationTitle("Groups").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-                .alert(editing?.id == "" ? "New group" : "Rename group", isPresented: $showingEditor, presenting: editing) { group in
+                .sheet(item: $selected) { group in
+                    GroupEntriesView(day: Date(), groupID: group.id, initialName: group.name, allTime: true, management: group.id != "uncategorized")
+                }
+                .alert("New group", isPresented: $showingEditor) {
                     TextField("Group name", text: $name)
                     Button("Save") {
-                        do { try store.saveCategory(id: group.id == "" ? nil : group.id, name: name) } catch { self.error = error.localizedDescription }
+                        do { try store.saveCategory(id: nil, name: name); error = nil } catch { self.error = error.localizedDescription }
                     }
                     Button("Cancel", role: .cancel) {}
                 }

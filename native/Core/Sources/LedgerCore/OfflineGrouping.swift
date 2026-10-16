@@ -44,6 +44,14 @@ public enum OfflineGrouping {
 }
 
 extension Ledger {
+    public func groupEntryCounts(now: Date = Date()) -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for entry in entries where entry.end <= now {
+            counts[confirmedCategoryID(for: entry) ?? "uncategorized", default: 0] += 1
+        }
+        return counts
+    }
+
     public func confirmedCategoryID(for entry: CheckIn) -> String? {
         guard entry.categoryAssignment != .automatic,
               let id = entry.categoryID, categories.contains(where: { $0.id == id }) else { return nil }
@@ -76,6 +84,7 @@ extension Ledger {
 
     public mutating func ensureDefaultGroups(writer: String) {
         for group in OfflineGrouping.defaultGroups {
+            if (groupDeletions ?? []).contains(where: { $0.id == group.id || $0.automaticRole == group.id }) { continue }
             if let index = categories.firstIndex(where: { $0.id == group.id || $0.automaticRole == group.id })
                 ?? categories.firstIndex(where: { OfflineGrouping.normalized($0.name) == OfflineGrouping.normalized(group.name) }) {
                 if categories[index].automaticRole == nil {

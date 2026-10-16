@@ -4,14 +4,46 @@ import LedgerCore
 struct CheckInView: View {
     @EnvironmentObject var store: LedgerStore
     @State private var saved = false
+    @State private var editing: CheckIn?
+    @State private var range: HistoryRange = .today
+    @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
+    @State private var end = Date()
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("What are you doing now?").font(.title2.bold())
+        List {
+            Section("What are you doing now?") {
                 CheckInEditor { saved = true }.id(store.sampleRequestID)
                 if saved { Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint) }
-            }.padding(20)
-        }.navigationTitle("Log").navigationBarTitleDisplayMode(.inline)
+            }
+            Section("Your logs") {
+                Picker("Period", selection: $range) {
+                    ForEach(HistoryRange.allCases) { Text($0.name).tag($0) }
+                }.pickerStyle(.menu).accessibilityIdentifier("logs.range")
+                if range == .custom {
+                    DatePicker("From", selection: $start, in: ...Date(), displayedComponents: [.date])
+                    DatePicker("Through", selection: $end, in: ...Date(), displayedComponents: [.date])
+                }
+                let samples = store.ledger.history(range: range, start: start, end: end).samples.sorted { $0.end > $1.end }
+                DisclosureGroup("Logs (\(samples.count))") {
+                    ForEach(samples) { entry in
+                        Button { editing = entry } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(entry.activity).foregroundStyle(.primary)
+                                Text("\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end)) · \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }.accessibilityIdentifier("today.logs")
+            }
+        }.listStyle(.insetGrouped).scrollDismissesKeyboard(.immediately)
+            .navigationTitle("Log").navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $editing) { entry in
+                NavigationStack {
+                    ScrollView { CheckInEditor(entry: entry) { editing = nil }.padding(20) }
+                        .navigationTitle("Edit log").navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { editing = nil } } }
+                }
+            }
     }
 }
 

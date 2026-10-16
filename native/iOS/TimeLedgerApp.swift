@@ -46,7 +46,7 @@ struct TimeLedgerApp: App {
 }
 
 enum LedgerScreen: Hashable { case calendar, inbox, settings }
-private enum AppTab: Hashable { case today, inbox, settings }
+private enum AppTab: Hashable { case today, log, inbox, settings }
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
@@ -66,6 +66,7 @@ struct RootView: View {
                     }
                 }
             }.tabItem { Label("Today", systemImage: "chart.pie") }.tag(AppTab.today)
+            NavigationStack { CheckInView() }.tabItem { Label("Log", systemImage: "plus.circle") }.tag(AppTab.log)
             NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(AppTab.inbox)
             NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(AppTab.settings)
         }

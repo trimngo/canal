@@ -53,6 +53,12 @@ final class LedgerStore: ObservableObject {
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-group-history") {
+                var fixture = Ledger()
+                try fixture.saveSample(id: "older", at: Date().addingTimeInterval(-10 * 86400), activity: "Older work observation", categoryID: "work", writer: "fixture")
+                try fixture.saveSample(id: "recent", at: Date().addingTimeInterval(-60), activity: "Recent work observation", categoryID: "work", writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-fixture") {
                 var fixture = Ledger()
                 for (i, item) in [("c", "Third idea"), ("a", "First idea"), ("b", "Second idea")].enumerated() {
@@ -239,6 +245,11 @@ final class LedgerStore: ObservableObject {
 
     func saveCategory(id: String?, name: String) throws {
         var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer); try commit(draft)
+    }
+
+    func deleteCategory(id: String) throws {
+        var draft = ledger; try draft.deleteCategory(id: id, writer: writer); try commit(draft)
+        groupingUndo = []; canUndoGrouping = false
     }
 
     func categorize(_ entry: CheckIn, categoryID: String?, newGroupName: String? = nil, includeMatching: Bool = false) throws {

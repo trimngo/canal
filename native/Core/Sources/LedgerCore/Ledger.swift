@@ -36,6 +36,13 @@ public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// Kept in backups and sync so an older device cannot resurrect a deleted group.
+public struct GroupDeletion: Codable, Identifiable, Equatable, Sendable {
+    public var id: String
+    public var automaticRole: String?
+    public var revision: Revision
+}
+
 // "automatic" is retained for compatibility with older phone/Watch data.
 // It now represents an unconfirmed suggestion and never a confirmed group.
 public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
@@ -128,6 +135,7 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var groupDeletions: [GroupDeletion]?
     public var inboxRanking: InboxRanking?
     public var schemaVersion = 2
     public var categories: [LedgerCategory] = OfflineGrouping.defaultGroups
@@ -137,7 +145,11 @@ public struct Ledger: Codable, Equatable, Sendable {
     public init() {}
 
     public func nextRevision(writer: String) -> Revision {
-        let values = categories.map(\.revision.counter) + entries.map(\.revision.counter) + captures.map(\.revision.counter) + [settings.revision.counter, inboxRanking?.revision.counter ?? 0]
+        var values = categories.map(\.revision.counter)
+        values.append(contentsOf: entries.map(\.revision.counter))
+        values.append(contentsOf: captures.map(\.revision.counter))
+        values.append(contentsOf: (groupDeletions ?? []).map(\.revision.counter))
+        values.append(contentsOf: [settings.revision.counter, inboxRanking?.revision.counter ?? 0])
         return Revision(counter: (values.max() ?? 0) + 1, writer: writer)
     }
 
@@ -232,6 +244,19 @@ public struct Ledger: Codable, Equatable, Sendable {
         } else { categories.append(LedgerCategory(name: text, revision: revision)) }
     }
 
+    public mutating func deleteCategory(id: String, writer: String) throws {
+        guard let group = categories.first(where: { $0.id == id }) else { throw LedgerError.invalidCategory }
+        let deletion = GroupDeletion(id: id, automaticRole: group.automaticRole, revision: nextRevision(writer: writer))
+        groupDeletions = (groupDeletions ?? []).filter { $0.id != id } + [deletion]
+        categories.removeAll { $0.id == id }
+        for index in entries.indices where entries[index].categoryID == id {
+            let revision = nextRevision(writer: writer)
+            entries[index].categoryID = nil
+            entries[index].categoryAssignment = .automatic
+            entries[index].revision = revision
+        }
+    }
+
     @discardableResult
     public mutating func addCapture(text: String, id: String = UUID().uuidString, writer: String, now: Date = Date()) throws -> Capture {
         if let saved = captures.first(where: { $0.id == id }) { return saved }
@@ -264,7 +289,15 @@ public struct Ledger: Codable, Equatable, Sendable {
             return result.values.sorted { $0.id < $1.id }
         }
         categories = merged(categories, other.categories, revision: { $0.revision })
+        let deletions = merged(groupDeletions ?? [], other.groupDeletions ?? [], revision: { $0.revision })
+        groupDeletions = deletions.isEmpty ? nil : deletions
+        categories.removeAll { group in deletions.contains { $0.id == group.id } }
         entries = merged(entries, other.entries, revision: { $0.revision })
+        // A concurrent sample may still refer to a deleted group. Preserve its
+        // observation and revision, and normalize only that obsolete reference.
+        for index in entries.indices where deletions.contains(where: { $0.id == entries[index].categoryID }) {
+            entries[index].categoryID = nil; entries[index].categoryAssignment = .automatic
+        }
         captures = merged(captures, other.captures, revision: { $0.revision })
         if let ranking = other.inboxRanking, inboxRanking == nil || inboxRanking!.revision < ranking.revision { inboxRanking = ranking }
         if settings.revision < other.settings.revision { settings = other.settings }

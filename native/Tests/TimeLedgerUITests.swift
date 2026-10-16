@@ -26,6 +26,7 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func log(_ text: String, in app: XCUIApplication, confirmSuggestion: Bool = false) {
+        app.tabBars.buttons["Log"].tap()
         let field = element(app, "checkin.activity")
         reveal(field, in: app); field.tap(); field.typeText(text)
         if confirmSuggestion {
@@ -35,24 +36,33 @@ final class TimeLedgerUITests: XCTestCase {
         let save = app.buttons["checkin.save"]
         reveal(save, in: app); save.tap()
         XCTAssertTrue(app.staticTexts["Saved. You can change it anytime."].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Today"].tap()
     }
 
     private func openLogs(_ app: XCUIApplication) {
+        app.tabBars.buttons["Log"].tap()
         let logs = element(app, "today.logs"); reveal(logs, in: app); logs.tap()
     }
 
-    func testHomePutsBreakdownBeforeLoggingAndProvidesInboxTab() {
+    func testHomeShowsDashboardAndKeepsLoggingOnItsOwnTab() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let header = element(app, "dashboard.breakdown-title")
         let field = element(app, "checkin.activity")
         XCTAssertTrue(header.waitForExistence(timeout: 10))
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertLessThan(header.frame.minY, field.frame.minY)
+        XCTAssertFalse(field.exists)
+        XCTAssertFalse(element(app, "today.logs").exists)
         XCTAssertEqual(app.tabBars.count, 1)
         XCTAssertTrue(app.tabBars.buttons["Inbox"].exists)
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
         recordScreen("Dashboard", in: app)
+        app.tabBars.buttons["Log"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(header.exists)
+        recordScreen("Log", in: app)
+        XCUIDevice.shared.press(.home); app.activate()
+        XCTAssertTrue(header.waitForExistence(timeout: 5))
+        XCTAssertFalse(field.exists)
     }
 
     func testUnconfirmedSuggestionStaysUncategorizedUntilAcceptedInReview() {
@@ -97,16 +107,19 @@ final class TimeLedgerUITests: XCTestCase {
         app.alerts.buttons["Create & categorize"].tap()
         app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
         app.swipeUp()
-        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.rename.", "Creative Practice")).firstMatch
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.open.", "Creative Practice")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let groupID = String(row.identifier.dropFirst("groups.rename.".count)); row.tap()
+        let groupID = String(row.identifier.dropFirst("groups.open.".count)); row.tap()
+        app.buttons["group.rename"].tap()
         let rename = app.alerts.textFields["Group name"]
         XCTAssertTrue(rename.waitForExistence(timeout: 5))
         rename.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         rename.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30))
         rename.typeText("Creative Projects")
         app.alerts.buttons["Save"].tap()
-        XCTAssertTrue(app.buttons["groups.rename.\(groupID)"].staticTexts["Creative Projects"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Creative Projects"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["groups.open.\(groupID)"].staticTexts["Creative Projects"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["dashboard.group.\(groupID)"].waitForExistence(timeout: 5))
     }
@@ -161,6 +174,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-quick-reply"]; app.launch()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Direct notification reply UI fixture"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(app.buttons["dashboard.review.uncategorized"].exists)
         app.terminate(); app.launchArguments = []; app.launch()
         openLogs(app)
@@ -180,7 +194,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-companion-unavailable"]
         app.launch()
-        XCTAssertTrue(element(app, "checkin.activity").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 10))
         XCTAssertEqual(app.alerts.count, 0)
         log("Saved while helper unavailable", in: app)
         app.tabBars.buttons["Settings"].tap()
@@ -209,6 +223,50 @@ final class TimeLedgerUITests: XCTestCase {
         period.tap(); app.buttons["Custom"].tap()
         XCTAssertTrue(element(app, "report.from").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "report.through").exists)
+    }
+
+    func testPieSlicesAndLegendSelectLabelsInsideChart() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
+        app.buttons["Show pie chart"].tap()
+        let chart = element(app, "report.pie.chart")
+        XCTAssertTrue(chart.waitForExistence(timeout: 5))
+        // The fixture is 75% Uncategorized, starting clockwise from twelve.
+        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 70, dy: 0)).tap()
+        let selection = element(app, "report.pie.selection")
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Uncategorized"), object: selection)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        recordScreen("SelectedPieSlice", in: app)
+        let work = app.buttons["report.pie.group.work"]; reveal(work, in: app); work.tap()
+        XCTAssertTrue(selection.label.contains("Work"))
+        XCTAssertTrue(selection.label.contains("%"))
+    }
+
+    func testGroupCountsAndDeletionPreserveAllTimeLogsAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
+        app.buttons["dashboard.groups"].tap()
+        let group = app.buttons["groups.open.work"]
+        XCTAssertTrue(group.waitForExistence(timeout: 5))
+        XCTAssertTrue(group.staticTexts["2"].exists)
+        recordScreen("GroupCounts", in: app)
+        group.tap()
+        XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
+        recordScreen("GroupHistory", in: app)
+        app.buttons["group.delete"].tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Older work observation"].exists)
+        app.buttons["group.delete"].tap()
+        app.buttons["Delete group"].lastMatch.tap()
+        XCTAssertFalse(app.buttons["groups.open.work"].exists)
+        app.buttons["groups.open.uncategorized"].tap()
+        XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
+        app.terminate(); app.launchArguments = []; app.launch()
+        app.buttons["dashboard.groups"].tap()
+        XCTAssertFalse(app.buttons["groups.open.work"].exists)
+        app.buttons["groups.open.uncategorized"].tap()
+        XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
     }
 
     func testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked() {
@@ -256,6 +314,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Restored. Your newer edits and existing logs were kept."].waitForExistence(timeout: 5))
         app.tabBars.buttons["Today"].tap()
         element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        app.tabBars.buttons["Log"].tap()
+        element(app, "logs.range").tap(); app.buttons["Past 7 days"].tap()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Restored older activity"].waitForExistence(timeout: 5))
     }

@@ -7,6 +7,9 @@ struct HistoryPanel: View {
     let report: HistoryReport
     let select: (BreakdownRow) -> Void
     @State private var page: Int? = 0
+    @State private var selectedAngle: Double?
+    @State private var selectedGroupID: String?
+    private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
     private func color(_ id: String) -> Color {
         if id == "remaining" { return .gray }
         if id == "uncategorized" { return .orange }
@@ -41,6 +44,18 @@ struct HistoryPanel: View {
                 }
             }
         }
+        .onChange(of: selectedAngle) { _, angle in
+            guard let angle else { return }
+            var cumulative = 0.0
+            selectedGroupID = report.rows.first { row in
+                cumulative += row.minutes
+                return angle < cumulative
+            }?.id
+        }
+        .onChange(of: report.start) { _, _ in clearSelection() }
+        .onChange(of: report.end) { _, _ in
+            if !report.rows.contains(where: { $0.id == selectedGroupID }) { clearSelection() }
+        }
     }
     private var breakdown: some View {
         ScrollView {
@@ -70,15 +85,38 @@ struct HistoryPanel: View {
                     Chart(report.rows) { row in
                         SectorMark(angle: .value("Time", row.minutes), innerRadius: .ratio(0.58), angularInset: 2)
                             .foregroundStyle(color(row.id))
+                            .opacity(selectedGroupID == nil || selectedGroupID == row.id ? 1 : 0.4)
                             .accessibilityLabel(row.name)
                             .accessibilityValue("\(Int(row.percent.rounded())) percent, \(store.duration(row.minutes))")
-                    }.frame(height: 165)
+                    }.chartAngleSelection(value: $selectedAngle)
+                        .chartBackground { proxy in
+                            GeometryReader { geometry in
+                                if let anchor = proxy.plotFrame {
+                                    let frame = geometry[anchor]
+                                    VStack(spacing: 3) {
+                                        if let row = selectedRow {
+                                            Text(row.name).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
+                                            Text("\(row.percent, specifier: "%.1f")%").font(.caption)
+                                            Text(store.duration(row.minutes)).font(.caption2).foregroundStyle(.secondary)
+                                        } else {
+                                            Text("Tap a slice").font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }.multilineTextAlignment(.center).frame(width: 88, height: 88)
+                                        .position(x: frame.midX, y: frame.midY)
+                                        .accessibilityElement(children: .combine).accessibilityIdentifier("report.pie.selection")
+                                }
+                            }.allowsHitTesting(false)
+                        }
+                        .frame(height: 180).accessibilityIdentifier("report.pie.chart")
                     ForEach(report.rows) { row in
-                        HStack {
-                            Circle().fill(color(row.id)).frame(width: 8, height: 8)
-                            Text(row.name); Spacer()
-                            Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
-                        }.font(.caption)
+                        Button { selectedGroupID = row.id } label: {
+                            HStack {
+                                Circle().fill(color(row.id)).frame(width: 8, height: 8)
+                                Text(row.name).foregroundStyle(.primary); Spacer()
+                                Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
+                            }.font(.caption).padding(.vertical, 3).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityIdentifier("report.pie.group.\(row.id)")
+                            .accessibilityAddTraits(selectedGroupID == row.id ? .isSelected : [])
                     }
                 }
             }.padding(.bottom, 8)
@@ -103,4 +141,5 @@ struct HistoryPanel: View {
     private var empty: some View {
         Text("Log an activity to start this view.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 150)
     }
+    private func clearSelection() { selectedAngle = nil; selectedGroupID = nil }
 }

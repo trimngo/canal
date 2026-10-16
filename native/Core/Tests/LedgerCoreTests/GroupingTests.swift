@@ -183,4 +183,68 @@ final class GroupingTests: XCTestCase {
         phone.merge(watch); phone.prepareGroupSuggestions(writer: "phone")
         XCTAssertEqual(phone, normalized)
     }
+    func testDeletingGroupPreservesEveryObservationAndSurvivesBackupAndDefaults() throws {
+        var ledger = Ledger()
+        try ledger.saveSample(id: "old", at: now.addingTimeInterval(-400 * 86400), activity: "Original text", categoryID: "work", writer: "phone", now: now)
+        try ledger.saveSample(id: "new", at: now, activity: "New text", categoryID: "work", writer: "phone", now: now)
+        try ledger.saveSample(id: "other", at: now, activity: "Rest", categoryID: "rest", writer: "phone", now: now)
+        let observations = ledger.entries.map { ($0.id, $0.activity, $0.end) }
+        try ledger.deleteCategory(id: "work", writer: "phone")
+        XCTAssertFalse(ledger.categories.contains { $0.id == "work" })
+        XCTAssertEqual(ledger.entries.count, observations.count)
+        for observation in observations {
+            let entry = try XCTUnwrap(ledger.entries.first { $0.id == observation.0 })
+            XCTAssertEqual(entry.activity, observation.1); XCTAssertEqual(entry.end, observation.2)
+        }
+        XCTAssertNil(ledger.entries.first { $0.id == "old" }?.categoryID)
+        XCTAssertNil(ledger.entries.first { $0.id == "new" }?.categoryID)
+        XCTAssertEqual(ledger.entries.first { $0.id == "other" }?.categoryID, "rest")
+        var restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        restored.ensureDefaultGroups(writer: "watch")
+        XCTAssertFalse(restored.categories.contains { $0.id == "work" })
+        XCTAssertEqual(restored.groupEntryCounts(now: now)["uncategorized"], 2)
+        XCTAssertNil(restored.suggestedCategory(for: "working"))
+    }
+
+    func testDeletedGroupCannotReturnFromStaleBackupOrConcurrentWatchEdit() throws {
+        var phone = Ledger()
+        try phone.saveSample(id: "shared", at: now, activity: "Work", categoryID: "work", writer: "phone", now: now)
+        var watch = phone
+        try phone.deleteCategory(id: "work", writer: "phone")
+        // An offline device may keep writing and even rename the group.
+        for index in 0..<10 { try watch.saveCategory(id: "work", name: "Work \(index)", writer: "watch") }
+        try watch.saveSample(id: "offline", at: now, activity: "Offline text", categoryID: "work", writer: "watch", now: now)
+        let stale = watch
+        phone.merge(watch); watch.merge(phone)
+        XCTAssertEqual(phone, watch)
+        XCTAssertFalse(phone.categories.contains { $0.id == "work" })
+        XCTAssertTrue(phone.entries.allSatisfy { $0.categoryID == nil })
+        let merged = phone
+        phone.merge(stale); phone.ensureDefaultGroups(writer: "phone")
+        XCTAssertEqual(phone, merged)
+        XCTAssertThrowsError(try phone.saveCategory(id: "work", name: "Return", writer: "phone"))
+        XCTAssertThrowsError(try phone.saveSample(at: now, activity: "Work", categoryID: "work", writer: "phone", now: now))
+    }
+
+    func testDeletingCustomDefaultRoleDoesNotRecreateItAndAllowsReusingName() throws {
+        var ledger = Ledger()
+        ledger.categories.removeAll { $0.id == "social" }
+        ledger.categories.append(LedgerCategory(id: "people", name: "Socializing"))
+        ledger.ensureDefaultGroups(writer: "phone")
+        try ledger.deleteCategory(id: "people", writer: "phone")
+        ledger.ensureDefaultGroups(writer: "watch")
+        XCTAssertFalse(ledger.categories.contains { $0.id == "social" || $0.id == "people" })
+        try ledger.saveCategory(id: nil, name: "Socializing", writer: "phone")
+        XCTAssertEqual(ledger.categories.filter { $0.name == "Socializing" }.count, 1)
+    }
+
+    func testAllTimeCountsIncludeZeroDurationAndUnconfirmedSamplesAcrossDates() throws {
+        var ledger = Ledger()
+        try ledger.saveSample(id: "old", at: now.addingTimeInterval(-400 * 86400), activity: "Work", categoryID: "work", writer: "phone", now: now)
+        try ledger.saveSample(id: "same-time", at: now, activity: "Work", categoryID: "work", writer: "phone", now: now)
+        try ledger.saveSample(id: "uncategorized", at: now, activity: "Working", categoryID: nil, writer: "phone", now: now)
+        ledger.entries.append(CheckIn(end: now, activity: "Cached suggestion", categoryID: "work", revision: Revision(), sampleID: "cached", categoryAssignment: .automatic))
+        XCTAssertEqual(ledger.groupEntryCounts(now: now), ["work": 2, "uncategorized": 2])
+    }
+
 }

@@ -10,10 +10,8 @@ private struct SelectedGroup: Identifiable {
 
 struct DayView: View {
     @EnvironmentObject var store: LedgerStore
-    @State private var editing: CheckIn?
     @State private var selectedGroup: SelectedGroup?
     @State private var managingGroups = false
-    @State private var saved = false
     @State private var range: HistoryRange = .today
     @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
     @State private var end = Date()
@@ -33,13 +31,7 @@ struct DayView: View {
             .sheet(item: $selectedGroup) { group in
                 GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end)
             }
-            .sheet(item: $editing) { entry in
-                NavigationStack {
-                    ScrollView { CheckInEditor(entry: entry) { editing = nil }.padding(20) }
-                        .navigationTitle("Edit log").navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { editing = nil } } }
-                }
-            }
+
     }
 
     private func content(now: Date) -> some View {
@@ -79,23 +71,7 @@ struct DayView: View {
                     }
                 }
             }
-            Section {
-                CheckInEditor { saved = true }.id(store.sampleRequestID)
-                if saved { Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint) }
-            } header: { Text("Log what I’m doing").font(.headline).textCase(nil) }
-            Section {
-                DisclosureGroup(range == .today ? "Today’s logs (\(report.samples.count))" : "Logs in this range (\(report.samples.count))") {
-                    ForEach(report.samples.sorted { $0.end > $1.end }) { entry in
-                        Button { editing = entry } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(entry.activity).foregroundStyle(.primary)
-                                Text("\(range == .today ? "" : entry.end.formatted(date: .abbreviated, time: .omitted) + " · ")\(store.time(entry.end)) · \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }.accessibilityIdentifier("today.logs")
-            }
+
         }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.immediately)
     }
 }
