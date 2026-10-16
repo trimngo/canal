@@ -82,7 +82,7 @@ struct GroupEntriesView: View {
                         } label: {
                             Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
                         }.accessibilityIdentifier("group.choose.\(entry.id)")
-                    }.padding(.vertical, 5).accessibilityIdentifier("group.entry.\(entry.id)")
+                    }.padding(.vertical, 5)
                         .swipeActions {
                             Button("Delete", role: .destructive) {
                                 do { try store.deleteLog(entry) } catch { self.error = error.localizedDescription }

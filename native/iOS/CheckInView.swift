@@ -23,7 +23,7 @@ struct CheckInView: View {
                     DatePicker("Through", selection: $end, in: ...Date(), displayedComponents: [.date])
                 }
                 let samples = store.ledger.history(range: range, start: start, end: end).samples.sorted { $0.end > $1.end }
-                DisclosureGroup("Logs (\(samples.count))") {
+                DisclosureGroup {
                     ForEach(samples) { entry in
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
@@ -38,7 +38,7 @@ struct CheckInView: View {
                                 }
                             }
                     }
-                }.accessibilityIdentifier("today.logs")
+                } label: { Text("Logs (\(samples.count))").accessibilityIdentifier("today.logs") }
             }
         }.listStyle(.insetGrouped).scrollDismissesKeyboard(.immediately)
             .navigationTitle("Log").navigationBarTitleDisplayMode(.inline)

@@ -11,16 +11,20 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func reveal(_ target: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<6 {
+        for _ in 0..<10 {
             let top = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : app.frame.minY
             var bottom = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
             if app.keyboards.firstMatch.exists { bottom = min(bottom, app.keyboards.firstMatch.frame.minY) }
             let frame = target.exists ? target.frame : .zero
             if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
-            let content = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.tables.firstMatch
-            if content.exists {
-                if !frame.isEmpty, frame.maxY < top { content.swipeDown() } else { content.swipeUp() }
-            } else { app.swipeUp() }
+            // Short drags keep lazy Form rows from being skipped by momentum.
+            let height = max(100, bottom - top)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let high = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.3))
+            let low = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.75))
+            if !frame.isEmpty, frame.maxY < top { high.press(forDuration: 0.01, thenDragTo: low) }
+            else { low.press(forDuration: 0.01, thenDragTo: high) }
+
         }
         XCTAssertTrue(target.waitForExistence(timeout: 5))
     }
@@ -326,7 +330,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
         openLogs(app)
         let row = app.buttons["logs.entry.recent"]; reveal(row, in: app); row.swipeLeft()
-        app.buttons["Delete"].tap()
+        if app.buttons["Delete"].exists { app.buttons["Delete"].tap() }
         let undo = app.buttons["logs.undo-delete"]
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
         XCTAssertTrue(app.buttons["logs.entry.recent"].waitForExistence(timeout: 5))
