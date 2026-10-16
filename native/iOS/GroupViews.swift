@@ -94,7 +94,7 @@ struct GroupEntriesView: View {
                 }
             }.navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("group.done") } }
                 .alert("Rename group", isPresented: $renaming) {
                     TextField("Group name", text: $groupName)
                     Button("Save") {
@@ -177,7 +177,7 @@ struct GroupManagerView: View {
                 } footer: { Text("Counts include all-time logs. Tap a group to see its logs, rename it, or delete it.") }
                 if let error { Text(error).foregroundStyle(.red) }
             }.navigationTitle("Groups").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("groups.done") } }
                 .sheet(item: $selected) { group in
                     GroupEntriesView(day: Date(), groupID: group.id, initialName: group.name, allTime: true, management: group.id != "uncategorized")
                 }

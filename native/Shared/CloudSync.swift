@@ -3,10 +3,11 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
-    case category(LedgerCategory), entry(CheckIn), capture(Capture), settings(Settings)
+    case category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
         case .category(let item): return "category-\(item.id)"
+        case .groupDeletion(let item): return "group-deletion-\(item.id)"
         case .entry(let item): return "entry-\(item.id)"
         case .capture(let item): return "capture-\(item.id)"
         case .settings: return "settings"
@@ -15,6 +16,7 @@ private enum CloudItem: Codable {
     var revision: Revision {
         switch self {
         case .category(let item): return item.revision
+        case .groupDeletion(let item): return item.revision
         case .entry(let item): return item.revision
         case .capture(let item): return item.revision
         case .settings(let item): return item.revision
@@ -24,6 +26,7 @@ private enum CloudItem: Codable {
         var remote = Ledger(); remote.categories = []; remote.entries = []; remote.captures = []
         switch self {
         case .category(let item): remote.categories = [item]
+        case .groupDeletion(let item): remote.groupDeletions = [item]
         case .entry(let item): remote.entries = [item]
         case .capture(let item): remote.captures = [item]
         case .settings(let item): remote.settings = item
@@ -31,7 +34,12 @@ private enum CloudItem: Codable {
         ledger.merge(remote)
     }
     static func all(in ledger: Ledger) -> [CloudItem] {
-        ledger.categories.map(CloudItem.category) + ledger.entries.map(CloudItem.entry) + ledger.captures.map(CloudItem.capture) + [.settings(ledger.settings)]
+        var items = ledger.categories.map(CloudItem.category)
+        items.append(contentsOf: (ledger.groupDeletions ?? []).map(CloudItem.groupDeletion))
+        items.append(contentsOf: ledger.entries.map(CloudItem.entry))
+        items.append(contentsOf: ledger.captures.map(CloudItem.capture))
+        items.append(.settings(ledger.settings))
+        return items
     }
 }
 

@@ -118,9 +118,9 @@ final class TimeLedgerUITests: XCTestCase {
         rename.typeText("Creative Projects")
         app.alerts.buttons["Save"].tap()
         XCTAssertTrue(app.navigationBars["Creative Projects"].waitForExistence(timeout: 5))
-        app.buttons["Done"].tap()
+        app.buttons["group.done"].tap()
         XCTAssertTrue(app.buttons["groups.open.\(groupID)"].staticTexts["Creative Projects"].waitForExistence(timeout: 5))
-        app.buttons["Done"].tap()
+        app.buttons["groups.done"].tap()
         XCTAssertTrue(app.buttons["dashboard.group.\(groupID)"].waitForExistence(timeout: 5))
     }
 
@@ -239,6 +239,8 @@ final class TimeLedgerUITests: XCTestCase {
         let work = app.buttons["report.pie.group.work"]; reveal(work, in: app); work.tap()
         XCTAssertTrue(selection.label.contains("Work"))
         XCTAssertTrue(selection.label.contains("%"))
+        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 70, dy: 0)).tap()
+        XCTAssertTrue(selection.label.contains("Uncategorized"))
     }
 
     func testGroupCountsAndDeletionPreserveAllTimeLogsAfterRelaunch() {
