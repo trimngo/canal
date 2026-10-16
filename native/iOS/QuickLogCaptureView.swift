@@ -28,7 +28,7 @@ struct QuickLogCaptureView: View {
                         .accessibilityIdentifier("quicklog.save")
                     Spacer()
                 }
-            }.padding(24).navigationBarTitleDisplayMode(.inline)
+            }.padding(24).ledgerInputDismissal().navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
                 .task {
                     activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil

@@ -46,7 +46,7 @@ public enum OfflineGrouping {
 extension Ledger {
     public func groupEntryCounts(now: Date = Date()) -> [String: Int] {
         var counts: [String: Int] = [:]
-        for entry in entries where entry.end <= now {
+        for entry in activeEntries where entry.end <= now {
             counts[confirmedCategoryID(for: entry) ?? "uncategorized", default: 0] += 1
         }
         return counts
@@ -60,7 +60,7 @@ extension Ledger {
 
     public func unconfirmedMatches(for activity: String) -> [CheckIn] {
         let key = OfflineGrouping.normalized(activity)
-        return entries.filter { confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key }
+        return activeEntries.filter { confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key }
     }
 
     public func suggestedCategory(for activity: String) -> String? {
@@ -72,7 +72,7 @@ extension Ledger {
     private func rememberedChoices() -> [String: CheckIn] {
         let known = Set(categories.map(\.id))
         var result: [String: CheckIn] = [:]
-        for entry in entries where entry.categoryAssignment != .automatic && known.contains(entry.categoryID ?? "") {
+        for entry in activeEntries where entry.categoryAssignment != .automatic && known.contains(entry.categoryID ?? "") {
             let key = OfflineGrouping.normalized(entry.activity)
             if let previous = result[key] {
                 if previous.revision > entry.revision || (previous.revision == entry.revision && previous.id >= entry.id) { continue }
@@ -112,9 +112,9 @@ extension Ledger {
 
     public mutating func confirmCategory(for id: String, categoryID: String?, includeMatching: Bool = false, writer: String) throws {
         if let categoryID, !categories.contains(where: { $0.id == categoryID }) { throw LedgerError.invalidCategory }
-        guard let chosen = entries.first(where: { $0.id == id }) else { return }
+        guard let chosen = activeEntries.first(where: { $0.id == id }) else { return }
         let key = OfflineGrouping.normalized(chosen.activity)
-        let selected = Set(entries.filter {
+        let selected = Set(activeEntries.filter {
             $0.id == id || (includeMatching && categoryID != nil && confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key)
         }.map(\.id))
         var counter = nextRevision(writer: writer).counter

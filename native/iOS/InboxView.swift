@@ -4,6 +4,7 @@ import LedgerCore
 struct InboxView: View {
     @EnvironmentObject var store: LedgerStore
     @State private var text = ""
+    @FocusState private var focused: Bool
     @State private var showDone = false
     @State private var ranking = false
     private var captures: [Capture] {
@@ -21,9 +22,9 @@ struct InboxView: View {
         List {
             Section {
                 TextField("Get it out of your head…", text: $text, axis: .vertical).lineLimit(1...4)
-                    .accessibilityIdentifier("inbox.text")
+                    .focused($focused).accessibilityIdentifier("inbox.text")
                 Button("Capture") {
-                    do { try store.addCapture(text); text = "" } catch { store.report(error) }
+                    do { try store.addCapture(text); text = ""; focused = false } catch { store.report(error) }
                 }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                     .accessibilityIdentifier("inbox.save")
             }
@@ -35,7 +36,7 @@ struct InboxView: View {
                         .foregroundStyle(.secondary).accessibilityIdentifier("inbox.ranking-status")
                     if waiting > 0 {
                         Button(store.ledger.rankingPair == nil ? "Rank ideas" : "Continue ranking") {
-                            do { try store.prepareRanking(); ranking = true } catch { store.report(error) }
+                            do { try store.prepareRanking(); focused = false; ranking = true } catch { store.report(error) }
                         }.accessibilityIdentifier("inbox.rank")
                     }
                 }
@@ -74,7 +75,8 @@ struct InboxView: View {
                 Text("Try: ‘Siri, create a note in Ledger called try shorter lessons.’ Say the whole thought in the same sentence.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-        }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
+        }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
+            .onDisappear { focused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
     private func metadata(_ capture: Capture) -> String {
@@ -104,6 +106,13 @@ private struct RankingView: View {
                     Label("All ideas ranked", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
                     Text("New ideas will wait for a few comparisons to find their place.").foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
+                if store.canUndoCaptureDeletion {
+                    HStack {
+                        Text("Idea deleted")
+                        Spacer()
+                        Button("Undo") { store.undoCaptureDeletion() }.accessibilityIdentifier("ranking.undo-delete")
+                    }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                }
                 Spacer(minLength: 0)
               }.padding(24)
             }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
@@ -113,10 +122,20 @@ private struct RankingView: View {
         }
     }
     private func choice(_ capture: Capture, pair: RankingPair, id: String) -> some View {
-        Button {
-            do { try store.chooseCapture(capture.id, pair: pair) } catch { store.report(error) }
-        } label: {
-            Text(capture.text).font(.title3).frame(maxWidth: .infinity, minHeight: 90).padding(12)
-        }.buttonStyle(.bordered).accessibilityIdentifier(id)
+        VStack(spacing: 8) {
+            Button {
+                do { try store.chooseCapture(capture.id, pair: pair) } catch { store.report(error) }
+            } label: {
+                Text(capture.text).font(.title3).frame(maxWidth: .infinity, minHeight: 90).padding(12)
+            }.buttonStyle(.bordered).accessibilityIdentifier(id)
+            HStack {
+                Spacer()
+                Button(role: .destructive) {
+                    do { try store.deleteCapture(capture) } catch { store.report(error) }
+                } label: { Image(systemName: "trash").frame(width: 44, height: 44).contentShape(Rectangle()) }
+                    .buttonStyle(.borderless).accessibilityLabel("Delete idea: \(capture.text)")
+                    .accessibilityIdentifier("\(id).delete")
+            }
+        }
     }
 }

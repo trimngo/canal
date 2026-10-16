@@ -14,6 +14,9 @@ final class LedgerStore: ObservableObject {
     @Published var companionStatus = "Connecting to paired device…"
     @Published var companionDiagnostic: String?
     @Published var backupStatus = "Automatic backup starts on iPhone"
+    @Published private(set) var canUndoLogDeletion = false
+    private var logDeletion: LogDeletion?
+    private var logUndoExpiry: Task<Void, Never>?
     @Published private(set) var canUndoCaptureDeletion = false
     private var captureDeletion: Capture?
     #if os(iOS)
@@ -189,6 +192,29 @@ final class LedgerStore: ObservableObject {
         try commit(draft)
     }
 
+    func deleteLog(_ entry: CheckIn) throws {
+        guard !ledger.isLogDeleted(entry.id) else { return }
+        var draft = ledger; draft.setLogDeleted(entry.id, deleted: true, writer: writer)
+        try commit(draft)
+        logDeletion = draft.logDeletions?.first { $0.id == entry.id }; canUndoLogDeletion = true
+        logUndoExpiry?.cancel()
+        logUndoExpiry = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
+            self?.canUndoLogDeletion = false; self?.logDeletion = nil
+        }
+    }
+    func undoLogDeletion() {
+        do {
+            guard let record = logDeletion,
+                  ledger.logDeletions?.first(where: { $0.id == record.id }) == record else {
+                canUndoLogDeletion = false; return
+            }
+            var draft = ledger; draft.setLogDeleted(record.id, deleted: false, writer: writer)
+            try commit(draft)
+            logUndoExpiry?.cancel(); logDeletion = nil; canUndoLogDeletion = false
+        } catch { report(error) }
+    }
+
     func saveQuickSample(_ text: String, id: String = UUID().uuidString, at timestamp: Date = Date()) throws {
         start()
         var draft = ledger
@@ -209,7 +235,7 @@ final class LedgerStore: ObservableObject {
     }
 
     func deleteCapture(_ capture: Capture) throws {
-        var draft = ledger; draft.setCaptureDeleted(capture.id, deleted: true, writer: writer)
+        var draft = ledger; draft.setCaptureDeleted(capture.id, deleted: true, writer: writer); draft.prepareRanking(writer: writer)
         try commit(draft)
         captureDeletion = draft.captures.first { $0.id == capture.id }; canUndoCaptureDeletion = true
     }
@@ -220,7 +246,7 @@ final class LedgerStore: ObservableObject {
                   ledger.captures.first(where: { $0.id == deleted.id })?.revision == deleted.revision else {
                 canUndoCaptureDeletion = false; return
             }
-            var draft = ledger; draft.setCaptureDeleted(deleted.id, deleted: false, writer: writer)
+            var draft = ledger; draft.setCaptureDeleted(deleted.id, deleted: false, writer: writer); draft.prepareRanking(writer: writer)
             try commit(draft); captureDeletion = nil; canUndoCaptureDeletion = false
         } catch { report(error) }
     }

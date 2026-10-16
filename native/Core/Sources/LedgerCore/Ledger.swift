@@ -1,9 +1,10 @@
 import Foundation
 
 public enum LedgerError: LocalizedError {
-    case invalidActivity, invalidCategory, futureSlot, invalidSlot, invalidSchedule, duplicateCategory, reservedCategory
+    case invalidActivity, invalidCategory, futureSlot, invalidSlot, invalidSchedule, duplicateCategory, reservedCategory, deletedSample
     public var errorDescription: String? {
         switch self {
+        case .deletedSample: return "This log was deleted. Use Undo to restore it before editing."
         case .invalidActivity: return "Enter what you were doing (up to 500 characters)."
         case .invalidCategory: return "Choose a category with a name up to 60 characters."
         case .futureSlot: return "A sample can only describe the present or the past."
@@ -41,6 +42,18 @@ public struct GroupDeletion: Codable, Identifiable, Equatable, Sendable {
     public var id: String
     public var automaticRole: String?
     public var revision: Revision
+}
+
+public struct LogDeletion: Codable, Identifiable, Equatable, Sendable {
+    public var id: String
+    public var deleted: Bool
+    public var revision: Revision
+}
+
+public struct ReminderTime: Equatable, Sendable {
+    public var hour: Int?
+    public var minute: Int
+    public var id: String { "checkin-\(hour.map(String.init) ?? "hourly")-\(minute)" }
 }
 
 // "automatic" is retained for compatibility with older phone/Watch data.
@@ -87,6 +100,7 @@ public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashab
 }
 
 public struct Settings: Codable, Equatable, Sendable {
+    public var notificationsAllDay = false
     public var showRemainingTime = false
     public var bedtimeMinute = 22 * 60
     public var notificationsEnabled = false
@@ -97,10 +111,11 @@ public struct Settings: Codable, Equatable, Sendable {
     public var revision = Revision()
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision, showRemainingTime, bedtimeMinute
+        case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision, showRemainingTime, bedtimeMinute
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        notificationsAllDay = try values.decodeIfPresent(Bool.self, forKey: .notificationsAllDay) ?? false
         notificationsEnabled = try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         startMinute = try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? 420
         endMinute = try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? 1320
@@ -110,7 +125,12 @@ public struct Settings: Codable, Equatable, Sendable {
         showRemainingTime = try values.decodeIfPresent(Bool.self, forKey: .showRemainingTime) ?? false
         bedtimeMinute = try values.decodeIfPresent(Int.self, forKey: .bedtimeMinute) ?? 1320
     }
+    public func notificationSchedule() throws -> [ReminderTime] {
+        if notificationsAllDay { return [0, 15, 30, 45].map { ReminderTime(hour: nil, minute: $0) } }
+        return try notificationMinutes().map { ReminderTime(hour: $0 / 60, minute: $0 % 60) }
+    }
     public func notificationMinutes() throws -> [Int] {
+        if notificationsAllDay { return Array(stride(from: 0, to: 1440, by: 15)) }
         guard startMinute >= 0, endMinute < 1440, endMinute > startMinute,
               startMinute % 15 == 0, endMinute % 15 == 0,
               endMinute - startMinute <= 900 else { throw LedgerError.invalidSchedule }
@@ -135,6 +155,7 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var logDeletions: [LogDeletion]?
     public var groupDeletions: [GroupDeletion]?
     public var inboxRanking: InboxRanking?
     public var schemaVersion = 2
@@ -148,9 +169,21 @@ public struct Ledger: Codable, Equatable, Sendable {
         var values = categories.map(\.revision.counter)
         values.append(contentsOf: entries.map(\.revision.counter))
         values.append(contentsOf: captures.map(\.revision.counter))
+        values.append(contentsOf: (logDeletions ?? []).map(\.revision.counter))
         values.append(contentsOf: (groupDeletions ?? []).map(\.revision.counter))
         values.append(contentsOf: [settings.revision.counter, inboxRanking?.revision.counter ?? 0])
         return Revision(counter: (values.max() ?? 0) + 1, writer: writer)
+    }
+
+    public func isLogDeleted(_ id: String) -> Bool { logDeletions?.first { $0.id == id }?.deleted == true }
+    public var activeEntries: [CheckIn] {
+        let deleted = Set((logDeletions ?? []).filter(\.deleted).map(\.id))
+        return entries.filter { !deleted.contains($0.id) }
+    }
+    public mutating func setLogDeleted(_ id: String, deleted: Bool, writer: String) {
+        guard entries.contains(where: { $0.id == id }), isLogDeleted(id) != deleted else { return }
+        let record = LogDeletion(id: id, deleted: deleted, revision: nextRevision(writer: writer))
+        logDeletions = (logDeletions ?? []).filter { $0.id != id } + [record]
     }
 
     public static func slotEnd(at date: Date) -> Date {
@@ -167,7 +200,7 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func entries(on day: Date, calendar: Calendar = .current) -> [CheckIn] {
         guard let bounds = calendar.dateInterval(of: .day, for: day) else { return [] }
-        return entries.filter { $0.end >= bounds.start && $0.end < bounds.end }.sorted {
+        return activeEntries.filter { $0.end >= bounds.start && $0.end < bounds.end }.sorted {
             $0.end == $1.end ? $0.id < $1.id : $0.end > $1.end
         }
     }
@@ -219,6 +252,7 @@ public struct Ledger: Codable, Equatable, Sendable {
     }
 
     public mutating func saveSample(id: String? = nil, at timestamp: Date, activity: String, categoryID: String?, writer: String, now: Date = Date()) throws {
+        if let id, isLogDeleted(id) { throw LedgerError.deletedSample }
         let text = activity.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 500 else { throw LedgerError.invalidActivity }
         guard timestamp.timeIntervalSince1970.isFinite else { throw LedgerError.invalidSlot }
@@ -293,6 +327,8 @@ public struct Ledger: Codable, Equatable, Sendable {
         groupDeletions = deletions.isEmpty ? nil : deletions
         categories.removeAll { group in deletions.contains { $0.id == group.id } }
         entries = merged(entries, other.entries, revision: { $0.revision })
+        let removed = merged(logDeletions ?? [], other.logDeletions ?? [], revision: { $0.revision })
+        logDeletions = removed.isEmpty ? nil : removed
         // A concurrent sample may still refer to a deleted group. Preserve its
         // observation and revision, and normalize only that obsolete reference.
         for index in entries.indices where deletions.contains(where: { $0.id == entries[index].categoryID }) {

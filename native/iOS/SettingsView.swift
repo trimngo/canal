@@ -24,11 +24,14 @@ struct SettingsView: View {
         Form {
             Section {
                 Toggle("Every 15 minutes", isOn: $settings.notificationsEnabled)
+                Toggle("All day", isOn: $settings.notificationsAllDay).accessibilityIdentifier("settings.notifications-all-day")
+                if !settings.notificationsAllDay {
                 Picker("Start", selection: $settings.startMinute) {
                     ForEach(stepMinutes, id: \.self) { Text(minuteLabel($0)).tag($0) }
                 }
                 Picker("Stop", selection: $settings.endMinute) {
                     ForEach(stepMinutes, id: \.self) { Text(minuteLabel($0)).tag($0) }
+                }
                 }
                 Button(saving ? "Saving…" : "Save notification settings") {
                     Task {
@@ -38,6 +41,7 @@ struct SettingsView: View {
                             proposed.startMinute = settings.startMinute
                             proposed.endMinute = settings.endMinute
                             proposed.notificationsEnabled = settings.notificationsEnabled
+                            proposed.notificationsAllDay = settings.notificationsAllDay
                             _ = try proposed.notificationMinutes()
                             if proposed.notificationsEnabled, !(try await notifications.permission()) { throw NotificationError.denied }
                             try await notifications.apply(proposed)
@@ -48,10 +52,10 @@ struct SettingsView: View {
                             store.report(error)
                         }
                     }
-                }.disabled(saving || !store.storageAvailable)
+                }.disabled(saving || !store.storageAvailable).accessibilityIdentifier("settings.save-notifications")
                 Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
             } header: { Text("Check-in notifications") } footer: {
-                Text("Default: 7 AM–10 PM. Prompts ask what you’re doing at that moment. A window can span up to 15 hours to stay within system scheduling limits. You can log manually anytime. Alerts follow your Focus and Watch settings.")
+                Text("All day prompts at :00, :15, :30, and :45, including overnight. Or choose a window of up to 15 hours (default 7 AM–10 PM). Use Sleep Focus to silence Ledger and mirror Focus on your Watch. Silenced alerts may remain in Notification Center. You can log manually anytime.")
             }
             Section("Test delivery") {
                 Button("Notify me in 15 seconds") {

@@ -43,7 +43,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         configureActions(); await refreshStatus()
         #if os(iOS)
         guard applied != settings else { return }
-        let minutes = try settings.notificationMinutes()
+        let schedule = try settings.notificationSchedule()
         let pending = await center.pendingNotificationRequests()
         let ids = pending.filter { $0.identifier.hasPrefix("checkin-") }.map(\.identifier)
         center.removePendingNotificationRequests(withIdentifiers: ids)
@@ -51,18 +51,19 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             let permission = await center.notificationSettings().authorizationStatus
             guard permission == .authorized || permission == .provisional else { applied = nil; return }
             do {
-                for minute in minutes {
+                for time in schedule {
                     let content = UNMutableNotificationContent()
                     content.title = "What are you doing right now?"
                     content.body = promptBody
                     content.sound = .default; content.categoryIdentifier = "CHECKIN"
-                    content.userInfo = ["minute": minute]
-                    var components = DateComponents(); components.hour = minute / 60; components.minute = minute % 60
+                    content.userInfo = ["minute": time.minute]
+                    content.interruptionLevel = .active
+                    var components = DateComponents(); components.hour = time.hour; components.minute = time.minute; components.second = 0
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-                    try await center.add(UNNotificationRequest(identifier: "checkin-\(minute)", content: content, trigger: trigger))
+                    try await center.add(UNNotificationRequest(identifier: time.id, content: content, trigger: trigger))
                 }
             } catch {
-                center.removePendingNotificationRequests(withIdentifiers: minutes.map { "checkin-\($0)" })
+                center.removePendingNotificationRequests(withIdentifiers: schedule.map(\.id))
                 applied = nil; throw error
             }
         }

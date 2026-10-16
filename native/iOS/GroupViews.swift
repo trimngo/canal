@@ -26,8 +26,8 @@ struct GroupEntriesView: View {
     }
     private var entries: [CheckIn] {
         let source: [CheckIn]
-        if allDays { source = store.ledger.entries.sorted { $0.end > $1.end } }
-        else if let rangeStart, let rangeEnd { source = store.ledger.entries.filter { $0.end >= rangeStart && $0.end <= rangeEnd }.sorted { $0.end > $1.end } }
+        if allDays { source = store.ledger.activeEntries.sorted { $0.end > $1.end } }
+        else if let rangeStart, let rangeEnd { source = store.ledger.activeEntries.filter { $0.end >= rangeStart && $0.end <= rangeEnd }.sorted { $0.end > $1.end } }
         else { source = store.ledger.entries(on: day) }
         return source.filter {
             $0.end <= Date() && (groupID == "uncategorized" ? store.ledger.confirmedCategoryID(for: $0) == nil : store.ledger.confirmedCategoryID(for: $0) == groupID)
@@ -82,7 +82,12 @@ struct GroupEntriesView: View {
                         } label: {
                             Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
                         }.accessibilityIdentifier("group.choose.\(entry.id)")
-                    }.padding(.vertical, 5)
+                    }.padding(.vertical, 5).accessibilityIdentifier("group.entry.\(entry.id)")
+                        .swipeActions {
+                            Button("Delete", role: .destructive) {
+                                do { try store.deleteLog(entry) } catch { self.error = error.localizedDescription }
+                            }
+                        }
                 }
                 if store.canUndoGrouping {
                     Section { Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("group.undo") }
@@ -92,7 +97,8 @@ struct GroupEntriesView: View {
                     Text("Suggestions work offline and learn from confirmed choices. Every log stays Uncategorized until you confirm its group.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-            }.navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
+            }.safeAreaInset(edge: .bottom, spacing: 0) { LogDeletionUndoBar() }
+                .navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("group.done") } }
                 .alert("Rename group", isPresented: $renaming) {

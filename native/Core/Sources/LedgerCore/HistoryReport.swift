@@ -35,13 +35,13 @@ extension Ledger {
         switch range {
         case .today: lower = today; upper = now
         case .week: lower = calendar.date(byAdding: .day, value: -6, to: today) ?? today; upper = now
-        case .allTime: lower = calendar.startOfDay(for: entries.filter { $0.end <= now }.map(\.end).min() ?? today); upper = now
+        case .allTime: lower = calendar.startOfDay(for: activeEntries.filter { $0.end <= now }.map(\.end).min() ?? today); upper = now
         case .custom:
             lower = min(today, calendar.startOfDay(for: min(start, end)))
             let last = min(today, calendar.startOfDay(for: max(start, end)))
             upper = min(now, calendar.date(byAdding: .day, value: 1, to: last) ?? now)
         }
-        let samples = entries.filter { $0.end >= lower && ($0.end < upper || upper == now && $0.end == now) && $0.end <= now }
+        let samples = activeEntries.filter { $0.end >= lower && ($0.end < upper || upper == now && $0.end == now) && $0.end <= now }
         let known = Set(categories.map(\.id))
         let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         // Visit only days with observations; empty years do not create an

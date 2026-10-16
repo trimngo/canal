@@ -126,7 +126,7 @@ private struct CalendarActivityDetail: View {
                     Text(store.categoryName(block.categoryID)).foregroundStyle(.secondary)
                 }
                 Section {
-                    ForEach(block.samples) { sample in
+                    ForEach(block.samples.filter { !store.ledger.isLogDeleted($0.id) }) { sample in
                         NavigationLink {
                             ScrollView { CheckInEditor(entry: sample) { dismiss() }.padding(24) }
                                 .navigationTitle("Edit sample").navigationBarTitleDisplayMode(.inline)
@@ -135,12 +135,17 @@ private struct CalendarActivityDetail: View {
                                 Text(sample.activity)
                                 Text(store.time(sample.end)).font(.caption).foregroundStyle(.secondary)
                             }
+                        }.swipeActions {
+                            Button("Delete", role: .destructive) {
+                                do { try store.deleteLog(sample) } catch { store.report(error) }
+                            }
                         }
                     }
                 } header: { Text("Supporting samples") } footer: {
                     Text("Tap a sample to change its activity, category, or time. The calendar is inferred from these observations.")
                 }
-            }.navigationTitle("Activity").navigationBarTitleDisplayMode(.inline)
+            }.safeAreaInset(edge: .bottom, spacing: 0) { LogDeletionUndoBar() }
+                .navigationTitle("Activity").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
         }
     }

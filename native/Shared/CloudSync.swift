@@ -3,9 +3,10 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
-    case category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
+    case logDeletion(LogDeletion), category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
+        case .logDeletion(let item): return "log-deletion-\(item.id)"
         case .category(let item): return "category-\(item.id)"
         case .groupDeletion(let item): return "group-deletion-\(item.id)"
         case .entry(let item): return "entry-\(item.id)"
@@ -15,6 +16,7 @@ private enum CloudItem: Codable {
     }
     var revision: Revision {
         switch self {
+        case .logDeletion(let item): return item.revision
         case .category(let item): return item.revision
         case .groupDeletion(let item): return item.revision
         case .entry(let item): return item.revision
@@ -25,6 +27,7 @@ private enum CloudItem: Codable {
     func apply(to ledger: inout Ledger) {
         var remote = Ledger(); remote.categories = []; remote.entries = []; remote.captures = []
         switch self {
+        case .logDeletion(let item): remote.logDeletions = [item]
         case .category(let item): remote.categories = [item]
         case .groupDeletion(let item): remote.groupDeletions = [item]
         case .entry(let item): remote.entries = [item]
@@ -36,6 +39,7 @@ private enum CloudItem: Codable {
     static func all(in ledger: Ledger) -> [CloudItem] {
         var items = ledger.categories.map(CloudItem.category)
         items.append(contentsOf: (ledger.groupDeletions ?? []).map(CloudItem.groupDeletion))
+        items.append(contentsOf: (ledger.logDeletions ?? []).map(CloudItem.logDeletion))
         items.append(contentsOf: ledger.entries.map(CloudItem.entry))
         items.append(contentsOf: ledger.captures.map(CloudItem.capture))
         items.append(.settings(ledger.settings))

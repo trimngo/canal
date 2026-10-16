@@ -15,7 +15,7 @@ struct RestoreBackupView: View {
             if let selected {
                 Section("Selected backup") {
                     Text(selected.savedAt.formatted(date: .abbreviated, time: .shortened))
-                    Text("\(selected.ledger.entries.count) activity logs · \(selected.ledger.captures.filter { $0.deletedAt == nil }.count) ideas")
+                    Text("\(selected.ledger.activeEntries.count) activity logs · \(selected.ledger.captures.filter { $0.deletedAt == nil }.count) ideas")
                     Button("Restore these records") {
                         guard let data else { return }
                         do {

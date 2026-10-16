@@ -70,6 +70,8 @@ struct RootView: View {
             NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(AppTab.inbox)
             NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(AppTab.settings)
         }
+        .safeAreaInset(edge: .top, spacing: 0) { LogDeletionUndoBar() }
+        .onChange(of: tab) { _, _ in UIApplication.shared.dismissLedgerKeyboard() }
         .onAppear { showRequestedCapture() }
         .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
         .onChange(of: scenePhase) { _, phase in

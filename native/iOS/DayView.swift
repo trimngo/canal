@@ -15,7 +15,7 @@ struct DayView: View {
     @State private var range: HistoryRange = .today
     @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
     @State private var end = Date()
-    private var ungrouped: Int { store.ledger.entries.filter { $0.end <= Date() && store.ledger.confirmedCategoryID(for: $0) == nil }.count }
+    private var ungrouped: Int { store.ledger.activeEntries.filter { $0.end <= Date() && store.ledger.confirmedCategoryID(for: $0) == nil }.count }
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { _ in content(now: Date()) }

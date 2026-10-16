@@ -322,6 +322,78 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Restored older activity"].waitForExistence(timeout: 5))
     }
 
+    func testLogSwipeDeletionUndoAndEditorDeletionPersist() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
+        openLogs(app)
+        let row = app.buttons["logs.entry.recent"]; reveal(row, in: app); row.swipeLeft()
+        app.buttons["Delete"].tap()
+        let undo = app.buttons["logs.undo-delete"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
+        XCTAssertTrue(app.buttons["logs.entry.recent"].waitForExistence(timeout: 5))
+        app.buttons["logs.entry.recent"].tap()
+        let remove = app.buttons["edit.delete"]; reveal(remove, in: app); remove.tap()
+        XCTAssertTrue(app.buttons["logs.undo-delete"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
+        recordScreen("LogDeletedUndo", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
+        XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
+        app.tabBars.buttons["Today"].tap(); app.buttons["dashboard.groups"].tap()
+        app.buttons["groups.open.work"].tap()
+        XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
+    }
+
+    func testRankingCanDeleteEitherIdeaUndoAndContinue() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.rank"].tap()
+        let first = app.buttons["ranking.first"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let deletedText = first.label
+        app.buttons["ranking.first.delete"].tap()
+        XCTAssertTrue(app.buttons["ranking.undo-delete"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["ranking.first"].label == deletedText)
+        XCTAssertFalse(app.buttons["ranking.second"].label == deletedText)
+        app.buttons["ranking.undo-delete"].tap()
+        XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
+        app.buttons["ranking.second.delete"].tap()
+        app.buttons["ranking.first"].tap()
+        XCTAssertTrue(app.staticTexts["All ideas ranked"].waitForExistence(timeout: 5))
+        recordScreen("RankingCleanup", in: app)
+    }
+
+    func testInboxKeyboardDismissesOutsideAndPreservesDraftAcrossTabs() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Inbox"].tap()
+        let field = element(app, "inbox.text"); field.tap(); field.typeText("Keep my draft")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.navigationBars["Inbox"].tap()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        XCTAssertEqual(field.value as? String, "Keep my draft")
+        app.tabBars.buttons["Today"].tap(); app.tabBars.buttons["Inbox"].tap()
+        XCTAssertEqual(field.value as? String, "Keep my draft")
+        field.tap()
+        let done = app.buttons["keyboard.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        app.buttons["inbox.save"].tap()
+        XCTAssertTrue(app.staticTexts["Keep my draft"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
+
+    func testAllDayNotificationSettingPersistsAndHidesWindowPickers() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        let toggle = app.switches["settings.notifications-all-day"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        app.buttons["settings.save-notifications"].tap()
+        XCTAssertFalse(app.buttons["Start"].exists)
+        recordScreen("AllDayReminders", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Settings"].tap()
+        XCTAssertEqual(app.switches["settings.notifications-all-day"].value as? String, "1")
+    }
+
     func testRemainingTimePreferenceSurvivesRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
         app.tabBars.buttons["Settings"].tap()

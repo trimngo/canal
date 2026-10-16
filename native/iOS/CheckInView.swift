@@ -31,7 +31,12 @@ struct CheckInView: View {
                                 Text("\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end)) · \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
-                        }
+                        }.accessibilityIdentifier("logs.entry.\(entry.id)")
+                            .swipeActions {
+                                Button("Delete", role: .destructive) {
+                                    do { try store.deleteLog(entry) } catch { store.report(error) }
+                                }
+                            }
                     }
                 }.accessibilityIdentifier("today.logs")
             }
@@ -110,7 +115,12 @@ struct CheckInEditor: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(saving || activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                 .accessibilityIdentifier("\(prefix).save")
-        }.onAppear {
+            if let entry {
+                Button("Delete log", role: .destructive) {
+                    do { try store.deleteLog(entry); focused = false; onSave() } catch { store.report(error) }
+                }.frame(maxWidth: .infinity).padding(.top, 8).accessibilityIdentifier("edit.delete")
+            }
+        }.ledgerInputDismissal().onDisappear { focused = false }.onAppear {
             if let entry {
                 activity = entry.activity; categoryID = store.ledger.confirmedCategoryID(for: entry) ?? ""
                 timestamp = entry.end; recordNow = false
