@@ -147,6 +147,9 @@ private struct CalendarActivityDetail: View {
             }.safeAreaInset(edge: .bottom, spacing: 0) { LogDeletionUndoBar() }
                 .navigationTitle("Activity").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+                .onChange(of: store.ledger.logDeletions) { _, _ in
+                    if block.samples.contains(where: { store.ledger.isLogDeleted($0.id) }) { dismiss() }
+                }
         }
     }
 }
