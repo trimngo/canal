@@ -1,0 +1,47 @@
+name: Pie interaction verification
+on:
+  push:
+    branches: ['review/native-pie-final']
+permissions:
+  contents: read
+jobs:
+  pie:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Validate core and build iPhone and Watch
+        run: bash native/scripts/validate.sh
+      - name: Verify pie taps, legend selection, and selected label
+        run: |
+          cd native
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build -resultBundlePath build/PieTests.xcresult -only-testing:TimeLedgerUITests/TimeLedgerUITests/testPieSlicesAndLegendSelectLabelsInsideChart CODE_SIGNING_ALLOWED=NO test
+      - name: Export verification screenshot
+        if: always()
+        run: |
+          mkdir -p review
+          if [ ! -d native/build/PieTests.xcresult ]; then exit 0; fi
+          xcrun xcresulttool get test-results summary --path native/build/PieTests.xcresult > review/summary.json
+          xcrun xcresulttool export attachments --path native/build/PieTests.xcresult --output-path attachments
+          python3 - <<'PY'
+          import json,pathlib,shutil
+          root=pathlib.Path('attachments')
+          for test in json.loads((root/'manifest.json').read_text()):
+              for a in test.get('attachments',[]):
+                  name=a.get('suggestedHumanReadableName','')
+                  if name.startswith('Review-'):
+                      shutil.copy(root/a['exportedFileName'],pathlib.Path('review')/(pathlib.Path(name).stem+'.png'))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pie-verification
+          path: review
+          retention-days: 1
