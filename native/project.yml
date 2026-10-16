@@ -42,14 +42,15 @@ targets:
     info:
       path: Generated/iOS-Info.plist
       properties:
-        CFBundleDisplayName: Ledger
+        CFBundleDisplayName: Dash
+        CFBundleSpokenName: Dash
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         INIntentsSupported: [INCreateNoteIntent]
-        NSSiriUsageDescription: Save the thoughts you ask Siri to capture to your Ledger inbox.
+        NSSiriUsageDescription: Save ideas and log current activities in Dash using Siri.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)
@@ -88,14 +89,15 @@ targets:
     info:
       path: Generated/Watch-Info.plist
       properties:
-        CFBundleDisplayName: Ledger
+        CFBundleDisplayName: Dash
+        CFBundleSpokenName: Dash
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.trimngo.TimeLedger
         WKRunsIndependentlyOfCompanionApp: false
         INIntentsSupported: [INCreateNoteIntent]
-        NSSiriUsageDescription: Save the thoughts you ask Siri to capture to your Ledger inbox.
+        NSSiriUsageDescription: Save ideas and log current activities in Dash using Siri.
         ITSAppUsesNonExemptEncryption: false
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)
         LedgerCloudContainer: $(LEDGER_CLOUD_CONTAINER)
@@ -129,7 +131,7 @@ targets:
     info:
       path: Generated/WatchIntents-Info.plist
       properties:
-        CFBundleDisplayName: Ledger Capture
+        CFBundleDisplayName: Dash Capture
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LedgerCaptureAccessGroup: $(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp

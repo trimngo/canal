@@ -33,7 +33,7 @@ struct RestoreBackupView: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(file.modified == .distantPast ? "iCloud backup" : file.modified.formatted(date: .abbreviated, time: .shortened))
-                            Text("Daily Ledger backup").font(.caption).foregroundStyle(.secondary)
+                            Text("Daily Dash backup").font(.caption).foregroundStyle(.secondary)
                         }
                     }.accessibilityIdentifier("backup.file")
                 }

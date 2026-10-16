@@ -55,7 +55,7 @@ struct SettingsView: View {
                 }.disabled(saving || !store.storageAvailable).accessibilityIdentifier("settings.save-notifications")
                 Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
             } header: { Text("Check-in notifications") } footer: {
-                Text("All day prompts at :00, :15, :30, and :45, including overnight. Or choose a window of up to 15 hours (default 7 AM–10 PM). Use Sleep Focus to silence Ledger and mirror Focus on your Watch. Silenced alerts may remain in Notification Center. You can log manually anytime.")
+                Text("All day prompts at :00, :15, :30, and :45, including overnight. Or choose a window of up to 15 hours (default 7 AM–10 PM). Use Sleep Focus to silence Dash and mirror Focus on your Watch. Silenced alerts may remain in Notification Center. You can log manually anytime.")
             }
             Section("Test delivery") {
                 Button("Notify me in 15 seconds") {
@@ -106,7 +106,7 @@ struct SettingsView: View {
                 }
                 Button("Sync now") { store.refresh() }
                 if let data = try? JSONEncoder().encode(store.ledger) {
-                    ShareLink("Export a backup", item: LedgerExport(data: data), preview: SharePreview("Time Ledger backup"))
+                    ShareLink("Export a backup", item: LedgerExport(data: data), preview: SharePreview("Dash backup"))
                 }
             }
             Section {
@@ -114,10 +114,10 @@ struct SettingsView: View {
                 Button("Back up now") { store.refresh() }.accessibilityIdentifier("backup.now")
                 NavigationLink("Restore a backup") { RestoreBackupView() }.accessibilityIdentifier("backup.restore")
             } header: { Text("Automatic backup") } footer: {
-                Text("Your iPhone saves a daily backup in your iCloud Drive after changes, including Watch logs once they sync. Older daily copies are kept. Enable iCloud Drive for Ledger in iPhone Settings. An upload-pending backup is still waiting to reach iCloud.")
+                Text("Your iPhone saves a daily backup in your iCloud Drive after changes, including Watch logs once they sync. Older daily copies are kept. Enable iCloud Drive for Dash in iPhone Settings. An upload-pending backup is still waiting to reach iCloud.")
             }
             Section {
-                Text("Try one sentence on your Watch: ‘Siri, create a note in Ledger called try shorter lessons.’")
+                Text("Ideas: ‘Siri, create a note in Dash called idea, try shorter lessons.’ Activities: ‘Siri, create a note in Dash called doing, preparing class.’")
                 #if targetEnvironment(simulator)
                 // Unsigned simulator apps have no Siri entitlement. Calling
                 // INPreferences there raises an Objective-C exception.
@@ -129,7 +129,7 @@ struct SettingsView: View {
                             Task { @MainActor in siriStatus = value }
                         }
                     }.accessibilityIdentifier("settings.siri.enable")
-                    Text(siriStatus == .denied ? "Siri access is off. Allow Ledger in your iPhone’s Siri settings." : "Allow Siri access once to use note capture.")
+                    Text(siriStatus == .denied ? "Siri access is off. Allow Dash in your iPhone’s Siri settings." : "Allow Siri access once to use note capture.")
                         .font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Label("Siri capture enabled", systemImage: "checkmark.circle").font(.footnote)

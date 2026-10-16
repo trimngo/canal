@@ -3,7 +3,7 @@ import LedgerCore
 
 struct CaptureThoughtIntent: AppIntent {
     static var title: LocalizedStringResource = "Capture a thought"
-    static var description = IntentDescription("Save a thought or task to your Time Ledger inbox. It does not count as time spent.")
+    static var description = IntentDescription("Save a thought or task to your Dash inbox. It does not count as time spent.")
     static var openAppWhenRun = false
 
     @Parameter(title: "What do you want to capture?")
@@ -17,7 +17,23 @@ struct CaptureThoughtIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = LedgerStore.shared; store.start()
         try store.addCapture(text)
-        return .result(dialog: "Saved to your Time Ledger inbox.")
+        return .result(dialog: "Saved to your Dash inbox.")
+    }
+}
+
+struct LogActivityIntent: AppIntent {
+    static var title: LocalizedStringResource = "Log an activity"
+    static var description = IntentDescription("Record what you are doing right now in Dash, with a timestamp.")
+    static var openAppWhenRun = false
+
+    @Parameter(title: "What are you doing?") var activity: String
+
+    static var parameterSummary: some ParameterSummary { Summary("Log \(\.$activity)") }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        try LedgerStore.shared.saveQuickSample(activity)
+        return .result(dialog: "Activity logged in Dash.")
     }
 }
 
@@ -27,5 +43,8 @@ struct LedgerShortcuts: AppShortcutsProvider {
             "Capture in \(.applicationName)", "Add a thought to \(.applicationName)",
             "Create a \(.applicationName) task"
         ], shortTitle: "Capture a thought", systemImageName: "tray.and.arrow.down")
+        AppShortcut(intent: LogActivityIntent(), phrases: [
+            "Log in \(.applicationName)", "Log an activity in \(.applicationName)"
+        ], shortTitle: "Log an activity", systemImageName: "clock")
     }
 }

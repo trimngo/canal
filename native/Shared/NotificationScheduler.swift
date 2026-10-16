@@ -74,7 +74,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     func sendTest() async throws {
         guard try await permission() else { throw NotificationError.denied }
         let content = UNMutableNotificationContent()
-        content.title = "Time Ledger test"
+        content.title = "Dash test"
         content.body = promptBody
         content.sound = .default
         content.categoryIdentifier = "CHECKIN"

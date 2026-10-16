@@ -194,6 +194,44 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
     }
 
+    func testSiriRoutesIdeasAndActivitiesSeparatelyAndPersistsBoth() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-routes"]; app.launch()
+        app.tabBars.buttons["Inbox"].tap()
+        XCTAssertTrue(app.staticTexts["Bicycle idea UI fixture"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Bicycle activity UI fixture"].exists)
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Bicycle activity UI fixture"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Bicycle idea UI fixture"].exists)
+        app.terminate(); app.launchArguments = []; app.launch()
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Bicycle activity UI fixture"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Inbox"].tap()
+        XCTAssertTrue(app.staticTexts["Bicycle idea UI fixture"].waitForExistence(timeout: 5))
+        recordScreen("DashInbox", in: app)
+    }
+
+    func testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
+        app.tabBars.buttons["Inbox"].tap()
+        app.buttons["inbox.copy-all"].tap()
+        XCTAssertTrue(element(app, "inbox.copy-confirmation").waitForExistence(timeout: 5))
+        let field = element(app, "inbox.text")
+        field.tap(); field.press(forDuration: 1.2)
+        let menuPaste = app.menuItems["Paste"]
+        if menuPaste.waitForExistence(timeout: 2) { menuPaste.tap() }
+        else {
+            let paste = app.buttons["Paste"].firstMatch
+            XCTAssertTrue(paste.waitForExistence(timeout: 3)); paste.tap()
+        }
+        let value = field.value as? String ?? ""
+        XCTAssertTrue(value.contains("Dash inbox — 2 ideas"))
+        XCTAssertTrue(value.contains("Idea to analyze\n   Keep every line"))
+        XCTAssertTrue(value.contains("Completed idea"))
+        XCTAssertTrue(value.contains("Status: Completed"))
+        XCTAssertTrue(value.contains("Captured:"))
+        XCTAssertFalse(value.contains("Deleted idea"))
+    }
+
     func testStartupHelperFailureDoesNotBlockLocalLoggingOrLoseItAfterRelaunch() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-companion-unavailable"]

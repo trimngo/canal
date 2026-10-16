@@ -69,6 +69,15 @@ final class LedgerStore: ObservableObject {
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-inbox-export-fixture") {
+                var fixture = Ledger()
+                try fixture.addCapture(text: "Idea to analyze\nKeep every line", id: "open", writer: "fixture")
+                try fixture.addCapture(text: "Completed idea", id: "done", writer: "fixture")
+                try fixture.addCapture(text: "Deleted idea", id: "removed", writer: "fixture")
+                fixture.setCaptureDone(id: "done", done: true, writer: "fixture")
+                fixture.setCaptureDeleted("removed", deleted: true, writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-backup-fixture") {
                 var fixture = Ledger()
                 let earlier = Date().addingTimeInterval(-2 * 86400)
@@ -159,13 +168,11 @@ final class LedgerStore: ObservableObject {
             let pending = try SiriCaptureQueue.pending()
             guard !pending.isEmpty else { return }
             var draft = ledger
-            for capture in pending {
-                try draft.addCapture(text: capture.text, id: capture.id, writer: writer, now: capture.createdAt)
-            }
+            for entry in pending { try draft.saveQuickCapture(entry, writer: writer) }
             if draft != ledger { try commit(draft) }
             // Delete only after an atomic ledger commit. A crash before removal
             // safely replays the queue without duplicating/reopening a capture.
-            for capture in pending { try SiriCaptureQueue.remove(capture) }
+            for entry in pending { try SiriCaptureQueue.remove(entry) }
         } catch { report(error) }
         #endif
     }
@@ -219,6 +226,12 @@ final class LedgerStore: ObservableObject {
         start()
         var draft = ledger
         try draft.saveQuickSample(id: id, at: timestamp, activity: text, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
+
+    func saveSiriEntry(_ entry: QuickCaptureEntry) throws {
+        start()
+        var draft = ledger; try draft.saveQuickCapture(entry, writer: writer)
         if draft != ledger { try commit(draft) }
     }
 
@@ -343,7 +356,7 @@ enum StoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable: return "Saved data is unavailable; changes have not been written."
-        case .unsupportedVersion: return "This data needs a newer version of Time Ledger."
+        case .unsupportedVersion: return "This data needs a newer version of Dash."
         }
     }
 }

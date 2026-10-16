@@ -146,7 +146,7 @@ final class AutomaticBackup {
         case iCloudUnavailable, downloading, unreadable
         var errorDescription: String? {
             switch self {
-            case .iCloudUnavailable: return "Enable iCloud Drive for Ledger in iPhone Settings."
+            case .iCloudUnavailable: return "Enable iCloud Drive for Dash in iPhone Settings."
             case .downloading: return "The backup is downloading from iCloud. Try opening it again shortly."
             case .unreadable: return "The backup could not be read."
             }

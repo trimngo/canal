@@ -6,8 +6,8 @@ import LedgerCore
 /// App Shortcut trigger phrases cannot interpolate a free-form String.
 final class SiriCaptureHandler: NSObject, INCreateNoteIntentHandling {
     static func text(from intent: INCreateNoteIntent) throws -> String {
-        try QuickCapture.text(title: intent.title?.spokenPhrase,
-                              body: (intent.content as? INTextNoteContent)?.text)
+        try QuickCapture.note(title: intent.title?.spokenPhrase,
+                              body: (intent.content as? INTextNoteContent)?.text).text
     }
 
     func resolveTitle(for intent: INCreateNoteIntent, with completion: @escaping (INSpeakableStringResolutionResult) -> Void) {
@@ -39,20 +39,23 @@ final class SiriCaptureHandler: NSObject, INCreateNoteIntentHandling {
 
     func handle(intent: INCreateNoteIntent, completion: @escaping (INCreateNoteIntentResponse) -> Void) {
         let receivedAt = Date()
-        let text = Result { try Self.text(from: intent) }
+        let entry = Result { try QuickCapture.note(title: intent.title?.spokenPhrase,
+            body: (intent.content as? INTextNoteContent)?.text, at: receivedAt) }
         Task { @MainActor in
             do {
+                let saved = try entry.get()
                 #if LEDGER_INTENTS_EXTENSION
-                let capture = try SiriCaptureQueue.enqueue(text.get(), at: receivedAt)
+                try SiriCaptureQueue.enqueue(saved)
                 #else
                 let store = LedgerStore.shared; store.start()
-                let capture = try store.addCapture(text.get(), at: receivedAt)
+                try store.saveSiriEntry(saved)
                 #endif
                 let response = INCreateNoteIntentResponse(code: .success, userActivity: nil)
-                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: capture.createdAt)
-                response.createdNote = INNote(title: INSpeakableString(spokenPhrase: capture.text),
-                    contents: [INTextNoteContent(text: capture.text)], groupName: INSpeakableString(spokenPhrase: "Inbox"),
-                    createdDateComponents: components, modifiedDateComponents: components, identifier: capture.id)
+                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: saved.recordedAt)
+                response.createdNote = INNote(title: INSpeakableString(spokenPhrase: saved.text),
+                    contents: [INTextNoteContent(text: saved.text)],
+                    groupName: INSpeakableString(spokenPhrase: saved.destination == .idea ? "Inbox" : "Activity log"),
+                    createdDateComponents: components, modifiedDateComponents: components, identifier: saved.id)
                 completion(response)
             } catch {
                 completion(INCreateNoteIntentResponse(code: .failure, userActivity: nil))

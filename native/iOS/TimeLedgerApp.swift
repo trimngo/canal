@@ -27,6 +27,14 @@ struct TimeLedgerApp: App {
                             handler.handle(intent: intent) { _ in }
                         }
                     }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-siri-routes") {
+                        for text in ["idea, Bicycle idea UI fixture", "doing, Bicycle activity UI fixture"] {
+                            let intent = INCreateNoteIntent(title: INSpeakableString(spokenPhrase: text), content: nil, groupName: nil)
+                            if let handler = siriDelegate.application(UIApplication.shared, handlerFor: intent) as? SiriCaptureHandler {
+                                handler.handle(intent: intent) { _ in }
+                            }
+                        }
+                    }
                     #endif
                 }
                 .onChange(of: scenePhase) { _, phase in

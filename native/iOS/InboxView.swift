@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import LedgerCore
 
 struct InboxView: View {
@@ -7,6 +8,7 @@ struct InboxView: View {
     @FocusState private var focused: Bool
     @State private var showDone = false
     @State private var ranking = false
+    @State private var copiedIdeaCount: Int?
     private var captures: [Capture] {
         let ordered = store.ledger.rankedCaptureIDs
         return store.ledger.captures.filter { $0.deletedAt == nil && $0.isDone == showDone }.sorted {
@@ -72,11 +74,37 @@ struct InboxView: View {
                 }
             }
             Section("Hands-free capture") {
-                Text("Try: ‘Siri, create a note in Ledger called try shorter lessons.’ Say the whole thought in the same sentence.")
+                Text("Idea: ‘Siri, create a note in Dash called idea, try shorter lessons.’\nActivity: ‘Siri, create a note in Dash called doing, preparing class.’ Say the whole entry in one sentence.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
             .onDisappear { focused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Copy all ideas", systemImage: "doc.on.doc", action: copyIdeas)
+                        .accessibilityIdentifier("inbox.copy-all")
+                        .disabled(!store.ledger.captures.contains { $0.deletedAt == nil })
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let copiedIdeaCount {
+                    Text("Copied \(copiedIdeaCount) \(copiedIdeaCount == 1 ? "idea" : "ideas"), including completed ideas")
+                        .font(.footnote).padding(12).frame(maxWidth: .infinity).background(.regularMaterial)
+                        .accessibilityIdentifier("inbox.copy-confirmation")
+                }
+            }
+            .task(id: copiedIdeaCount) {
+                guard copiedIdeaCount != nil else { return }
+                do { try await Task.sleep(nanoseconds: 4_000_000_000) } catch { return }
+                copiedIdeaCount = nil
+            }
+    }
+    private func copyIdeas() {
+        let export = store.ledger.inboxExport
+        guard export.count > 0 else { return }
+        UIPasteboard.general.string = export.text
+        copiedIdeaCount = export.count
+        focused = false
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
     private func metadata(_ capture: Capture) -> String {
