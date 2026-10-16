@@ -89,7 +89,7 @@ struct HistoryPanel: View {
                                         .accessibilityHidden(true)
                                 }
                             }
-                        }
+                        }.accessibilityIdentifier("report.pie.chart")
                         // Keep the label outside Chart's generated accessibility
                         // tree so VoiceOver can read the selected group as well.
                         VStack(spacing: 3) {
@@ -103,7 +103,7 @@ struct HistoryPanel: View {
                         }.multilineTextAlignment(.center).frame(width: 88, height: 88)
                             .accessibilityElement(children: .combine).accessibilityIdentifier("report.pie.selection")
                             .allowsHitTesting(false)
-                    }.frame(height: 180).accessibilityIdentifier("report.pie.chart")
+                    }.frame(height: 180)
                     ForEach(report.rows) { row in
                         Button { selectedGroupID = row.id } label: {
                             HStack {
