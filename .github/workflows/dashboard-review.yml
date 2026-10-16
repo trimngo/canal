@@ -1,0 +1,57 @@
+name: Dashboard screen review
+on:
+  push:
+    branches: ['review/native-dashboard-groups']
+    paths: ['.github/workflows/dashboard-review.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            for (let attempt = 0; attempt < 40; attempt++) {
+              const response = await github.rest.actions.listWorkflowRunArtifacts({
+                ...context.repo, run_id: 38854050968
+              });
+              if (response.data.artifacts.some(a => a.name === 'native-simulator-results')) return;
+              await new Promise(resolve => setTimeout(resolve, 30000));
+            }
+            throw new Error('Test results artifact not available');
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-simulator-results
+          run-id: 38854050968
+          github-token: ${{ github.token }}
+          path: results
+      - name: Export fixture screenshots and diagnostic summaries
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          RESULT=$(find results -name UITests.xcresult -type d -print -quit)
+          mkdir -p review
+          xcrun xcresulttool get test-results summary --path "$RESULT" > review/summary.json
+          xcrun xcresulttool export attachments --path "$RESULT" --output-path attachments
+          python3 - <<'PY'
+          import json,pathlib,shutil
+          root=pathlib.Path('attachments')
+          manifest=json.loads((root/'manifest.json').read_text())
+          shutil.copy(root/'manifest.json','review/manifest.json')
+          for test in manifest:
+              items=test.get('attachments',[])
+              snapshots=sorted([a for a in items if 'UI Snapshot' in a.get('suggestedHumanReadableName','')], key=lambda a:a.get('timestamp',0),reverse=True)[:1]
+              for a in items:
+                  name=a.get('suggestedHumanReadableName','')
+                  if name.startswith('Review-'):
+                      shutil.copy(root/a['exportedFileName'],pathlib.Path('review')/(pathlib.Path(name).stem+'-'+a['exportedFileName']+'.png'))
+              for a in snapshots:
+                  shutil.copy(root/a['exportedFileName'],pathlib.Path('review')/('diagnostic-'+a['exportedFileName']+'.plist'))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-screen-review
+          path: review
+          retention-days: 1
