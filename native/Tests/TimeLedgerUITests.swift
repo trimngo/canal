@@ -256,7 +256,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Cancel"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].exists)
         app.buttons["group.delete"].tap()
-        app.buttons["Delete group"].lastMatch.tap()
+        app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Delete group", "group.delete")).firstMatch.tap()
         XCTAssertFalse(app.buttons["groups.open.work"].exists)
         app.buttons["groups.open.uncategorized"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
