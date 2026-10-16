@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>IntentPhrases</key>
+    <array>
+        <dict>
+            <key>IntentName</key>
+            <string>INCreateNoteIntent</string>
+            <key>IntentExamples</key>
+            <array>
+                <string>Create a note in Dash called idea, try shorter lessons</string>
+                <string>Create a note in Dash called doing, preparing class</string>
+                <string>Create a Dash note called idea, try shorter lessons</string>
+                <string>Create a Dash note called doing, preparing class</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

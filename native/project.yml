@@ -5,6 +5,7 @@ options:
     iOS: '17.0'
     watchOS: '10.0'
   xcodeVersion: '26.3'
+  developmentLanguage: en
 packages:
   LedgerCore:
     path: Core
@@ -25,6 +26,8 @@ targets:
     sources:
       - iOS
       - Shared
+      - path: SiriResources
+        buildPhase: resources
     dependencies:
       - package: LedgerCore
       - target: TimeLedgerWatch
@@ -44,6 +47,7 @@ targets:
       properties:
         CFBundleDisplayName: Dash
         CFBundleSpokenName: Dash
+        CFBundleDevelopmentRegion: en
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -73,6 +77,8 @@ targets:
     sources:
       - Watch
       - Shared
+      - path: SiriResources
+        buildPhase: resources
     dependencies:
       - package: LedgerCore
       - target: TimeLedgerWatchIntents
@@ -91,6 +97,7 @@ targets:
       properties:
         CFBundleDisplayName: Dash
         CFBundleSpokenName: Dash
+        CFBundleDevelopmentRegion: en
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
@@ -116,6 +123,8 @@ targets:
       - WatchIntents
       - path: Shared/SiriCaptureHandler.swift
       - path: Shared/SiriCaptureQueue.swift
+      - path: SiriResources
+        buildPhase: resources
     dependencies:
       - package: LedgerCore
     settings:
@@ -132,6 +141,7 @@ targets:
       path: Generated/WatchIntents-Info.plist
       properties:
         CFBundleDisplayName: Dash Capture
+        CFBundleDevelopmentRegion: en
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LedgerCaptureAccessGroup: $(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp

@@ -62,6 +62,7 @@ platform :ios do
         expected_build = ENV.fetch("BUILD_NUMBER", "1")
         UI.user_error!("Packaged build number #{actual_build} does not match requested build number #{expected_build}") unless actual_build.to_s == expected_build
         UI.message("Verified packaged build number: #{actual_build}")
+        sh("python3", File.join(native_directory, "scripts", "validate-siri-support.py"), "--ipa", lane_context[SharedValues::IPA_OUTPUT_PATH])
         upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
       ensure
         delete_keychain(name: keychain_name)
