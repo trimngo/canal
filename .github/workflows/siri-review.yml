@@ -1,0 +1,22 @@
+name: Siri packaged support verification
+on:
+  push:
+    branches: ['review/native-siri-metadata']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Validate signing workflow syntax
+        run: ruby -c native/fastlane/Fastfile
+      - name: Verify core, native builds, and packaged Siri phrases
+        run: bash native/scripts/validate.sh
