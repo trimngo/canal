@@ -1,9 +1,11 @@
 import Foundation
 
 public enum LedgerError: LocalizedError {
-    case invalidActivity, invalidCategory, futureSlot, invalidSlot, invalidSchedule, duplicateCategory, reservedCategory, deletedSample
+    case invalidActivity, invalidCategory, futureSlot, invalidSlot, invalidSchedule, duplicateCategory, reservedCategory, deletedSample, invalidCapture, deletedCapture
     public var errorDescription: String? {
         switch self {
+        case .invalidCapture: return "Enter an idea before saving."
+        case .deletedCapture: return "This idea was deleted. Restore it before editing."
         case .deletedSample: return "This log was deleted. Use Undo to restore it before editing."
         case .invalidActivity: return "Enter what you were doing (up to 500 characters)."
         case .invalidCategory: return "Choose a category with a name up to 60 characters."
@@ -290,6 +292,15 @@ public struct Ledger: Codable, Equatable, Sendable {
         let revision = nextRevision(writer: writer)
         guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
         captures[index].isDone = done; captures[index].revision = revision
+    }
+
+    public mutating func updateCaptureText(id: String, text: String, writer: String) throws {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { throw LedgerError.invalidCapture }
+        guard let index = captures.firstIndex(where: { $0.id == id }), captures[index].deletedAt == nil else { throw LedgerError.deletedCapture }
+        guard captures[index].text != cleaned else { return }
+        captures[index].text = cleaned
+        captures[index].revision = nextRevision(writer: writer)
     }
 
     public mutating func saveSettings(_ value: Settings, writer: String) throws {

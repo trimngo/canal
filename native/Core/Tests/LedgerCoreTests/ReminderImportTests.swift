@@ -137,4 +137,29 @@ final class ReminderImportTests: XCTestCase {
         let exported = ledger.inboxExport.text.replacingOccurrences(of: "\n   ", with: "\n")
         XCTAssertTrue(exported.contains(notes.trimmingCharacters(in: .whitespacesAndNewlines)))
     }
+
+    func testTransferredIdeaCorrectionsPreserveIdentityDateRankAndSync() throws {
+        var ledger = Ledger()
+        let source = ReminderSnapshot(identifiers: ["edit"], title: "Siri transcription", createdAt: created)
+        ledger.importReminders([source], writer: "phone")
+        ledger.prepareRanking(writer: "phone")
+        let before = try XCTUnwrap(ledger.captures.first)
+        let rank = ledger.rankedCaptureIDs
+        var watch = ledger
+        let corrected = "Corrected thought\n" + String(repeating: "Keep long notes. ", count: 80)
+        try ledger.updateCaptureText(id: before.id, text: corrected, writer: "phone")
+        XCTAssertEqual(ledger.captures.first?.id, before.id)
+        XCTAssertEqual(ledger.captures.first?.createdAt, created)
+        XCTAssertEqual(ledger.rankedCaptureIDs, rank)
+        XCTAssertEqual(ledger.captures.first?.text, corrected.trimmingCharacters(in: .whitespacesAndNewlines))
+        XCTAssertFalse(ledger.canRemoveImportedReminder(source))
+        watch.merge(try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger)
+        XCTAssertEqual(watch.captures, ledger.captures)
+        XCTAssertEqual(watch.importReminders([source], writer: "watch"), 0)
+        XCTAssertEqual(watch.captures, ledger.captures)
+        XCTAssertThrowsError(try ledger.updateCaptureText(id: before.id, text: " \n", writer: "phone"))
+        ledger.setCaptureDeleted(before.id, deleted: true, writer: "phone")
+        XCTAssertThrowsError(try ledger.updateCaptureText(id: before.id, text: "Do not resurrect", writer: "phone"))
+        XCTAssertNotNil(ledger.captures.first?.deletedAt)
+    }
 }

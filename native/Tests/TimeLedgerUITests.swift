@@ -648,6 +648,18 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(element(app, "inbox.waiting-title").exists)
         app.tabBars.buttons["Settings"].tap()
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
+        app.tabBars.buttons["Inbox"].tap()
+        let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.actions.")).firstMatch
+        actions.tap(); app.buttons["Edit idea"].tap()
+        let editor = app.textViews["capture.edit-text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5)); editor.tap(); editor.typeText("\nCorrected details")
+        app.buttons["capture.edit-save"].tap()
+        let corrected = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Corrected details")).firstMatch
+        XCTAssertTrue(corrected.waitForExistence(timeout: 5))
+        recordScreen("InboxIdeaEdited", in: app)
+        app.terminate(); app.launch()
+        app.tabBars.buttons["Inbox"].tap()
+        XCTAssertTrue(corrected.waitForExistence(timeout: 5))
     }
 
     private func assertPendingReminders(_ count: Int, in app: XCUIApplication) {

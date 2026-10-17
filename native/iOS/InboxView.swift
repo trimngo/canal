@@ -8,6 +8,7 @@ struct InboxView: View {
     @FocusState private var focused: Bool
     @State private var showDone = false
     @State private var ranking = false
+    @State private var editing: Capture?
     @State private var copiedIdeaCount: Int?
     private var ranked: [Capture] { store.ledger.rankedCaptures }
     private var waiting: [Capture] { store.ledger.unrankedCaptures }
@@ -68,10 +69,11 @@ struct InboxView: View {
                 }
             }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
                 .onDisappear { focused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
+                .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         if !showDone, !waiting.isEmpty {
-                        Button("New \(waiting.count)") {
+                            Button("New \(waiting.count)") {
                                 focused = false
                                 withAnimation { proxy.scrollTo("inbox.waiting", anchor: UnitPoint(x: 0.5, y: 0.15)) }
                             }.accessibilityIdentifier("inbox.new-shortcut")
@@ -108,6 +110,7 @@ struct InboxView: View {
                 Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
+                Button("Edit idea") { focused = false; editing = capture }
                 if !capture.isDone {
                     Button("Re-rank this idea") {
                         do { try store.rerankCapture(capture.id); ranking = true } catch { store.report(error) }
@@ -133,6 +136,38 @@ struct InboxView: View {
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
         if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { return "#\(rank + 1) · \(origin)\(date)" }
         return showDone ? origin + date : "\(origin)Waiting to rank · \(date)"
+    }
+}
+
+private struct CaptureEditView: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Environment(\.dismiss) private var dismiss
+    let capture: Capture
+    @State private var text: String
+
+    init(capture: Capture) {
+        self.capture = capture
+        _text = State(initialValue: capture.text)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextEditor(text: $text).frame(minHeight: 160).accessibilityIdentifier("capture.edit-text")
+                Text("Captured \(capture.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }.navigationTitle("Edit idea").navigationBarTitleDisplayMode(.inline)
+                .scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            do { try store.updateCaptureText(capture, text: text); dismiss() } catch { store.report(error) }
+                        }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
+                            .accessibilityIdentifier("capture.edit-save")
+                    }
+                }
+        }
     }
 }
 
