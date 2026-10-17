@@ -79,6 +79,56 @@ final class ReminderImportTests: XCTestCase {
         XCTAssertEqual(ledger.captures.first?.createdAt, later)
     }
 
+    func testSourceRemovalRequiresAnImportedSavedCopyWithExactText() throws {
+        var ledger = Ledger()
+        let item = ReminderSnapshot(identifiers: ["external", "local"], title: "  Bicycle  ", notes: " Check wheel size\n", createdAt: created)
+        XCTAssertFalse(ledger.canRemoveImportedReminder(item))
+        ledger.importReminders([item], writer: "phone")
+        XCTAssertTrue(ledger.canRemoveImportedReminder(item))
+        let saved = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        XCTAssertTrue(saved.canRemoveImportedReminder(item))
+        ledger.captures.removeAll()
+        XCTAssertFalse(ledger.canRemoveImportedReminder(item))
+    }
+
+    func testChangedSourceOrDashCopyIsKeptInsteadOfLosingEdits() {
+        var ledger = Ledger()
+        let original = ReminderSnapshot(identifiers: ["one"], title: "Original", notes: "Details")
+        ledger.importReminders([original], writer: "phone")
+        let changed = ReminderSnapshot(identifiers: ["one"], title: "New Watch edit", notes: "Details")
+        XCTAssertFalse(ledger.canRemoveImportedReminder(changed))
+        XCTAssertEqual(ledger.importReminders([changed], writer: "phone"), 0)
+        XCTAssertFalse(ledger.canRemoveImportedReminder(changed))
+        ledger.captures[0].text = "Edited in Dash"
+        XCTAssertFalse(ledger.canRemoveImportedReminder(original))
+        XCTAssertEqual(ledger.captures.count, 1)
+    }
+
+    func testDeletionRetriesDoNotDuplicateOrReopenIdeas() {
+        var ledger = Ledger()
+        let item = ReminderSnapshot(identifiers: ["source"], title: "A saved thought")
+        ledger.importReminders([item], writer: "phone")
+        ledger.setCaptureDone(id: "reminder-source", done: true, writer: "phone")
+        ledger.setCaptureDeleted("reminder-source", deleted: true, writer: "phone")
+        let before = ledger
+        for _ in 0..<3 {
+            XCTAssertEqual(ledger.importReminders([item], writer: "phone"), 0)
+            XCTAssertTrue(ledger.canRemoveImportedReminder(item))
+        }
+        XCTAssertEqual(ledger, before)
+    }
+
+    func testCompletedEmptyAndAmbiguousSourcesAreNeverRemoved() {
+        var ledger = Ledger()
+        let a = ReminderSnapshot(identifiers: ["a"], title: "A"), b = ReminderSnapshot(identifiers: ["b"], title: "B")
+        ledger.importReminders([a, b], writer: "phone")
+        XCTAssertFalse(ledger.canRemoveImportedReminder(ReminderSnapshot(identifiers: ["a"], title: "A", isCompleted: true)))
+        XCTAssertFalse(ledger.canRemoveImportedReminder(ReminderSnapshot(identifiers: ["a"], title: " \n")))
+        XCTAssertFalse(ledger.canRemoveImportedReminder(ReminderSnapshot(identifiers: [], title: "A")))
+        XCTAssertFalse(ledger.canRemoveImportedReminder(ReminderSnapshot(identifiers: ["a", "b"], title: "A")))
+        XCTAssertTrue(ledger.canRemoveImportedReminder(a))
+    }
+
     func testLongReminderNotesAreNotTruncated() {
         var ledger = Ledger()
         let notes = String(repeating: "Keep this entire thought.\n", count: 100)

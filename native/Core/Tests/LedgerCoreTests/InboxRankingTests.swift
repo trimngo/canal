@@ -108,6 +108,29 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(ledger.rankingPair?.first, "newest")
         XCTAssertEqual(ledger.rankedCaptureIDs.filter { $0 == "a" || $0 == "b" }, ["a", "b"])
     }
+    func testRankedAndWaitingListsPartitionActiveIdeasAndKeepUserOrder() throws {
+        var ledger = try fixture(["a", "b", "c"])
+        try finish(&ledger)
+        ledger.setCaptureDone(id: "b", done: true, writer: "phone")
+        ledger.setCaptureDeleted("c", deleted: true, writer: "phone")
+        try ledger.addCapture(text: "Manual idea", id: "manual", writer: "phone", now: Date(timeIntervalSince1970: 100))
+        ledger.importReminders([
+            ReminderSnapshot(identifiers: ["new"], title: "New reminder", createdAt: Date(timeIntervalSince1970: 120)),
+            ReminderSnapshot(identifiers: ["old"], title: "Older reminder", createdAt: Date(timeIntervalSince1970: 20))
+        ], writer: "phone")
+        XCTAssertEqual(ledger.rankedCaptures.map(\.id), ["a"])
+        XCTAssertEqual(ledger.unrankedCaptures.map(\.id), ["reminder-new", "manual", "reminder-old"])
+        XCTAssertEqual(Set((ledger.rankedCaptures + ledger.unrankedCaptures).map(\.id)), Set(ledger.activeCaptures.map(\.id)))
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "reminder-new")
+        XCTAssertEqual(ledger.unrankedCaptures.count, 3)
+        let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        XCTAssertEqual(restored.unrankedCaptures, ledger.unrankedCaptures)
+        try finish(&ledger)
+        XCTAssertTrue(ledger.unrankedCaptures.isEmpty)
+        XCTAssertEqual(ledger.rankedCaptures.count, 4)
+    }
+
     func testImportedRemindersRankByOriginalCreationRatherThanImportOrder() throws {
         var ledger = Ledger()
         let baseline = Date(timeIntervalSince1970: 100)

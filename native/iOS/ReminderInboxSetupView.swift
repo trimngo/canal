@@ -11,7 +11,7 @@ struct ReminderInboxSetupView: View {
         Form {
             Section {
                 Text("Siri, remind me to change wheels on bicycle.").font(.headline)
-                Text("Apple Reminders captures the idea. Dash copies it into your inbox when opened, while running, and during background refresh when iOS permits.")
+                Text("Apple Reminders captures the idea. Dash moves it into your inbox when opened, while running, and during background refresh when iOS permits.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section {
@@ -27,7 +27,7 @@ struct ReminderInboxSetupView: View {
                     }.accessibilityIdentifier("reminders.allow")
                 }
             } header: { Text("1. Allow Reminders access") } footer: {
-                Text("Apple requires Full Access to read reminders. Dash reads items only from the list you connect. Imported reminders are never edited, completed, or deleted in Apple Reminders.")
+                Text("Apple requires Full Access. Dash transfers items only from the list you connect, and deletes each original only after saving it. Further edits happen in Dash. Originals that change during transfer are kept in Reminders.")
             }
             if reminders.authorized {
                 Section {
@@ -46,13 +46,17 @@ struct ReminderInboxSetupView: View {
                     }.disabled(selection.isEmpty || working || reminders.isRefreshing)
                         .accessibilityIdentifier("reminders.connect")
                 } header: { Text("2. Connect a list") } footer: {
-                    Text("Unfinished items already in this list will also be copied. Use an iCloud list so reminders captured on your Watch can reach your iPhone.")
+                    Text("Unfinished items already in this list will also be transferred and removed after saving. Use a dedicated capture list. Use iCloud so reminders captured on your Watch can reach your iPhone.")
                 }
             }
             if reminders.enabled {
                 Section {
                     LabeledContent("Connected list", value: reminders.selectedListName)
                     Text(reminders.status).accessibilityIdentifier("reminders.status")
+                    if let count = reminders.pendingCount {
+                        LabeledContent("Waiting in Reminders", value: "\(count)")
+                            .accessibilityElement(children: .combine).accessibilityIdentifier("reminders.pending-count")
+                    }
                     if let date = reminders.lastImportAt {
                         Text("Last checked \(date.formatted(date: .abbreviated, time: .shortened))")
                             .font(.footnote).foregroundStyle(.secondary)

@@ -12,8 +12,14 @@ struct ReminderListOption: Identifiable, Hashable {
     var label: String { account.isEmpty ? title : "\(title) · \(account)" }
 }
 
-/// Reminders is the capture source. Only the user-selected list is fetched;
-/// source reminders are never completed, edited, or deleted by an import.
+private struct PendingReminder: Sendable {
+    let snapshot: ReminderSnapshot
+    let localID: String
+    let modifiedAt: Date?
+}
+
+/// The selected list is a transfer inbox. Delete only after an atomic ledger
+/// save, and keep any source that changed during the handoff.
 @MainActor
 final class ReminderInbox: ObservableObject {
     static let shared = ReminderInbox()
@@ -26,6 +32,7 @@ final class ReminderInbox: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var status = "Connect a Reminders list to capture ideas with Siri."
     @Published private(set) var lastImportAt: Date?
+    @Published private(set) var pendingCount: Int?
     private let eventStore = EKEventStore()
     private let defaults = UserDefaults.standard
     private let deviceID: String
@@ -35,7 +42,7 @@ final class ReminderInbox: ObservableObject {
     private var anotherRefresh = false
     private var fetchToken: Any?
     private var fetchID: UUID?
-    private var continuation: CheckedContinuation<[ReminderSnapshot], Error>?
+    private var continuation: CheckedContinuation<[PendingReminder], Error>?
     private var timeout: Task<Void, Never>?
 
     private init() {
@@ -86,6 +93,7 @@ final class ReminderInbox: ObservableObject {
         guard authorized, lists.contains(where: { $0.id == id }) else { status = "Choose an available Reminders list."; return }
         connection = UUID(); cancelFetch()
         selectedListID = id; enabled = true
+        pendingCount = nil
         defaults.set(id, forKey: "reminders.inbox.list")
         defaults.set(true, forKey: "reminders.inbox.enabled")
         _ = await refresh()
@@ -101,7 +109,7 @@ final class ReminderInbox: ObservableObject {
             guard let source else { throw ImportError.noSource }
             var title = "Dash Inbox"
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--ui-reminders-fixture") { title = "Dash Inbox UI Fixture" }
+            if ProcessInfo.processInfo.arguments.contains("--ui-reminders-fixture") { title = "Dash Inbox UI Fixture \(UUID().uuidString.prefix(8))" }
             #endif
             let list: EKCalendar
             if let existing = eventStore.calendars(for: .reminder).first(where: { $0.title == title && $0.source?.sourceIdentifier == source.sourceIdentifier }) {
@@ -120,6 +128,7 @@ final class ReminderInbox: ObservableObject {
 
     func disconnect() {
         connection = UUID(); enabled = false
+        pendingCount = nil
         defaults.set(false, forKey: "reminders.inbox.enabled")
         changeTask?.cancel(); cancelFetch()
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
@@ -153,13 +162,25 @@ final class ReminderInbox: ObservableObject {
         }
         do {
             try Task.checkCancellation()
-            let snapshots = try await fetchPending(in: list)
+            let pending = try await fetchPending(in: list)
+            pendingCount = pending.count
             try Task.checkCancellation()
             guard enabled, connection == current else { return false }
-            let count = try LedgerStore.shared.importReminders(snapshots)
+            let count = try LedgerStore.shared.importReminders(pending.map(\.snapshot))
+            // importReminders returns only after an atomic disk write. An import
+            // failure exits through catch before any source can be removed.
+            let transfer = removeSaved(pending, listID: list.calendarIdentifier, connection: current)
+            if let remaining = try? await fetchPending(in: list) { pendingCount = remaining.count }
+            guard enabled, connection == current else { return false }
             let checkedAt = Date(); lastImportAt = checkedAt
             defaults.set(checkedAt, forKey: "reminders.inbox.last-import")
-            status = count == 0 ? "Up to date. No new ideas." : "Imported \(count) new \(count == 1 ? "idea" : "ideas")."
+            if transfer.kept > 0 {
+                status = "Saved ideas are kept in Dash. Some originals changed or could not be removed, so they remain in Reminders."
+            } else if transfer.removed > 0 {
+                status = "Moved \(transfer.removed) \(transfer.removed == 1 ? "reminder" : "reminders") to Dash."
+            } else {
+                status = count == 0 ? "Up to date. No new ideas." : "Imported \(count) new \(count == 1 ? "idea" : "ideas")."
+            }
             return true
         } catch {
             if connection == current, enabled {
@@ -169,22 +190,45 @@ final class ReminderInbox: ObservableObject {
         }
     }
 
-    private func fetchPending(in list: EKCalendar) async throws -> [ReminderSnapshot] {
+    private func removeSaved(_ pending: [PendingReminder], listID: String, connection current: UUID) -> (removed: Int, kept: Int) {
+        var removed = 0, kept = 0
+        for candidate in pending {
+            guard enabled, connection == current, selectedListID == listID, !Task.isCancelled else { break }
+            guard let reminder = eventStore.calendarItem(withIdentifier: candidate.localID) as? EKReminder else { continue }
+            guard reminder.refresh() else { kept += 1; continue }
+            // Never remove a reminder moved to another list or completed by its owner.
+            guard reminder.calendar.calendarIdentifier == listID, !reminder.isCompleted else { continue }
+            let latest = Self.candidate(reminder, deviceID: deviceID)
+            guard latest.snapshot == candidate.snapshot, latest.modifiedAt == candidate.modifiedAt,
+                  LedgerStore.shared.ledger.canRemoveImportedReminder(latest.snapshot) else { kept += 1; continue }
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-reminders-delete-failure") { kept += 1; continue }
+            #endif
+            do { try eventStore.remove(reminder, commit: true); removed += 1 }
+            catch { kept += 1 } // Keep the saved copy and retry cleanup, without importing twice.
+        }
+        return (removed, kept)
+    }
+
+    nonisolated private static func candidate(_ reminder: EKReminder, deviceID: String) -> PendingReminder {
+        var identifiers: [String] = []
+        if let external = reminder.calendarItemExternalIdentifier, !external.isEmpty {
+            identifiers.append(identity("external:" + external))
+        }
+        identifiers.append(identity("local:" + deviceID + ":" + reminder.calendarItemIdentifier))
+        let snapshot = ReminderSnapshot(identifiers: identifiers, title: reminder.title ?? "", notes: reminder.notes,
+                                        createdAt: reminder.creationDate, isCompleted: reminder.isCompleted)
+        return PendingReminder(snapshot: snapshot, localID: reminder.calendarItemIdentifier, modifiedAt: reminder.lastModifiedDate)
+    }
+
+    private func fetchPending(in list: EKCalendar) async throws -> [PendingReminder] {
         let id = UUID(), calendarID = list.calendarIdentifier, deviceID = deviceID
         let predicate = eventStore.predicateForIncompleteReminders(withDueDateStarting: nil, ending: nil, calendars: [list])
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { pending in
                 continuation = pending; fetchID = id
                 fetchToken = eventStore.fetchReminders(matching: predicate) { [weak self] reminders in
-                    let snapshots = reminders?.filter { $0.calendar.calendarIdentifier == calendarID }.map { reminder in
-                        var identifiers: [String] = []
-                        if let external = reminder.calendarItemExternalIdentifier, !external.isEmpty {
-                            identifiers.append(Self.identity("external:" + external))
-                        }
-                        identifiers.append(Self.identity("local:" + deviceID + ":" + reminder.calendarItemIdentifier))
-                        return ReminderSnapshot(identifiers: identifiers, title: reminder.title ?? "", notes: reminder.notes,
-                            createdAt: reminder.creationDate, isCompleted: reminder.isCompleted)
-                    }
+                    let snapshots = reminders?.filter { $0.calendar.calendarIdentifier == calendarID }.map { Self.candidate($0, deviceID: deviceID) }
                     Task { @MainActor in
                         if let snapshots { self?.finishFetch(id, result: .success(snapshots)) }
                         else { self?.finishFetch(id, result: .failure(ImportError.fetchFailed)) }
@@ -205,7 +249,7 @@ final class ReminderInbox: ObservableObject {
         SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func finishFetch(_ id: UUID, result: Result<[ReminderSnapshot], Error>) {
+    private func finishFetch(_ id: UUID, result: Result<[PendingReminder], Error>) {
         guard fetchID == id, let pending = continuation else { return }
         continuation = nil; fetchID = nil; fetchToken = nil
         timeout?.cancel(); timeout = nil
@@ -246,7 +290,8 @@ final class ReminderInbox: ObservableObject {
     private func seedFixture(in list: EKCalendar, source: EKSource) throws {
         // Only explicit UI-test launches create these isolated simulator items.
         // Fixtures never run in a TestFlight/Release build.
-        guard !defaults.bool(forKey: "reminders.ui-fixture-seeded") else { return }
+        let fixtureKey = "reminders.ui-fixture-seeded.\(list.calendarIdentifier)"
+        guard !defaults.bool(forKey: fixtureKey) else { return }
         let pending = EKReminder(eventStore: eventStore); pending.calendar = list; pending.title = "Reminders bicycle idea UI fixture"
         try eventStore.save(pending, commit: true)
         let done = EKReminder(eventStore: eventStore); done.calendar = list; done.title = "Completed source UI fixture"; done.isCompleted = true
@@ -255,7 +300,7 @@ final class ReminderInbox: ObservableObject {
         try eventStore.saveCalendar(other, commit: true)
         let unrelated = EKReminder(eventStore: eventStore); unrelated.calendar = other; unrelated.title = "Other list must stay private UI fixture"
         try eventStore.save(unrelated, commit: true)
-        defaults.set(true, forKey: "reminders.ui-fixture-seeded")
+        defaults.set(true, forKey: fixtureKey)
     }
     #endif
 

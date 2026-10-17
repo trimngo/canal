@@ -87,6 +87,21 @@ final class LedgerStore: ObservableObject {
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-ranked-inbox-fixture") {
+                var fixture = Ledger(), ranked = InboxRanking()
+                for index in 1...14 {
+                    let id = "ranked-\(index)"
+                    try fixture.addCapture(text: "Ranked priority \(index)", id: id, writer: "fixture", now: Date().addingTimeInterval(Double(-index * 60)))
+                    ranked.ordered.append(id)
+                }
+                ranked.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranked
+                fixture.importReminders([
+                    ReminderSnapshot(identifiers: ["new-import"], title: "New imported idea", createdAt: Date()),
+                    ReminderSnapshot(identifiers: ["older-import"], title: "Older imported idea", createdAt: Date().addingTimeInterval(-120))
+                ], writer: "fixture")
+                try fixture.addCapture(text: "New manual idea", id: "new-manual", writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-export-fixture") {
                 var fixture = Ledger()
                 try fixture.addCapture(text: "Idea to analyze\nKeep every line", id: "open", writer: "fixture")
@@ -291,9 +306,14 @@ final class LedgerStore: ObservableObject {
     @discardableResult
     func importReminders(_ snapshots: [ReminderSnapshot]) throws -> Int {
         start()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-reminders-save-failure") { throw StoreError.unavailable }
+        #endif
         var draft = ledger
         let count = draft.importReminders(snapshots, writer: writer)
-        if draft != ledger { try commit(draft) }
+        // Confirm a durable save even on a deletion retry for an existing import.
+        // The caller must never remove its source after a failed disk write.
+        if draft != ledger || !snapshots.isEmpty { try commit(draft) }
         return count
     }
 

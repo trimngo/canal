@@ -104,6 +104,16 @@ extension Ledger {
         let valid = Set(activeCaptures.map(\.id))
         return (inboxRanking?.ordered ?? []).filter(valid.contains)
     }
+    public var rankedCaptures: [Capture] {
+        let byID = Dictionary(activeCaptures.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return rankedCaptureIDs.compactMap { byID[$0] }
+    }
+    public var unrankedCaptures: [Capture] {
+        let ranked = Set(rankedCaptureIDs)
+        return activeCaptures.filter { !ranked.contains($0.id) }.sorted {
+            $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt
+        }
+    }
     public var rankingPair: RankingPair? { inboxRanking?.pair }
 
     public mutating func prepareRanking(writer: String) {
