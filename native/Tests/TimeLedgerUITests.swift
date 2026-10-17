@@ -43,6 +43,18 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Today"].tap()
     }
 
+    private func dashboardGroup(_ id: String, in app: XCUIApplication) -> XCUIElement {
+        let target = app.buttons["dashboard.group.\(id)"]
+        if target.exists, target.isHittable { return target }
+        let header = element(app, "dashboard.breakdown-title")
+        for _ in 0..<5 {
+            if header.exists, header.isHittable { break }
+            app.swipeDown()
+        }
+        reveal(target, in: app)
+        return target
+    }
+
     private func openLogs(_ app: XCUIApplication) {
         app.tabBars.buttons["Log"].tap()
         let logs = element(app, "today.logs"); reveal(logs, in: app); logs.tap()
@@ -77,14 +89,14 @@ final class TimeLedgerUITests: XCTestCase {
         let confirm = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "group.confirm.")).firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5)); confirm.tap()
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["dashboard.group.work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
     }
 
     func testNewLogCanExplicitlyConfirmTheDisplayedSuggestion() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
         log("Preparing classes", in: app, confirmSuggestion: true)
-        XCTAssertTrue(app.buttons["dashboard.group.work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
     }
 
@@ -98,7 +110,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
         app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["dashboard.group.social"].waitForExistence(timeout: 5))
+        XCTAssertTrue(dashboardGroup("social", in: app).waitForExistence(timeout: 5))
     }
 
     func testDashboardCreatesAndRenamesANewGroup() {
@@ -119,7 +131,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["categories.save"].tap()
         XCTAssertTrue(app.buttons["groups.open.\(groupID)"].staticTexts["Creative Projects"].waitForExistence(timeout: 5))
         app.buttons["groups.done"].tap()
-        XCTAssertTrue(app.buttons["dashboard.group.\(groupID)"].waitForExistence(timeout: 5))
+        XCTAssertTrue(dashboardGroup(groupID, in: app).waitForExistence(timeout: 5))
     }
 
     func testCalendarOpensOnASeparateScreen() {
@@ -131,7 +143,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testExistingConfirmedLogSurvivesUpgradeAndCanBeEdited() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-legacy-ledger"]; app.launch()
-        XCTAssertTrue(app.buttons["dashboard.group.work"].waitForExistence(timeout: 10))
+        XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 10))
         openLogs(app)
         let sample = app.staticTexts["Legacy sample UI fixture"]; reveal(sample, in: app); sample.tap()
         XCTAssertTrue(element(app, "edit.activity").waitForExistence(timeout: 5))
