@@ -82,4 +82,43 @@ final class InboxRankingTests: XCTestCase {
         var single = try fixture(["a"]); single.prepareRanking(writer: "phone")
         XCTAssertNil(single.rankingPair); XCTAssertEqual(single.rankedCaptureIDs, ["a"])
     }
+    func testInitialComparisonsStartWithNewestCreatedIdeas() throws {
+        var ledger = try fixture(["old", "middle", "new"])
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair, RankingPair(first: "new", second: "middle"))
+        let pair = ledger.rankingPair
+        let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        XCTAssertEqual(restored.rankingPair, pair)
+    }
+    func testPendingInsertionsChooseNewestWithoutDiscardingActiveComparison() throws {
+        var ledger = try fixture(["a", "b"])
+        try finish(&ledger)
+        let baseline = Date(timeIntervalSince1970: 100)
+        try ledger.addCapture(text: "Older pending", id: "older", writer: "phone", now: baseline)
+        try ledger.addCapture(text: "Newer pending", id: "newer", writer: "phone", now: baseline.addingTimeInterval(1))
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "newer")
+        let pair = try XCTUnwrap(ledger.rankingPair)
+        try ledger.addCapture(text: "Arrived while comparing", id: "newest", writer: "phone", now: baseline.addingTimeInterval(2))
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair, pair)
+        while ledger.inboxRanking?.insertion?.item == "newer", let current = ledger.rankingPair {
+            ledger.chooseCapture(current.first, from: current, writer: "phone")
+        }
+        XCTAssertEqual(ledger.rankingPair?.first, "newest")
+        XCTAssertEqual(ledger.rankedCaptureIDs.filter { $0 == "a" || $0 == "b" }, ["a", "b"])
+    }
+    func testImportedRemindersRankByOriginalCreationRatherThanImportOrder() throws {
+        var ledger = Ledger()
+        let baseline = Date(timeIntervalSince1970: 100)
+        try ledger.addCapture(text: "Native idea", id: "native", writer: "phone", now: baseline.addingTimeInterval(10))
+        ledger.importReminders([
+            ReminderSnapshot(identifiers: ["old"], title: "Old reminder", createdAt: baseline),
+            ReminderSnapshot(identifiers: ["new"], title: "New reminder", createdAt: baseline.addingTimeInterval(20))
+        ], writer: "phone", now: baseline.addingTimeInterval(1000))
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair, RankingPair(first: "reminder-new", second: "native"))
+        XCTAssertEqual(ledger.captures.first { $0.id == "reminder-old" }?.createdAt, baseline)
+    }
+
 }

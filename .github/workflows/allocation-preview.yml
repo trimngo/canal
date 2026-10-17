@@ -1,0 +1,37 @@
+name: Allocation interface preview
+on:
+  push:
+    branches: ['review/native-allocation-preview']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - name: Test core and planner interface scenarios
+        run: |
+          cd native
+          xcodegen generate
+          swift test --package-path Core
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build -resultBundlePath build/Planner.xcresult CODE_SIGNING_ALLOWED=NO -only-testing:TimeLedgerUITests/TimeLedgerUITests/testWakingScheduleAndTargetsAreAccessibleAndPersist -only-testing:TimeLedgerUITests/TimeLedgerUITests/testMultiCategorySelectionResolvesParentConflictExplicitly -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingCanDeleteEitherIdeaUndoAndContinue test
+      - name: Export planner screenshots
+        if: always()
+        run: |
+          mkdir -p native/build/planner-review
+          xcrun xcresulttool get test-results summary --path native/build/Planner.xcresult > native/build/planner-review/summary.json
+          xcrun xcresulttool export attachments --path native/build/Planner.xcresult --output-path native/build/planner-attachments
+          python3 native/scripts/export-ui-review.py native/build/planner-attachments native/build/planner-review
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allocation-preview
+          path: native/build/planner-review
+          retention-days: 1

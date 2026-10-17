@@ -109,7 +109,7 @@ extension Ledger {
     public mutating func prepareRanking(writer: String) {
         var ranking = inboxRanking ?? InboxRanking()
         let previous = ranking
-        ranking.prepare(ids: activeCaptures.sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt < $1.createdAt }.map(\.id))
+        ranking.prepare(ids: activeCaptures.sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt }.map(\.id))
         guard ranking != previous else { return }
         ranking.revision = nextRevision(writer: writer); inboxRanking = ranking
     }
