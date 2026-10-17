@@ -89,6 +89,8 @@ private struct CommitmentEditorView: View {
     @State private var error: String?
     @State private var confirmingRemoval = false
     @State private var managingCategories = false
+    private enum TimeField: Hashable { case hours, minutes }
+    @FocusState private var focusedTime: TimeField?
 
     init(commitment: WeeklyCommitment? = nil) {
         self.commitment = commitment
@@ -124,9 +126,11 @@ private struct CommitmentEditorView: View {
                 Section {
                     HStack {
                         TextField("Hours", text: $hours).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .focused($focusedTime, equals: .hours)
                             .accessibilityIdentifier("commitment.hours")
                         Text("h").foregroundStyle(.secondary)
                         TextField("Minutes", text: $minutes).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .focused($focusedTime, equals: .minutes)
                             .accessibilityIdentifier("commitment.minutes")
                         Text("min").foregroundStyle(.secondary)
                     }
@@ -151,6 +155,12 @@ private struct CommitmentEditorView: View {
                     }
                 }
                 .onAppear { selectInitialCategory() }
+                .onChange(of: focusedTime) { _, field in
+                    guard field != nil else { return }
+                    DispatchQueue.main.async {
+                        UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
+                    }
+                }
                 .onChange(of: availableCategories.map(\.id)) { _, _ in selectInitialCategory() }
                 .confirmationDialog("Remove this weekly commitment?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
                     Button("Remove commitment", role: .destructive) {

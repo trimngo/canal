@@ -552,11 +552,11 @@ final class TimeLedgerUITests: XCTestCase {
         setCommitmentNumber("commitment.minutes", to: "0", in: app)
         recordScreen("WeeklyCommitmentEditor", in: app)
         app.buttons["commitment.save"].tap()
-        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 1h this week"))
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 1h 0m this week"))
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 5))
         app.tabBars.buttons["Commitments"].tap()
-        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 1h this week"))
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 1h 0m this week"))
         work.tap(); app.buttons["commitment.remove"].tap()
         app.sheets.buttons["Remove commitment"].tap()
         XCTAssertTrue(app.staticTexts["Make time for what matters"].waitForExistence(timeout: 5))
@@ -573,8 +573,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Commitments"].tap()
         let work = app.buttons["commitments.edit.work"], music = app.buttons["commitments.edit.music"]
         XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(music.exists)
-        XCTAssertTrue(work.label.contains("of 1h this week"))
-        XCTAssertTrue(music.label.contains("of 10h this week"))
+        XCTAssertTrue(work.label.contains("of 1h 0m this week"))
+        XCTAssertTrue(music.label.contains("of 10h 0m this week"))
         XCTAssertFalse(element(app, "allocation.periods").exists)
         recordScreen("WeeklyCommitments", in: app)
         app.tabBars.buttons["Today"].tap()
@@ -586,6 +586,7 @@ final class TimeLedgerUITests: XCTestCase {
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8)); field.typeText(value)
         XCTAssertEqual(field.value as? String, value)
+        app.buttons["keyboard.done"].tap()
     }
 
     private func openHistory(_ app: XCUIApplication) {
