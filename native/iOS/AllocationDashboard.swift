@@ -51,7 +51,7 @@ struct DayView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let bounds = store.ledger.wakingBounds(on: day) {
-                    Text("Waking day \(day.formatted(date: .abbreviated, time: .omitted)): \(store.time(bounds.start))–\(store.time(bounds.end)) · \(store.ledger.reportingCalendar().timeZone.identifier)")
+                    Text("Waking day \(store.dayLabel(day)): \(store.time(bounds.start))–\(store.time(bounds.end)) · \(store.ledger.reportingCalendar().timeZone.identifier)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             } header: { Text("Where your time went").textCase(nil).font(.headline).accessibilityIdentifier("dashboard.breakdown-title") }

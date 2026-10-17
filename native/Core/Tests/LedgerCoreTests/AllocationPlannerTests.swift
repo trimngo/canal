@@ -179,4 +179,60 @@ final class AllocationPlannerTests: XCTestCase {
         XCTAssertEqual(ledger.targetBudgets?.count, 1)
         XCTAssertEqual(ledger.wakingOverrides?.count, 1)
     }
+    func testAllSevenDaysAreRepresentedAndOlderSamplesCannotFillMissingDays() throws {
+        var ledger = Ledger()
+        for offset in -7...0 {
+            let stamp = utc.date(byAdding: .day, value: offset, to: now)!
+            try ledger.saveSample(at: stamp, activity: "Work", categoryIDs: ["work"], writer: "test", now: now)
+        }
+        let period = ledger.rollingAllocation(now: now, calendar: utc)
+        XCTAssertEqual(period.representedDays, 7)
+        XCTAssertEqual(period.wakingMinutes, 6 * 900 + 240)
+        XCTAssertEqual(period.percent(period.directMinutes["work", default: 0]), 100)
+        for entry in ledger.activeEntries where utc.isDate(entry.end, inSameDayAs: now) { ledger.setLogDeleted(entry.id, deleted: true, writer: "test") }
+        XCTAssertFalse(ledger.allocation(on: now, now: now, calendar: utc).sufficient)
+        XCTAssertEqual(ledger.rollingAllocation(now: now, calendar: utc).representedDays, 6)
+    }
+    func testMovingTargetedCategoryVersionsBudgetAndKeepsOtherTargets() throws {
+        var ledger = try fixture()
+        let effective = Date().addingTimeInterval(-60)
+        try ledger.saveTargets(["work": 30, "music": 15], effectiveAt: effective, writer: "test")
+        try ledger.moveCategory("work", to: "music", writer: "test")
+        XCTAssertEqual(ledger.currentTargets(), ["music": 15])
+        XCTAssertEqual(ledger.currentBudget(at: effective)?.percentages, ["work": 30, "music": 15])
+        XCTAssertEqual(ledger.targetBudgets?.count, 2)
+    }
+    func testConcurrentBudgetAndOverrideRecordsConvergeAndResetCannotBeResurrected() throws {
+        var a = try fixture(), b = a
+        try a.saveTargets(["work": 30], effectiveAt: now, writer: "a")
+        try b.saveTargets(["music": 15], effectiveAt: now, writer: "b")
+        try a.saveWakingOverride(on: now, wake: 480, bed: 1200, calendar: utc, writer: "a")
+        let stale = a
+        try a.saveWakingOverride(on: now, wake: 480, bed: 1200, reset: true, calendar: utc, writer: "a")
+        let originalB = b; b.merge(a); a.merge(originalB)
+        XCTAssertEqual(a, b); XCTAssertEqual(a.targetBudgets?.count, 2)
+        a.merge(stale)
+        XCTAssertTrue(try XCTUnwrap(a.wakingOverrides?.first).reset)
+        XCTAssertEqual(a.currentTargets(at: now), b.currentTargets(at: now))
+        XCTAssertEqual(a.wakingSchedule(on: now, calendar: utc).wake, 420)
+        // CloudKit sends a partial ledger per record, not a full replacement.
+        var partial = Ledger(); partial.categories = []; partial.targetBudgets = [try XCTUnwrap(a.targetBudgets?.first)]
+        a.merge(partial)
+        XCTAssertEqual(a.categories.count, 4); XCTAssertEqual(a.targetBudgets?.count, 2)
+    }
+    func testOldJSONMissingPlannerFieldsUsesSafeDefaultsWithoutChangingRawLog() throws {
+        var ledger = Ledger()
+        ledger.entries = [CheckIn(end: now, activity: "Existing", categoryID: "work", revision: Revision(counter: 1, writer: "old"))]
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(ledger)) as! [String: Any]
+        for key in ["targetBudgets", "wakingOverrides"] { json.removeValue(forKey: key) }
+        var settings = json["settings"] as! [String: Any]
+        for key in ["wakeUpMinute", "wakingTimeZoneIdentifier"] { settings.removeValue(forKey: key) }
+        json["settings"] = settings
+        let restored = try LedgerBackup.decode(JSONSerialization.data(withJSONObject: json)).ledger
+        XCTAssertEqual(restored.entries, ledger.entries)
+        XCTAssertNil(restored.targetBudgets); XCTAssertNil(restored.wakingOverrides)
+        XCTAssertEqual(restored.wakingSchedule(on: now, calendar: utc).wake, 420)
+        XCTAssertEqual(restored.allocation(on: now, now: now, calendar: utc).directMinutes["work"], 240)
+    }
+
 }

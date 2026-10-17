@@ -28,7 +28,7 @@ struct CheckInView: View {
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(entry.activity).foregroundStyle(.primary)
-                                Text("\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
+                                Text("\(store.dayLabel(entry.end)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }.accessibilityIdentifier("logs.entry.\(entry.id)")

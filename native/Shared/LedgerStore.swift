@@ -400,12 +400,19 @@ final class LedgerStore: ObservableObject {
         let rows = ledger.breakdown(on: ledger.wakingDay(containing: now), now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }
         guard !rows.isEmpty else { return "Log an activity to start today’s breakdown." }
         let stamp = DateFormatter(); stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.timeZone = ledger.reportingCalendar().timeZone
         stamp.dateFormat = ledger.settings.use24HourTime ? "MMM d, HH:mm" : "MMM d, h:mm a"
         return "Summary as of \(stamp.string(from: now))\n" + rows.map { "\($0.name): \(Int($0.percent.rounded()))% · \(duration($0.minutes))" }.joined(separator: "\n")
     }
     func time(_ date: Date) -> String {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = ledger.reportingCalendar().timeZone
         formatter.dateFormat = ledger.settings.use24HourTime ? "HH:mm" : "h:mm a"
+        return formatter.string(from: date)
+    }
+    func dayLabel(_ date: Date) -> String {
+        let formatter = DateFormatter(); formatter.dateStyle = .medium
+        formatter.timeZone = ledger.reportingCalendar().timeZone
         return formatter.string(from: date)
     }
     func duration(_ minutes: Double) -> String {

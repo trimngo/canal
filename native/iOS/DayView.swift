@@ -77,14 +77,16 @@ struct AllocationHistoryView: View {
 }
 
 struct CalendarHistoryView: View {
+    @EnvironmentObject var store: LedgerStore
     @State private var day = Date()
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { _ in
             let now = Date()
             VStack(spacing: 12) {
-                DatePicker("Day", selection: $day, in: ...now, displayedComponents: [.date]).padding(.horizontal)
+                DatePicker("Waking date", selection: $day, in: ...now, displayedComponents: [.date]).environment(\.timeZone, store.ledger.reportingCalendar().timeZone).padding(.horizontal)
                 DayCalendarView(day: day, now: now)
             }
         }.navigationTitle("Calendar").navigationBarTitleDisplayMode(.inline)
+            .onAppear { day = store.ledger.wakingDay(containing: Date()) }
     }
 }

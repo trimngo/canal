@@ -59,7 +59,7 @@ struct GroupEntriesView: View {
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(entry.activity).foregroundStyle(.primary)
-                                Text(allDays || rangeStart != nil ? "\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end))" : store.time(entry.end))
+                                Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }.buttonStyle(.plain)

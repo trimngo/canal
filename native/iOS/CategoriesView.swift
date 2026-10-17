@@ -10,6 +10,8 @@ struct CategoriesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var drafts: [String: String] = [:]
     @State private var original: [String: String] = [:]
+    @State private var originalValues: [String: Double] = [:]
+    @State private var loaded = false
     @State private var collapsed = Set<String>()
     @State private var editing: LedgerCategory?
     @State private var creating = false
@@ -23,6 +25,7 @@ struct CategoriesView: View {
         for category in top {
             let text = (drafts[category.id] ?? "").trimmingCharacters(in: .whitespaces)
             if text.isEmpty { continue }
+            if drafts[category.id] == original[category.id], let unchanged = originalValues[category.id] { result[category.id] = unchanged; continue }
             guard text.range(of: "^(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+)$", options: .regularExpression) != nil,
                   let value = Double(text.replacingOccurrences(of: ",", with: ".")), value.isFinite else { return nil }
             result[category.id] = value
@@ -65,7 +68,7 @@ struct CategoriesView: View {
                 if !valid { Text("Enter valid percentages totaling at most 100%. Your entries will stay here while you correct them.").foregroundStyle(.red).font(.footnote) }
                 Button("Save targets") {
                     do {
-                        if let values { try store.saveTargets(values); original = drafts; error = nil }
+                        if let values { try store.saveTargets(values); original = drafts; originalValues = values; error = nil }
                     } catch { self.error = error.localizedDescription }
                 }.disabled(!valid || !dirty).accessibilityIdentifier("categories.save-targets")
                 if let budget = store.ledger.currentBudget() {
@@ -88,19 +91,20 @@ struct CategoriesView: View {
         .sheet(item: $editing) { CategoryEditView(category: $0) }
         .sheet(isPresented: $creating) { CategoryEditView(category: nil) }
         .sheet(isPresented: $reviewingUncategorized) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
-        .onAppear { loadTargets() }
+        .onAppear { if !loaded { loadTargets(); loaded = true } }
+        .onChange(of: store.ledger.currentBudget()?.id) { _, _ in if !dirty { loadTargets() } }
         .onChange(of: top.map(\.id)) { _, _ in
             let ids = Set(top.map(\.id))
-            drafts = drafts.filter { ids.contains($0.key) }; original = original.filter { ids.contains($0.key) }
+            drafts = drafts.filter { ids.contains($0.key) }; original = original.filter { ids.contains($0.key) }; originalValues = originalValues.filter { ids.contains($0.key) }
             let current = store.ledger.currentTargets()
             for id in ids where drafts[id] == nil {
                 let text = current[id].map(percentageText) ?? ""
-                drafts[id] = text; original[id] = text
+                drafts[id] = text; original[id] = text; originalValues[id] = current[id]
             }
         }
     }
     private func loadTargets() {
-        let current = store.ledger.currentTargets()
+        let current = store.ledger.currentTargets(); originalValues = current
         drafts = Dictionary(uniqueKeysWithValues: top.map { ($0.id, current[$0.id].map(percentageText) ?? "") }); original = drafts
     }
     private func categoryRow(_ category: LedgerCategory) -> some View {

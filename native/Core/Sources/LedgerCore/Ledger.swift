@@ -292,7 +292,7 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public mutating func saveSettings(_ value: Settings, writer: String) throws {
         _ = try value.notificationMinutes()
-        guard (0..<1440).contains(value.bedtimeMinute), (0..<1440).contains(value.wakeUpMinute ?? 420), value.bedtimeMinute != (value.wakeUpMinute ?? 420), value.wakingTimeZoneIdentifier == nil || TimeZone(identifier: value.wakingTimeZoneIdentifier!) != nil else { throw LedgerError.invalidSchedule }
+        guard (0..<1440).contains(value.bedtimeMinute), (0..<1440).contains(value.wakeUpMinute ?? 420), value.bedtimeMinute != (value.wakeUpMinute ?? 420), value.wakingTimeZoneIdentifier == nil || TimeZone(identifier: value.wakingTimeZoneIdentifier!) != nil else { throw PlannerError.invalidWakingSchedule }
         var revised = value; revised.revision = nextRevision(writer: writer); settings = revised
     }
 
