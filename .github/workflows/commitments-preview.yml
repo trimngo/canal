@@ -1,0 +1,39 @@
+name: Weekly commitments interface review
+on:
+  push:
+    branches: ['review/native-weekly-preview']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: weekly-preview-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  preview:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - name: Check commitment editing and navigation
+        run: |
+          cd native
+          xcodegen generate
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build -resultBundlePath build/Weekly.xcresult CODE_SIGNING_ALLOWED=NO -only-testing:TimeLedgerUITests/TimeLedgerUITests/testWeeklyCommitmentsCanBeCreatedEditedRemovedAndPersistWithoutDeletingLogs -only-testing:TimeLedgerUITests/TimeLedgerUITests/testWeeklyCommitmentsUseCategoryLogsAndHaveADirectBottomTab -only-testing:TimeLedgerUITests/TimeLedgerUITests/testWakingScheduleAndTargetsAreAccessibleAndPersist -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHomeShowsDashboardAndKeepsLoggingOnItsOwnTab test
+      - name: Export interface screenshots
+        if: always()
+        run: |
+          mkdir -p native/build/weekly-review
+          xcrun xcresulttool get test-results summary --path native/build/Weekly.xcresult > native/build/weekly-review/summary.json
+          xcrun xcresulttool export attachments --path native/build/Weekly.xcresult --output-path native/build/weekly-attachments
+          python3 native/scripts/export-ui-review.py native/build/weekly-attachments native/build/weekly-review
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weekly-commitments-preview
+          path: native/build/weekly-review
+          retention-days: 1
