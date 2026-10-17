@@ -301,6 +301,9 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(value.contains("Idea to analyze\n   Keep every line"))
         XCTAssertTrue(value.contains("Completed idea"))
         XCTAssertTrue(value.contains("Status: Completed"))
+        XCTAssertTrue(value.contains("List: New Ideas"))
+        XCTAssertTrue(value.contains("List: Completed"))
+        XCTAssertTrue(value.contains("Rank: Not evaluated"))
         XCTAssertTrue(value.contains("Captured:"))
         XCTAssertFalse(value.contains("Deleted idea"))
     }
@@ -705,6 +708,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["capture.edit-save"].tap()
         reveal(actions, in: app); actions.tap(); app.buttons["Snooze…"].tap()
         app.buttons["snooze.week"].tap()
+        if app.buttons["Keep chosen date"].waitForExistence(timeout: 2) { app.buttons["Keep chosen date"].tap() }
         let snoozed = element(app, "inbox.snoozed")
         reveal(snoozed, in: app); snoozed.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Returns ")).firstMatch.waitForExistence(timeout: 5))
@@ -720,6 +724,53 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(returned.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["ranking.first"].exists)
         recordScreen("InboxReturnedFromSnooze", in: app)
+    }
+
+    func testRankingEditsCompletesAndMovesToReferenceWithoutLeavingReview() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        openInbox(app); openRanking(app)
+        let first = app.buttons["ranking.first"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let original = first.label
+        app.buttons["ranking.first.actions"].tap(); app.buttons["Edit idea"].tap()
+        let notes = app.textViews["capture.edit-notes"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 5)); notes.tap(); notes.typeText("Reviewed during ranking")
+        app.buttons["capture.edit-save"].tap()
+        XCTAssertEqual(first.label, original)
+        app.buttons["ranking.first.actions"].tap(); app.buttons["Move to Reference"].tap()
+        XCTAssertFalse(first.exists && first.label == original)
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let completed = first.label
+        app.buttons["ranking.first.actions"].tap(); app.buttons["Mark done"].tap()
+        XCTAssertFalse(first.exists && first.label == completed)
+        recordScreen("RankingActions", in: app)
+        app.navigationBars["Rank ideas"].buttons["Done"].tap()
+        let header = element(app, "inbox.reference-title"); reveal(header, in: app)
+        XCTAssertTrue(header.label.contains("1"))
+        XCTAssertTrue(app.staticTexts[original].exists)
+        recordScreen("InboxReference", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        reveal(header, in: app); XCTAssertTrue(app.staticTexts[original].exists)
+    }
+
+    func testCustomDaySnoozeOffersMondayAndKeepsTaskInSnoozedSection() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
+        openInbox(app)
+        let actions = app.buttons["inbox.actions.open"]; reveal(actions, in: app)
+        actions.tap(); app.buttons["Snooze…"].tap()
+        let days = app.textFields["snooze.days"]
+        XCTAssertTrue(days.waitForExistence(timeout: 5)); days.tap()
+        // Always choose the upcoming Saturday, so the weekend prompt is deterministic.
+        let weekday = Calendar.current.component(.weekday, from: Date())
+        let count = (7 - weekday + 7) % 7
+        days.typeText(XCUIKeyboardKey.delete.rawValue + String(count == 0 ? 7 : count))
+        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        app.buttons["snooze.days-save"].tap()
+        XCTAssertTrue(app.buttons["Move to Monday"].waitForExistence(timeout: 5))
+        app.buttons["Move to Monday"].tap()
+        let snoozed = element(app, "inbox.snoozed"); reveal(snoozed, in: app); snoozed.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Returns ")).firstMatch.exists)
+        recordScreen("InboxWeekdaySnooze", in: app)
     }
 
     func testInboxAutoFocusesCaptureAndSavingNeverOpensRanking() {

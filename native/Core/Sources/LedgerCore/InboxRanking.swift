@@ -365,12 +365,17 @@ public struct InboxRanking: Codable, Equatable, Sendable {
 extension Ledger {
     public var activeCaptures: [Capture] { activeCaptures(at: Date()) }
     public func activeCaptures(at now: Date) -> [Capture] {
-        captures.filter { $0.deletedAt == nil && !$0.isDone && !$0.isSnoozed(at: now) }
+        captures.filter { $0.deletedAt == nil && !$0.isDone && $0.isReference != true && !$0.isSnoozed(at: now) }
     }
     public var snoozedCaptures: [Capture] { snoozedCaptures(at: Date()) }
     public func snoozedCaptures(at now: Date) -> [Capture] {
-        captures.filter { $0.deletedAt == nil && !$0.isDone && $0.isSnoozed(at: now) }.sorted {
+        captures.filter { $0.deletedAt == nil && !$0.isDone && $0.isReference != true && $0.isSnoozed(at: now) }.sorted {
             $0.snoozedUntil == $1.snoozedUntil ? $0.id < $1.id : $0.snoozedUntil! < $1.snoozedUntil!
+        }
+    }
+    public var referenceCaptures: [Capture] {
+        captures.filter { $0.deletedAt == nil && !$0.isDone && $0.isReference == true }.sorted {
+            $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt
         }
     }
     private var rankingIDs: [String] {
@@ -461,7 +466,7 @@ extension Ledger {
         ranking.rerank(id, ids: rankingIDs); saveRanking(ranking, writer: writer)
     }
     public mutating func snoozeCapture(_ id: String, until: Date, writer: String, now: Date = Date()) {
-        guard until > now, let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone }) else { return }
+        guard until > now, let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone && $0.isReference != true }) else { return }
         let revision = nextRevision(writer: writer)
         captures[index].snoozedUntil = until
         captures[index].reviewRevision = revision
@@ -469,12 +474,24 @@ extension Ledger {
         normalizeInboxRanking(writer: writer)
     }
     public mutating func bringBackCapture(_ id: String, writer: String, now: Date = Date()) {
-        guard let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone }),
+        guard let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone && $0.isReference != true }),
               captures[index].snoozedUntil != nil else { return }
         let revision = nextRevision(writer: writer)
         captures[index].snoozedUntil = now
         captures[index].reviewRevision = revision
         captures[index].revision = revision
+        normalizeInboxRanking(writer: writer)
+    }
+    public mutating func setCaptureReference(_ id: String, reference: Bool, writer: String) {
+        guard let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil }),
+              (captures[index].isReference == true) != reference else { return }
+        let revision = nextRevision(writer: writer)
+        captures[index].isReference = reference
+        captures[index].snoozedUntil = nil
+        captures[index].revision = revision
+        // Returning a reference item makes it a new actionable candidate.
+        // Moving it out of ranking preserves all other items and their answers.
+        if !reference { captures[index].reviewRevision = revision }
         normalizeInboxRanking(writer: writer)
     }
     public mutating func setCaptureDeleted(_ id: String, deleted: Bool, writer: String, now: Date = Date()) {

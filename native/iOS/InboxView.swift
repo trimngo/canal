@@ -108,6 +108,17 @@ struct InboxView: View {
                     } footer: {
                         Text("Soonest return first. Due ideas return to the front of New Ideas for a fresh review.")
                     }
+                    Section {
+                        if store.ledger.referenceCaptures.isEmpty {
+                            Text("Keep useful notes here when there's no action to take.").foregroundStyle(.secondary)
+                        }
+                        ForEach(store.ledger.referenceCaptures) { captureRow($0) }
+                    } header: {
+                        Text("Reference (\(store.ledger.referenceCaptures.count))").textCase(nil).font(.headline)
+                            .accessibilityIdentifier("inbox.reference-title")
+                    } footer: {
+                        Text("Reference items stay out of ranking. Move one back to New Ideas if it needs action.")
+                    }
                 }
                 Section { Toggle("Show completed", isOn: $showDone) }
                 Section("Hands-free capture") {
@@ -183,21 +194,29 @@ struct InboxView: View {
             } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3).frame(width: 44, height: 44) }
                 .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
             VStack(alignment: .leading, spacing: 6) {
-                Button { focused = false; editing = capture } label: {
-                    Text(capture.text).foregroundStyle(.primary).frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(.borderless).accessibilityIdentifier("inbox.details.\(capture.id)")
+                Text(capture.text).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    .onTapGesture { focused = false; editing = capture }
+                    .accessibilityAction(named: "Edit idea") { focused = false; editing = capture }
+                    .accessibilityIdentifier("inbox.details.\(capture.id)")
                 Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button("Edit idea") { focused = false; editing = capture }
                 if !capture.isDone {
-                    if capture.isSnoozed(at: Date()) {
-                        Button("Bring back now") { bringBack(capture) }
+                    if capture.isReference == true {
+                        Button("Move to New Ideas") { moveReference(capture, reference: false) }
+                    } else {
+                        Button("Move to Reference") { moveReference(capture, reference: true) }
+                        if capture.isSnoozed(at: Date()) {
+                            Button("Bring back now") { bringBack(capture) }
+                        }
+                        Button(capture.isSnoozed(at: Date()) ? "Change return date…" : "Snooze…") { focused = false; snoozing = capture }
+                        if !capture.isSnoozed(at: Date()) {
+                            Button("Re-rank this idea") {
+                                do { try store.rerankCapture(capture.id); ranking = true } catch { store.report(error) }
+                            }
+                        }
                     }
-                    Button(capture.isSnoozed(at: Date()) ? "Change return date…" : "Snooze…") { focused = false; snoozing = capture }
-                    if !capture.isSnoozed(at: Date()) { Button("Re-rank this idea") {
-                        do { try store.rerankCapture(capture.id); ranking = true } catch { store.report(error) }
-                    } }
                 }
                 Button("Delete idea", role: .destructive) { remove(capture) }
             } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
@@ -206,7 +225,7 @@ struct InboxView: View {
         }.padding(.vertical, 4)
             .swipeActions { Button("Delete", role: .destructive) { remove(capture) } }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if !capture.isDone {
+                if !capture.isDone, capture.isReference != true {
                     if capture.isSnoozed(at: Date()) {
                         Button("Bring back", systemImage: "arrow.uturn.backward") { bringBack(capture) }.tint(.teal)
                     } else {
@@ -224,9 +243,13 @@ struct InboxView: View {
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
     private func bringBack(_ capture: Capture) { do { try store.bringBackCapture(capture) } catch { store.report(error) } }
+    private func moveReference(_ capture: Capture, reference: Bool) {
+        do { try store.setCaptureReference(capture, reference: reference) } catch { store.report(error) }
+    }
     private func metadata(_ capture: Capture) -> String {
         let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
+        if capture.isReference == true { return "Reference · \(origin)\(date)" }
         if let due = capture.snoozedUntil, !capture.isDone {
             if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .shortened))" }
             if waiting.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
@@ -282,6 +305,8 @@ private struct CaptureSnoozeView: View {
     @Environment(\.dismiss) private var dismiss
     let capture: Capture
     @State private var date = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+    @State private var days = "7"
+    @State private var weekendDate: Date?
     var body: some View {
         NavigationStack {
             Form {
@@ -289,23 +314,46 @@ private struct CaptureSnoozeView: View {
                     Text(capture.text)
                     Button("Tomorrow") { snooze(days: 1) }.accessibilityIdentifier("snooze.tomorrow")
                     Button("In a week") { snooze(days: 7) }.accessibilityIdentifier("snooze.week")
+                    Button("Next weekday") {
+                        if let due = InboxSnooze.nextWeekday(after: Date()) { save(due) }
+                    }.accessibilityIdentifier("snooze.weekday")
+                }
+                Section("Number of days") {
+                    TextField("Days", text: $days).keyboardType(.numberPad).accessibilityIdentifier("snooze.days")
+                    Button("Snooze for this many days") {
+                        if let count = Int(days) { snooze(days: count) }
+                    }.disabled(Int(days).map { $0 <= 0 } ?? true).accessibilityIdentifier("snooze.days-save")
                 }
                 Section("Choose a return date") {
                     DatePicker("Return", selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
-                    Button("Snooze until this date") { save(date) }.accessibilityIdentifier("snooze.custom")
+                    Button("Snooze until this date") { propose(date) }.accessibilityIdentifier("snooze.custom")
                 }
                 Text("Returns to New Ideas for a fresh review. Your notes and original capture date stay unchanged.")
                     .font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle("Snooze idea").navigationBarTitleDisplayMode(.inline)
+                .scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+                .confirmationDialog("This return date is on a weekend", isPresented: Binding(
+                    get: { weekendDate != nil }, set: { if !$0 { weekendDate = nil } }
+                ), titleVisibility: .visible, presenting: weekendDate) { due in
+                    Button("Move to Monday") { save(InboxSnooze.weekdayOnOrAfter(due)) }
+                        .accessibilityIdentifier("snooze.move-monday")
+                    Button("Keep chosen date") { save(due) }.accessibilityIdentifier("snooze.keep-weekend")
+                    Button("Cancel", role: .cancel) { weekendDate = nil }
+                } message: { due in
+                    Text(due.formatted(date: .abbreviated, time: .shortened))
+                }
                 .onAppear {
                     if let existing = capture.snoozedUntil, existing > Date() { date = existing }
                 }
         }
     }
     private func snooze(days: Int) {
-        guard let due = Calendar.current.date(byAdding: .day, value: days, to: Date()) else { return }
-        save(due)
+        guard let due = InboxSnooze.after(days: days, from: Date()) else { return }
+        propose(due)
+    }
+    private func propose(_ date: Date) {
+        if InboxSnooze.isWeekend(date) { weekendDate = date } else { save(date) }
     }
     private func save(_ date: Date) {
         do { try store.snoozeCapture(capture, until: date); dismiss() } catch { store.report(error) }
@@ -316,6 +364,7 @@ private struct RankingView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     @State private var snoozing: Capture?
+    @State private var editing: Capture?
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -356,6 +405,7 @@ private struct RankingView: View {
               }.padding(24)
             }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
+                .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
                 .task { do { try store.resumeRanking() } catch { store.report(error) } }
                 .onChange(of: store.ledger.rankingPair, initial: true) { _, _ in
@@ -375,6 +425,16 @@ private struct RankingView: View {
                 Button("Snooze", systemImage: "moon.zzz") { snoozing = capture }
                     .accessibilityIdentifier("\(id).snooze")
                 Spacer()
+                Menu {
+                    Button("Edit idea") { editing = capture }.accessibilityIdentifier("\(id).edit")
+                    Button("Mark done") {
+                        do { try store.setCaptureDone(capture, done: true) } catch { store.report(error) }
+                    }.accessibilityIdentifier("\(id).done")
+                    Button("Move to Reference") {
+                        do { try store.setCaptureReference(capture, reference: true) } catch { store.report(error) }
+                    }.accessibilityIdentifier("\(id).reference")
+                } label: { Label("More", systemImage: "ellipsis.circle").frame(minWidth: 44, minHeight: 44) }
+                    .accessibilityIdentifier("\(id).actions")
                 Button(role: .destructive) {
                     do { try store.deleteCapture(capture) } catch { store.report(error) }
                 } label: { Image(systemName: "trash").frame(width: 44, height: 44).contentShape(Rectangle()) }
