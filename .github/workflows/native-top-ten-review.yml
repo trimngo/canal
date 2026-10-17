@@ -1,0 +1,49 @@
+name: Focused Inbox UI review
+on:
+  push:
+    branches: [review/native-top-ten-ui]
+permissions:
+  contents: read
+concurrency:
+  group: top-ten-ui-review
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Verify affected Inbox interactions
+        run: |
+          cd native
+          xcodegen generate
+          swift test --package-path Core
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxAutoFocusesCaptureAndSavingNeverOpensRanking \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTopTenScreeningBacklogRerankingAndExplicitReplenishment \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingCanDeleteEitherIdeaUndoAndContinue \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankedIdeasStayFirstAndNewIdeasHaveTheirOwnSectionAndShortcut \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxKeyboardDismissesOutsideAndPreservesDraftAcrossTabs
+      - name: Export review
+        if: always()
+        run: |
+          if [ -d native/build/UITests.xcresult ]; then
+            mkdir -p native/build/ui-review
+            xcrun xcresulttool get test-results summary --path native/build/UITests.xcresult > native/build/ui-review/summary.json
+            xcrun xcresulttool export attachments --path native/build/UITests.xcresult --output-path native/build/ui-attachments
+            python3 native/scripts/export-ui-review.py native/build/ui-attachments native/build/ui-review
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ui-review
+          path: native/build/ui-review
+          retention-days: 7
