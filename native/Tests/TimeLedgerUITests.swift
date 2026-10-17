@@ -781,7 +781,11 @@ final class TimeLedgerUITests: XCTestCase {
     private func openInbox(_ app: XCUIApplication, capture: Bool = false) {
         app.tabBars.buttons["Inbox"].tap()
         if !capture, app.keyboards.firstMatch.waitForExistence(timeout: 1) {
-            app.navigationBars["Inbox"].tap()
+            // Setup should use the explicit dismissal control. A separate
+            // keyboard test verifies tapping outside the input itself.
+            let done = app.buttons["keyboard.done"]
+            if done.waitForExistence(timeout: 5) { done.tap() }
+            else { app.navigationBars["Inbox"].tap() }
             let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
             XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         }
