@@ -169,7 +169,9 @@ final class ReminderInbox: ObservableObject {
             let count = try LedgerStore.shared.importReminders(pending.map(\.snapshot))
             // importReminders returns only after an atomic disk write. An import
             // failure exits through catch before any source can be removed.
-            let transfer = removeSaved(pending, listID: list.calendarIdentifier, connection: current)
+            let transfer = await removeSaved(pending, listID: list.calendarIdentifier, connection: current)
+            try Task.checkCancellation()
+            guard enabled, connection == current else { return false }
             if let remaining = try? await fetchPending(in: list) { pendingCount = remaining.count }
             guard enabled, connection == current else { return false }
             let checkedAt = Date(); lastImportAt = checkedAt
@@ -190,9 +192,10 @@ final class ReminderInbox: ObservableObject {
         }
     }
 
-    private func removeSaved(_ pending: [PendingReminder], listID: String, connection current: UUID) -> (removed: Int, kept: Int) {
+    private func removeSaved(_ pending: [PendingReminder], listID: String, connection current: UUID) async -> (removed: Int, kept: Int) {
         var removed = 0, kept = 0
         for candidate in pending {
+            await Task.yield() // Keep a large capture-list transfer responsive and cancellable.
             guard enabled, connection == current, selectedListID == listID, !Task.isCancelled else { break }
             guard let reminder = eventStore.calendarItem(withIdentifier: candidate.localID) as? EKReminder else { continue }
             guard reminder.refresh() else { kept += 1; continue }
