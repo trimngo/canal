@@ -2,6 +2,7 @@ import WatchKit
 
 final class SiriWatchDelegate: NSObject, WKApplicationDelegate {
     func applicationDidFinishLaunching() {
+        LedgerStore.shared.start()
         NotificationScheduler.shared.configureActions()
     }
 
