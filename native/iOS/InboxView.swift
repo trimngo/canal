@@ -80,7 +80,7 @@ struct InboxView: View {
                             Text("In progress (\(inProgress.count))").textCase(nil).font(.headline)
                                 .accessibilityIdentifier("inbox.progress-title")
                         } footer: {
-                            Text("Already seen, but not fully ranked. Your answers are saved; unseen ideas get a first look before these are finished.")
+                            Text("Not yet placed. Continue to finish each idea’s position before moving to another. Your answers are saved.")
                         }
                     }
                     Section {
@@ -239,7 +239,7 @@ private struct RankingView: View {
                     choice(first, pair: pair, id: "ranking.first")
                     Text("or").foregroundStyle(.secondary)
                     choice(second, pair: pair, id: "ranking.second")
-                    Text("Every choice is saved. You can pause anytime.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Finish placing this idea, then review the next. Every choice is saved; you can pause anytime.").font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Label("Review complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
                     Text(store.ledger.topTenIsVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")

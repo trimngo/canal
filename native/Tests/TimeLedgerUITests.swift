@@ -753,19 +753,29 @@ final class TimeLedgerUITests: XCTestCase {
         openInbox(app); openRanking(app)
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
         let first = app.buttons["ranking.first"].label
-        app.buttons["ranking.first"].tap() // Qualifies, but is not fully inserted yet.
-        XCTAssertNotEqual(app.buttons["ranking.first"].label, first) // Next unseen idea gets a look.
+        app.buttons["ranking.first"].tap() // Qualifies; keep placing this same idea.
+        XCTAssertEqual(app.buttons["ranking.first"].label, first)
         app.buttons["Done"].tap()
         let progress = element(app, "inbox.progress-title"); reveal(progress, in: app)
-        XCTAssertTrue(progress.label.contains("2")) // First candidate plus the just-presented next candidate.
-        XCTAssertTrue(element(app, "inbox.waiting-title").label.contains("1"))
-        recordScreen("InboxUnseenAndInProgress", in: app)
+        XCTAssertTrue(progress.label.contains("1"))
+        XCTAssertTrue(element(app, "inbox.waiting-title").label.contains("2"))
+        recordScreen("InboxPausedPlacement", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
         reveal(progress, in: app)
-        XCTAssertTrue(progress.label.contains("2"))
+        XCTAssertTrue(progress.label.contains("1"))
         let resume = app.buttons["inbox.continue"]; reveal(resume, in: app); resume.tap()
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["ranking.first"].label, first)
+        for _ in 0..<4 {
+            if app.buttons["ranking.first"].label != first { break }
+            app.buttons["ranking.first"].tap()
+        }
         XCTAssertNotEqual(app.buttons["ranking.first"].label, first)
+        app.buttons["Done"].tap()
+        let winner = app.cells.containing(.button, identifier: "inbox.actions.new-manual").firstMatch
+        reveal(winner, in: app)
+        XCTAssertTrue(winner.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "#1 ·")).firstMatch.exists)
+        recordScreen("InboxWinnerPlacedImmediately", in: app)
     }
 
     private func openInbox(_ app: XCUIApplication, capture: Bool = false) {

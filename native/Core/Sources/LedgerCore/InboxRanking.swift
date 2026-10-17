@@ -51,6 +51,8 @@ public struct TopTenRanking: Codable, Equatable, Sendable {
     var pending: [String] = []
     // Optional for ledgers saved before separate unseen/in-progress queues.
     var presented: [String]? = []
+    // Recover candidates parked by the earlier first-look flow without
+    // discarding their comparisons. Finish these before taking a fresh idea.
     var deferred: [String]?
     var replenishing = false
 }
@@ -123,16 +125,6 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         // pair is the best available evidence of what had already been shown.
         if topTen?.presented == nil, let pair { seen.insert(pair.first); seen.insert(pair.second) }
         return seen
-    }
-
-    // Finish the current answer, then give untouched candidates their first look.
-    mutating func yieldToUnseen() {
-        guard let candidate = topTen?.candidate, topTen?.replenishing != true,
-              !(topTen?.pending.isEmpty ?? true) else { return }
-        var deferred = topTen?.deferred ?? []
-        if !deferred.contains(candidate.item) { deferred.append(candidate.item) }
-        topTen?.deferred = deferred
-        topTen?.candidate = nil
     }
 
     mutating func normalize(ids: [String]) {
@@ -279,17 +271,17 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                 }
                 topTen?.replenishing = false
             }
-            if let next = topTen?.pending.first {
-                topTen?.pending.removeFirst()
-                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
-                continue
-            }
             if let next = topTen?.deferred?.first {
                 topTen?.deferred?.removeFirst()
                 // This candidate already had a first comparison. Search the
                 // current list directly, reusing its answers even if #10 changed.
                 // Inserting at index 10 naturally returns it to the backlog.
                 topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: false)
+                continue
+            }
+            if let next = topTen?.pending.first {
+                topTen?.pending.removeFirst()
+                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
                 continue
             }
             return
@@ -396,7 +388,9 @@ extension Ledger {
         guard var ranking = inboxRanking, ranking.pair == expected,
               preferred == expected.first || preferred == expected.second else { return }
         ranking.recordPresentation()
-        ranking.apply(preferred); ranking.yieldToUnseen(); ranking.advance(ids: rankingIDs)
+        // Keep comparing this candidate until its position is settled. advance
+        // updates the top ten before presenting another candidate.
+        ranking.apply(preferred); ranking.advance(ids: rankingIDs)
         ranking.recordPresentation()
         // Every answer advances the revision even if the next pair has the same IDs.
         ranking.revision = nextRevision(writer: writer); inboxRanking = ranking
