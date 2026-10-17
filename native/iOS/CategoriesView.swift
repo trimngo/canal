@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import LedgerCore
 
 private func percentageText(_ value: Double) -> String {
@@ -12,6 +13,7 @@ struct CategoriesView: View {
     @State private var original: [String: String] = [:]
     @State private var originalValues: [String: Double] = [:]
     @State private var loaded = false
+    @FocusState private var focusedTarget: String?
     @State private var collapsed = Set<String>()
     @State private var editing: LedgerCategory?
     @State private var creating = false
@@ -91,6 +93,12 @@ struct CategoriesView: View {
         .sheet(item: $editing) { CategoryEditView(category: $0) }
         .sheet(isPresented: $creating) { CategoryEditView(category: nil) }
         .sheet(isPresented: $reviewingUncategorized) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
+                .onChange(of: focusedTarget) { _, id in
+            guard id != nil else { return }
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
+            }
+        }
         .onAppear { if !loaded { loadTargets(); loaded = true } }
         .onChange(of: store.ledger.currentBudget()?.id) { _, _ in if !dirty { loadTargets() } }
         .onChange(of: top.map(\.id)) { _, _ in
@@ -124,12 +132,13 @@ struct CategoriesView: View {
                 Spacer(minLength: 2)
                 if isTop {
                     TextField("—", text: Binding(get: { drafts[category.id] ?? "" }, set: { drafts[category.id] = $0 }))
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 54)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 64)
+                        .focused($focusedTarget, equals: category.id)
                         .accessibilityLabel("\(category.name) target percent").accessibilityIdentifier("categories.target.\(category.id)")
                     Text("%").foregroundStyle(.secondary)
                 }
             }
-            if isTop, let percent = values?[category.id] {
+            if isTop, let percent = values?[category.id], (0...100).contains(percent) {
                 Text("≈ \(store.duration(store.ledger.typicalWakingMinutes * percent / 100)) per waking day")
                     .font(.caption).foregroundStyle(.secondary)
             }
