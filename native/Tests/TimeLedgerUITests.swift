@@ -72,8 +72,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testUnconfirmedSuggestionStaysUncategorizedUntilAcceptedInReview() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
         log("Working on app", in: app)
-        XCTAssertTrue(app.buttons["dashboard.review.uncategorized"].exists)
-        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); XCTAssertTrue(review.exists); review.tap()
         XCTAssertTrue(app.staticTexts["Suggested: Work"].waitForExistence(timeout: 5))
         let confirm = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "group.confirm.")).firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5)); confirm.tap()
@@ -110,7 +109,6 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Creative Practice")
         app.alerts.buttons["Create & categorize"].tap()
         app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
-        app.swipeUp()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.open.", "Creative Practice")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let groupID = String(row.identifier.dropFirst("groups.open.".count)); row.tap()
@@ -175,7 +173,7 @@ final class TimeLedgerUITests: XCTestCase {
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Direct notification reply UI fixture"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Today"].tap()
-        XCTAssertTrue(app.buttons["dashboard.review.uncategorized"].exists)
+        let pending = app.buttons["dashboard.review.uncategorized"]; reveal(pending, in: app); XCTAssertTrue(pending.exists)
         app.terminate(); app.launchArguments = []; app.launch()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Direct notification reply UI fixture"].waitForExistence(timeout: 5))
@@ -333,7 +331,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
         app.buttons["group.done"].tap()
-        app.buttons["group.delete"].tap(); app.buttons["Cancel"].tap()
+        app.buttons["group.delete"].tap(); app.sheets.buttons["Cancel"].firstMatch.tap()
         XCTAssertTrue(app.textFields["categories.name"].exists)
         app.buttons["group.delete"].tap()
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Delete category", "group.delete")).firstMatch.tap()
