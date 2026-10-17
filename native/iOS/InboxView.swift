@@ -27,7 +27,7 @@ struct InboxView: View {
             List {
                 Section {
                     TextField("Get it out of your head…", text: $text, axis: .vertical).lineLimit(1...4)
-                        .focused($focused).accessibilityIdentifier("inbox.text")
+                        .focused($focused).accessibilityIdentifier("inbox.text").id("inbox.capture")
                     Button("Save") {
                         do { try store.addCapture(text); text = ""; focused = true } catch { store.report(error) }
                     }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
@@ -68,10 +68,12 @@ struct InboxView: View {
                         Text("New Ideas (\(waiting.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.waiting-title")
                     }
                     Section {
-                        DisclosureGroup("Backlog (\(backlog.count))", isExpanded: $showBacklog) {
+                        DisclosureGroup(isExpanded: $showBacklog) {
                             if backlog.isEmpty { Text("No backlog ideas yet.").foregroundStyle(.secondary) }
                             ForEach(backlog) { captureRow($0) }
-                        }.accessibilityIdentifier("inbox.backlog")
+                        } label: {
+                            Text("Backlog (\(backlog.count))").accessibilityIdentifier("inbox.backlog")
+                        }
                     } footer: {
                         Text("Evaluated ideas outside your current priorities. The backlog is unsorted; you can re-rank any idea.")
                     }
@@ -85,6 +87,9 @@ struct InboxView: View {
                 }
             }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
                 .onDisappear { focused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
+                .onChange(of: ranking) { _, presented in
+                    if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
+                }
                 .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
