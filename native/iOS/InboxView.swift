@@ -71,7 +71,7 @@ struct InboxView: View {
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         if !showDone, !waiting.isEmpty {
-                            Button("New \(waiting.count)", systemImage: "arrow.down") {
+                        Button("New \(waiting.count)") {
                                 focused = false
                                 withAnimation { proxy.scrollTo("inbox.waiting", anchor: UnitPoint(x: 0.5, y: 0.15)) }
                             }.accessibilityIdentifier("inbox.new-shortcut")
