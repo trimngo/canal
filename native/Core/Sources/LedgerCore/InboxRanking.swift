@@ -166,10 +166,17 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         return ids.filter { !evaluated.contains($0) }
     }
     func challengers(ids: [String]) -> [String] {
-        let backlog = backlogIDs(ids: ids)
-        guard ordered.count == 10, let threshold = ordered.last else { return backlog }
-        let screened = PreferenceGraph(topTen?.preferences ?? []).below(threshold)
-        return backlog.filter { !screened.contains($0) }
+        let graph = PreferenceGraph(topTen?.preferences ?? [])
+        var pool = backlogIDs(ids: ids)
+        if ordered.count == 10, let threshold = ordered.last {
+            let screened = graph.below(threshold)
+            pool.removeAll { screened.contains($0) }
+        }
+        // A known loser to another eligible backlog item cannot be the best.
+        // Prune it before the tournament, regardless of its arrival/list order.
+        let eligible = Set(pool)
+        let dominated = pool.reduce(into: Set<String>()) { $0.formUnion(graph.below($1).intersection(eligible)) }
+        return pool.filter { !dominated.contains($0) }
     }
     var isActive: Bool {
         guard let state = topTen else { return false }
