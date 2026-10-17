@@ -32,6 +32,22 @@ jobs:
         env:
           LEDGER_UI_TESTS: '1'
         run: bash native/scripts/validate.sh
+      - name: Export compact interface review
+        if: always()
+        run: |
+          if [ -d native/build/UITests.xcresult ]; then
+            mkdir -p native/build/ui-review
+            xcrun xcresulttool get test-results summary --path native/build/UITests.xcresult > native/build/ui-review/summary.json
+            xcrun xcresulttool export attachments --path native/build/UITests.xcresult --output-path native/build/ui-attachments
+            python3 native/scripts/export-ui-review.py native/build/ui-attachments native/build/ui-review
+          fi
+      - name: Save interface screenshots and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-review
+          path: native/build/ui-review
+          retention-days: 7
       - name: Save simulator apps and test results
         if: always()
         uses: actions/upload-artifact@v4

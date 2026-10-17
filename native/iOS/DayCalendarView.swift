@@ -87,7 +87,7 @@ struct DayCalendarView: View {
                             Circle().fill(.primary).frame(width: 6, height: 6)
                                 .position(x: 61, y: y(sample.end)).allowsHitTesting(false)
                         }
-                        if let noon = hours.first(where: { Calendar.current.component(.hour, from: $0) == 12 }) {
+                        if let noon = hours.first(where: { store.ledger.reportingCalendar().component(.hour, from: $0) == 12 }) {
                             hourLine(noon, emphasize: true).id("timeline.noon").padding(.top, y(noon)).allowsHitTesting(false)
                         }
                         if now >= bounds.start, now < bounds.end {

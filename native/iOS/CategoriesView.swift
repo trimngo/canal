@@ -77,7 +77,7 @@ struct CategoriesView: View {
             Section { NavigationLink("Waking schedule") { WakingScheduleView() } }
             if let error { Text(error).foregroundStyle(.red) }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
         .navigationTitle("Categories").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { if dirty { discard = true } else { dismiss() } }.accessibilityIdentifier("groups.done") } }
         .interactiveDismissDisabled(dirty)
@@ -175,7 +175,7 @@ struct CategoryEditView: View {
                     }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
-            }.scrollDismissesKeyboard(.interactively)
+            }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
                 .navigationTitle(category == nil ? "New category" : "Edit category").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

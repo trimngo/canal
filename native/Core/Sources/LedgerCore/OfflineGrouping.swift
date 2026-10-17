@@ -78,7 +78,7 @@ extension Ledger {
     private func rememberedChoices() -> [String: CheckIn] {
         let known = Set(categories.map(\.id))
         var result: [String: CheckIn] = [:]
-        for entry in activeEntries where entry.categoryAssignment != .automatic && known.contains(entry.categoryID ?? "") {
+        for entry in activeEntries where entry.categoryAssignment != .automatic && known.contains(entry.categoryID ?? "") && confirmedCategoryIDs(for: entry).count == 1 {
             let key = OfflineGrouping.normalized(entry.activity)
             if let previous = result[key] {
                 if previous.revision > entry.revision || (previous.revision == entry.revision && previous.id >= entry.id) { continue }

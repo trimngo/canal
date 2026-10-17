@@ -67,8 +67,8 @@ struct GroupEntriesView: View {
                             .font(.caption).foregroundStyle(.secondary)
                         suggestion(for: entry)
                         Menu {
-                            ForEach(store.ledger.categories) { group in
-                                Button(group.name) {
+                            ForEach(store.ledger.orderedCategories) { group in
+                                Button(store.ledger.categoryPath(group.id)) {
                                     do { try store.categorize(entry, categoryID: group.id) } catch { self.error = error.localizedDescription }
                                 }
                             }
