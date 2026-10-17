@@ -96,7 +96,7 @@ struct CategoriesView: View {
                 .onChange(of: focusedTarget) { _, id in
             guard id != nil else { return }
             DispatchQueue.main.async {
-                UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+                UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
             }
         }
         .onAppear { if !loaded { loadTargets(); loaded = true } }
