@@ -9,6 +9,7 @@ final class WatchReplyState: ObservableObject {
     @Published var error: String?
     var pendingText: String?
     var responseTime: Date?
+    var sampleID: String?
 }
 
 final class CheckInNotificationController: WKUserNotificationHostingController<WatchPromptView> {
@@ -24,6 +25,7 @@ final class CheckInNotificationController: WKUserNotificationHostingController<W
         // must not open/reset the app's full sample editor.
         notificationActions = []
         deliveryID = NotificationScheduler.replyID(for: notification)
+        reply.sampleID = deliveryID
         reply.inputOpen = false; reply.saved = false; reply.error = nil
         reply.pendingText = nil; reply.responseTime = nil
         LedgerStore.shared.start()
@@ -67,11 +69,12 @@ final class CheckInNotificationController: WKUserNotificationHostingController<W
 
 struct WatchPromptView: View {
     @ObservedObject var reply: WatchReplyState
+    @ObservedObject private var store = LedgerStore.shared
     var dictate: () -> Void
     var body: some View {
         VStack(spacing: 12) {
             if reply.saved {
-                Label("Saved", systemImage: "checkmark.circle.fill")
+                Label(reply.sampleID.map { store.pairedDeviceReceivedSample($0) } == true ? "Received by iPhone" : "Saved on Watch", systemImage: "checkmark.circle.fill")
                     .font(.title3).foregroundStyle(.mint)
                     .accessibilityIdentifier("watch.reply.saved")
             } else {

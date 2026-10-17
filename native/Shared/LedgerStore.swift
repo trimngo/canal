@@ -210,6 +210,11 @@ final class LedgerStore: ObservableObject {
         #endif
     }
 
+    func pairedDeviceReceivedSample(_ id: String) -> Bool {
+        guard let entry = ledger.entries.first(where: { $0.id == id }) else { return false }
+        return companion?.hasReceivedSample(entry) == true
+    }
+
     private func importSiriCaptures() {
         #if os(watchOS)
         do {

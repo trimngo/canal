@@ -1,0 +1,72 @@
+import Foundation
+
+/// A bounded fast lane for recent logs and ideas. Full history and all other
+/// settings still travel through the existing durable file-transfer queue.
+public struct CompanionQuickPacket: Codable, Sendable {
+    public var id: String
+    public var ledger: Ledger
+}
+
+public struct CompanionQuickReceipt: Codable, Sendable {
+    public var id: String
+    public var saved: Bool
+    public init(id: String, saved: Bool) { self.id = id; self.saved = saved }
+}
+
+public struct CompanionQuickDelivery {
+    private var acknowledged: [String: Revision] = [:]
+    private var active: CompanionQuickPacket?
+    public init() {}
+
+    private func recent(_ source: Ledger) -> Ledger {
+        var result = Ledger(); result.categories = []
+        result.entries = Array(source.entries.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
+        result.captures = Array(source.captures.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
+        result.logDeletions = Array((source.logDeletions ?? []).sorted { $0.revision > $1.revision }.prefix(20))
+        return result
+    }
+    private func revisions(_ ledger: Ledger) -> [String: Revision] {
+        var result: [String: Revision] = [:]
+        for entry in ledger.entries { result["log:" + entry.id] = entry.revision }
+        for capture in ledger.captures { result["idea:" + capture.id] = capture.revision }
+        for deletion in ledger.logDeletions ?? [] { result["deletion:" + deletion.id] = deletion.revision }
+        return result
+    }
+    public func hasReceived(_ entry: CheckIn) -> Bool { acknowledged["log:" + entry.id] == entry.revision }
+    public func recentLogsReceived(in ledger: Ledger) -> Bool {
+        let wanted = revisions(recent(ledger))
+        return !wanted.isEmpty && wanted.allSatisfy { acknowledged[$0.key] == $0.value }
+    }
+
+    public mutating func prepare(_ source: Ledger, id: String, byteLimit: Int = 48_000) throws -> Data? {
+        guard active == nil else { return nil }
+        let latest = recent(source)
+        var partial = Ledger(); partial.categories = []
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        func fits(_ value: Ledger) throws -> Bool { try encoder.encode(CompanionQuickPacket(id: id, ledger: value)).count <= byteLimit }
+        // Send individual changes, never the full history ahead of a new reply.
+        for entry in latest.entries where !hasReceived(entry) {
+            partial.entries.append(entry)
+            if try !fits(partial) { partial.entries.removeLast() }
+        }
+        for item in latest.captures where acknowledged["idea:" + item.id] != item.revision {
+            partial.captures.append(item)
+            if try !fits(partial) { partial.captures.removeLast() }
+        }
+        for item in latest.logDeletions ?? [] where acknowledged["deletion:" + item.id] != item.revision {
+            partial.logDeletions = (partial.logDeletions ?? []) + [item]
+            if try !fits(partial) { partial.logDeletions?.removeLast() }
+        }
+        guard !revisions(partial).isEmpty else { return nil }
+        let packet = CompanionQuickPacket(id: id, ledger: partial)
+        active = packet
+        return try encoder.encode(packet)
+    }
+    @discardableResult
+    public mutating func finish(id: String, saved: Bool) -> Bool {
+        guard let packet = active, packet.id == id else { return false }
+        if saved { acknowledged.merge(revisions(packet.ledger)) { _, new in new } }
+        active = nil
+        return saved
+    }
+}
