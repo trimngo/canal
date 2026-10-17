@@ -28,7 +28,7 @@ struct CheckInView: View {
                         Button { editing = entry } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(entry.activity).foregroundStyle(.primary)
-                                Text("\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end)) · \(store.categoryName(store.ledger.confirmedCategoryID(for: entry)))")
+                                Text("\(entry.end.formatted(date: .abbreviated, time: .omitted)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }.accessibilityIdentifier("logs.entry.\(entry.id)")
@@ -57,7 +57,7 @@ struct CheckInEditor: View {
     var entry: CheckIn? = nil
     var onSave: () -> Void = {}
     @State private var activity = ""
-    @State private var categoryID = ""
+    @State private var categoryIDs: [String] = []
     @State private var recordNow = true
     @State private var timestamp = Date()
     @State private var saving = false
@@ -75,25 +75,22 @@ struct CheckInEditor: View {
                     HStack {
                         Text("Suggested: \(store.categoryName(suggested))").font(.subheadline)
                         Spacer()
-                        if categoryID == suggested {
+                        if categoryIDs == [suggested] {
                             Label("Confirmed", systemImage: "checkmark").font(.caption).foregroundStyle(.secondary)
                         } else {
-                            Button("Use \(store.categoryName(suggested))") { categoryID = suggested }
+                            Button(categoryIDs.isEmpty ? "Use \(store.categoryName(suggested))" : "Use only \(store.categoryName(suggested))") { categoryIDs = [suggested] }
                                 .buttonStyle(.bordered).controlSize(.small)
                                 .accessibilityIdentifier("\(prefix).confirm-suggestion")
                         }
                     }
-                    Text(categoryID.isEmpty ? "Uncategorized until you confirm a group." : "Your chosen group will be saved.")
+                    Text(categoryIDs.isEmpty ? "Uncategorized until you confirm a group." : "Your chosen group will be saved.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else if !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("No suggestion yet. You can choose a group or save as Uncategorized.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Picker("Group", selection: $categoryID) {
-                Text("Uncategorized").tag("")
-                ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
-            }.pickerStyle(.menu).accessibilityIdentifier("\(prefix).category")
+            CategorySelectionPicker(selection: $categoryIDs).accessibilityIdentifier("\(prefix).category")
             DisclosureGroup("Time") {
                 Toggle("Use current time", isOn: $recordNow)
                     .onChange(of: recordNow) { _, value in if !value, entry == nil { timestamp = Date() } }
@@ -106,8 +103,8 @@ struct CheckInEditor: View {
                 saving = true; focused = false
                 do {
                     try store.saveSample(id: entry?.id, at: recordNow ? Date() : timestamp,
-                                         activity: activity, categoryID: categoryID.isEmpty ? nil : categoryID)
-                    if entry == nil { activity = ""; categoryID = "" }
+                                         activity: activity, categoryIDs: categoryIDs)
+                    if entry == nil { activity = ""; categoryIDs = [] }
                     onSave()
                 } catch { store.report(error) }
                 saving = false
@@ -122,13 +119,13 @@ struct CheckInEditor: View {
             }
         }.ledgerInputDismissal().onDisappear { focused = false }.onAppear {
             if let entry {
-                activity = entry.activity; categoryID = store.ledger.confirmedCategoryID(for: entry) ?? ""
+                activity = entry.activity; categoryIDs = store.ledger.confirmedCategoryIDs(for: entry)
                 timestamp = entry.end; recordNow = false
             } else if let draft = store.quickReplyDraft {
                 activity = draft; store.quickReplyDraft = nil
             }
         }.onChange(of: activity) { old, new in
-            if entry == nil, OfflineGrouping.normalized(old) != OfflineGrouping.normalized(new) { categoryID = "" }
+            if entry == nil, OfflineGrouping.normalized(old) != OfflineGrouping.normalized(new) { categoryIDs = [] }
         }
     }
 }

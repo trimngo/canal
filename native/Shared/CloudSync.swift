@@ -3,10 +3,13 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
+    case targetBudget(TargetBudget), wakingOverride(WakingOverride)
     case reminderImport(ReminderImportReceipt)
     case logDeletion(LogDeletion), category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
+        case .targetBudget(let item): return "target-budget-\(item.id)"
+        case .wakingOverride(let item): return "waking-override-\(item.id)"
         case .reminderImport(let item): return "reminder-import-\(item.id)"
         case .logDeletion(let item): return "log-deletion-\(item.id)"
         case .category(let item): return "category-\(item.id)"
@@ -18,6 +21,8 @@ private enum CloudItem: Codable {
     }
     var revision: Revision {
         switch self {
+        case .targetBudget(let item): return item.revision
+        case .wakingOverride(let item): return item.revision
         case .reminderImport(let item): return item.revision
         case .logDeletion(let item): return item.revision
         case .category(let item): return item.revision
@@ -30,6 +35,8 @@ private enum CloudItem: Codable {
     func apply(to ledger: inout Ledger) {
         var remote = Ledger(); remote.categories = []; remote.entries = []; remote.captures = []
         switch self {
+        case .targetBudget(let item): remote.targetBudgets = [item]
+        case .wakingOverride(let item): remote.wakingOverrides = [item]
         case .reminderImport(let item): remote.reminderImports = [item]
         case .logDeletion(let item): remote.logDeletions = [item]
         case .category(let item): remote.categories = [item]
@@ -47,6 +54,8 @@ private enum CloudItem: Codable {
         items.append(contentsOf: ledger.entries.map(CloudItem.entry))
         items.append(contentsOf: ledger.captures.map(CloudItem.capture))
         items.append(contentsOf: (ledger.reminderImports ?? []).map(CloudItem.reminderImport))
+        items.append(contentsOf: (ledger.targetBudgets ?? []).map(CloudItem.targetBudget))
+        items.append(contentsOf: (ledger.wakingOverrides ?? []).map(CloudItem.wakingOverride))
         items.append(.settings(ledger.settings))
         return items
     }

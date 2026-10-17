@@ -62,6 +62,20 @@ final class LedgerStore: ObservableObject {
                 try fixture.saveSample(id: "recent", at: Date().addingTimeInterval(-60), activity: "Recent work observation", categoryID: "work", writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-allocation-fixture") {
+                var fixture = Ledger(); fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music")]
+                fixture.settings.wakeUpMinute = 0; fixture.settings.bedtimeMinute = 1439
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                let now = Date(), cal = Calendar.current
+                let first = cal.startOfDay(for: now).addingTimeInterval(60)
+                try fixture.saveSample(id: "today-teaching", at: min(first, now), activity: "Preparing classes", categoryIDs: ["teaching"], writer: "fixture", now: now)
+                try fixture.saveSample(id: "today-music", at: now.addingTimeInterval(-1), activity: "Guitar practice", categoryIDs: ["music"], writer: "fixture", now: now)
+                if let yesterday = cal.date(byAdding: .day, value: -1, to: first) {
+                    try fixture.saveSample(at: yesterday, activity: "Yesterday work", categoryIDs: ["work"], writer: "fixture", now: now)
+                }
+                try fixture.saveTargets(["work": 30, "music": 15], effectiveAt: now.addingTimeInterval(-60), writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-fixture") {
                 var fixture = Ledger()
                 for (i, item) in [("c", "Third idea"), ("a", "First idea"), ("b", "Second idea")].enumerated() {
@@ -103,6 +117,12 @@ final class LedgerStore: ObservableObject {
                     loaded.schemaVersion = 2
                     try JSONEncoder().encode(loaded).write(to: file, options: [.atomic])
                 }
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
+                    loaded.settings.wakeUpMinute = 0; loaded.settings.bedtimeMinute = 1439
+                    try JSONEncoder().encode(loaded).write(to: file, options: [.atomic])
+                }
+                #endif
                 ledger = loaded
             }
         } catch {
@@ -120,6 +140,10 @@ final class LedgerStore: ObservableObject {
         guard !started else { return }; started = true
         do {
             var draft = ledger
+            if draft.settings.wakingTimeZoneIdentifier == nil {
+                var settings = draft.settings; settings.wakingTimeZoneIdentifier = TimeZone.current.identifier
+                try draft.saveSettings(settings, writer: writer)
+            }
             draft.ensureDefaultGroups(writer: writer)
             draft.prepareGroupSuggestions(writer: writer)
             if draft != ledger {
@@ -197,6 +221,28 @@ final class LedgerStore: ObservableObject {
         var draft = ledger
         try draft.saveSample(id: id, at: timestamp, activity: activity, categoryID: categoryID, writer: writer)
         try commit(draft)
+    }
+
+    func saveSample(id: String? = nil, at timestamp: Date = Date(), activity: String, categoryIDs: [String]) throws {
+        var draft = ledger
+        try draft.saveSample(id: id, at: timestamp, activity: activity, categoryIDs: categoryIDs, writer: writer)
+        try commit(draft)
+    }
+    func saveTargets(_ values: [String: Double]) throws {
+        var draft = ledger; try draft.saveTargets(values, writer: writer); try commit(draft)
+    }
+    func moveCategory(_ id: String, to parent: String?) throws {
+        var draft = ledger; try draft.moveCategory(id, to: parent, writer: writer); try commit(draft)
+    }
+    func reorderCategories(_ ids: [String], parent: String?) throws {
+        var draft = ledger; try draft.reorderCategories(ids, parent: parent, writer: writer); try commit(draft)
+    }
+    func saveWakingOverride(on day: Date, wake: Int, bed: Int, reset: Bool = false) throws {
+        var draft = ledger; try draft.saveWakingOverride(on: day, wake: wake, bed: bed, reset: reset, writer: writer); try commit(draft)
+    }
+    func categoryNames(for entry: CheckIn) -> String {
+        let names = ledger.confirmedCategoryIDs(for: entry).map { ledger.categoryPath($0) }
+        return names.isEmpty ? "Uncategorized" : names.joined(separator: " + ")
     }
 
     func deleteLog(_ entry: CheckIn) throws {
@@ -295,6 +341,15 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer); try commit(draft)
     }
 
+    func editCategory(id: String?, name: String, parent: String?) throws {
+        var draft = ledger
+        try draft.saveCategory(id: id, name: name, writer: writer)
+        if let categoryID = id ?? draft.categories.last?.id {
+            if draft.categoryParents[categoryID] != parent { try draft.moveCategory(categoryID, to: parent, writer: writer) }
+        }
+        try commit(draft)
+    }
+
     func deleteCategory(id: String) throws {
         var draft = ledger; try draft.deleteCategory(id: id, writer: writer); try commit(draft)
         groupingUndo = []; canUndoGrouping = false
@@ -311,7 +366,7 @@ final class LedgerStore: ObservableObject {
         try draft.confirmCategory(for: current.id, categoryID: destination, includeMatching: includeMatching, writer: writer)
         let changed = draft.entries.compactMap { updated -> (before: CheckIn, after: CheckIn)? in
             guard let original = ledger.entries.first(where: { $0.id == updated.id }),
-                  original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment else { return nil }
+                  original.categoryIDs != updated.categoryIDs || original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment else { return nil }
             return (original, updated)
         }
         try commit(draft)
@@ -325,6 +380,7 @@ final class LedgerStore: ObservableObject {
                 guard let index = draft.entries.firstIndex(where: { $0.id == change.after.id }),
                       draft.entries[index].revision == change.after.revision else { continue }
                 let revision = draft.nextRevision(writer: writer)
+                draft.entries[index].categoryIDs = change.before.categoryIDs
                 draft.entries[index].categoryID = change.before.categoryID
                 draft.entries[index].categoryAssignment = change.before.categoryAssignment
                 draft.entries[index].revision = revision
@@ -341,7 +397,7 @@ final class LedgerStore: ObservableObject {
 
     func categoryName(_ id: String?) -> String { ledger.categories.first { $0.id == id }?.name ?? "Uncategorized" }
     func notificationSummary(now: Date = Date()) -> String {
-        let rows = ledger.breakdown(on: now, now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }
+        let rows = ledger.breakdown(on: ledger.wakingDay(containing: now), now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }
         guard !rows.isEmpty else { return "Log an activity to start today’s breakdown." }
         let stamp = DateFormatter(); stamp.locale = Locale(identifier: "en_US_POSIX")
         stamp.dateFormat = ledger.settings.use24HourTime ? "MMM d, HH:mm" : "MMM d, h:mm a"

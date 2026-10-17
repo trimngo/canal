@@ -29,51 +29,54 @@ public struct HistoryReport: Sendable {
 
 extension Ledger {
     public func history(range: HistoryRange, start: Date = Date(), end: Date = Date(), now: Date = Date(), calendar: Calendar = .current) -> HistoryReport {
-        let today = calendar.startOfDay(for: now)
+        let cal = reportingCalendar(calendar)
+        let today = wakingDay(containing: now, calendar: cal)
         let lower: Date
-        let upper: Date
+        let last: Date
         switch range {
-        case .today: lower = today; upper = now
-        case .week: lower = calendar.date(byAdding: .day, value: -6, to: today) ?? today; upper = now
-        case .allTime: lower = calendar.startOfDay(for: activeEntries.filter { $0.end <= now }.map(\.end).min() ?? today); upper = now
+        case .today: lower = today; last = today
+        case .week: lower = cal.date(byAdding: .day, value: -6, to: today) ?? today; last = today
+        case .allTime:
+            lower = activeEntries.filter { $0.end <= now }.map { wakingDay(containing: $0.end, calendar: cal) }.min() ?? today
+            last = today
         case .custom:
-            lower = min(today, calendar.startOfDay(for: min(start, end)))
-            let last = min(today, calendar.startOfDay(for: max(start, end)))
-            upper = min(now, calendar.date(byAdding: .day, value: 1, to: last) ?? now)
+            lower = min(today, cal.startOfDay(for: min(start, end)))
+            last = min(today, cal.startOfDay(for: max(start, end)))
         }
-        let samples = activeEntries.filter { $0.end >= lower && ($0.end < upper || upper == now && $0.end == now) && $0.end <= now }
-        let known = Set(categories.map(\.id))
-        let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        // Visit only days with observations; empty years do not create an
-        // unbounded calendar loop, and historical estimates stop at the last log.
-        let observations = Dictionary(grouping: samples) { calendar.startOfDay(for: $0.end) }
-        let days = observations.keys.sorted()
-        var totals: [String: Double] = [:]
-        var daily: [DailyTotal] = []
+        let upper = min(now, wakingBounds(on: last, calendar: cal)?.end ?? now)
+        // The log list retains even observations outside the configured schedule.
+        let samples = activeEntries.filter {
+            let day = wakingDay(containing: $0.end, calendar: cal)
+            return day >= lower && day <= last && $0.end <= now
+        }
+        let days = Set(samples.map { wakingDay(containing: $0.end, calendar: cal) }).sorted()
+        var totals: [String: Double] = [:], daily: [DailyTotal] = []
+        var tracked = 0.0
         for day in days {
-            var values: [String: Double] = [:]
-            var dailyLedger = self; dailyLedger.entries = observations[day] ?? []
-            for segment in dailyLedger.inferredSegments(on: day, now: now, calendar: calendar) {
-                let id = known.contains(segment.categoryID ?? "") ? segment.categoryID! : "uncategorized"
-                let minutes = max(0, min(segment.end, upper).timeIntervalSince(max(segment.start, lower)) / 60)
-                values[id, default: 0] += minutes
-                totals[id, default: 0] += minutes
+            let period = allocation(on: day, now: now, calendar: cal)
+            tracked += period.wakingMinutes
+            for category in children(of: nil) {
+                let minutes = period.total(for: category.id, ledger: self)
+                if minutes > 0 {
+                    totals[category.id, default: 0] += minutes
+                    daily.append(DailyTotal(day: day, categoryID: category.id, name: category.name, minutes: minutes))
+                }
             }
-            for (id, minutes) in values where minutes > 0 {
-                daily.append(DailyTotal(day: day, categoryID: id, name: names[id] ?? "Uncategorized", minutes: minutes))
+            let uncategorized = period.directMinutes["uncategorized", default: 0]
+            if uncategorized > 0 {
+                totals["uncategorized", default: 0] += uncategorized
+                daily.append(DailyTotal(day: day, categoryID: "uncategorized", name: "Uncategorized", minutes: uncategorized))
             }
         }
-        let tracked = totals.values.reduce(0, +)
-        var remaining = 0.0
-        if range == .today, settings.showRemainingTime,
-           let bedtime = calendar.date(bySettingHour: settings.bedtimeMinute / 60, minute: settings.bedtimeMinute % 60, second: 0, of: today) {
-            remaining = max(0, bedtime.timeIntervalSince(now) / 60)
+        let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        var rows: [BreakdownRow] = []
+        for (id, minutes) in totals {
+            rows.append(BreakdownRow(id: id, name: names[id] ?? "Uncategorized", minutes: minutes, dayMinutes: tracked))
         }
-        var rows = totals.map { id, minutes in
-            BreakdownRow(id: id, name: names[id] ?? "Uncategorized", minutes: minutes, dayMinutes: tracked + remaining)
-        }.filter { $0.minutes > 0 }
-        if remaining > 0 { rows.append(BreakdownRow(id: "remaining", name: "Time remaining", minutes: remaining, dayMinutes: tracked + remaining)) }
-        rows.sort { $0.minutes == $1.minutes ? $0.name < $1.name : $0.minutes > $1.minutes }
-        return HistoryReport(rows: rows, dailyTotals: daily.sorted { $0.day == $1.day ? $0.categoryID < $1.categoryID : $0.day < $1.day }, samples: samples, start: lower, end: upper, trackedMinutes: tracked, remainingMinutes: remaining)
+        rows.sort { lhs, rhs in
+            if lhs.minutes == rhs.minutes { return lhs.name < rhs.name }
+            return lhs.minutes > rhs.minutes
+        }
+        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked, remainingMinutes: 0)
     }
 }

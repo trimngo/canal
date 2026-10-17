@@ -6,7 +6,7 @@ private struct CalendarActivity: Identifiable {
     var start: Date
     var end: Date
     var activity: String
-    var categoryID: String?
+    var categoryIDs: [String]
     var samples: [CheckIn]
 }
 
@@ -17,7 +17,7 @@ struct DayCalendarView: View {
     @State private var selected: CalendarActivity?
     private let hourHeight: CGFloat = 72
     private var bounds: DateInterval {
-        Calendar.current.dateInterval(of: .day, for: day)
+        store.ledger.wakingBounds(on: day)
             ?? DateInterval(start: Calendar.current.startOfDay(for: day), duration: 86400)
     }
     private var cutoff: Date { max(bounds.start, min(bounds.end, now)) }
@@ -26,21 +26,21 @@ struct DayCalendarView: View {
     private var hours: [Date] {
         stride(from: 0.0, through: bounds.duration, by: 3600).map { bounds.start.addingTimeInterval($0) }
     }
-    private var samples: [CheckIn] { store.ledger.entries(on: day).filter { $0.end <= cutoff } }
+    private var samples: [CheckIn] { store.ledger.wakingSamples(on: day, now: now) }
     private var blocks: [CalendarActivity] {
         let observations = Dictionary(samples.map { ($0.id, $0) }, uniquingKeysWith: { $0.revision < $1.revision ? $1 : $0 })
         var result: [CalendarActivity] = []
         for segment in store.ledger.inferredSegments(on: day, now: now) {
             guard let sample = observations[segment.sampleID] else { continue }
-            let groupID = store.ledger.confirmedCategoryID(for: sample)
+            let groupIDs = store.ledger.confirmedCategoryIDs(for: sample)
             if let last = result.last, last.end == segment.start,
-               last.categoryID == groupID,
+               last.categoryIDs == groupIDs,
                last.activity.caseInsensitiveCompare(sample.activity) == .orderedSame {
                 result[result.count - 1].end = segment.end
                 result[result.count - 1].samples.append(sample)
             } else {
                 result.append(CalendarActivity(id: sample.id, start: segment.start, end: segment.end,
-                                               activity: sample.activity, categoryID: groupID, samples: [sample]))
+                                               activity: sample.activity, categoryIDs: groupIDs, samples: [sample]))
             }
         }
         return result
@@ -70,15 +70,15 @@ struct DayCalendarView: View {
                             Button { selected = block } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     if blockHeight >= 22 { Text(block.activity).font(.caption.bold()).lineLimit(1) }
-                                    if blockHeight >= 42 { Text(store.categoryName(block.categoryID)).font(.caption2).lineLimit(1) }
+                                    if blockHeight >= 42 { Text(block.categoryIDs.isEmpty ? "Uncategorized" : block.categoryIDs.map { store.ledger.categoryPath($0) }.joined(separator: " + ")).font(.caption2).lineLimit(1) }
                                 }.padding(.horizontal, 6)
                                     .frame(maxWidth: .infinity, minHeight: blockHeight, maxHeight: blockHeight, alignment: .topLeading)
-                                    .background(color(block.categoryID).opacity(0.22))
-                                    .overlay(alignment: .leading) { Rectangle().fill(color(block.categoryID)).frame(width: 3) }
+                                    .background(color(block.categoryIDs.first).opacity(0.22))
+                                    .overlay(alignment: .leading) { Rectangle().fill(color(block.categoryIDs.first)).frame(width: 3) }
                                     .clipped()
                             }.buttonStyle(.plain)
                                 .accessibilityIdentifier("timeline.block")
-                                .accessibilityLabel("\(block.activity), estimated \(store.time(block.start)) to \(store.time(block.end)), \(store.categoryName(block.categoryID))")
+                                .accessibilityLabel("\(block.activity), estimated \(store.time(block.start)) to \(store.time(block.end)), \(block.categoryIDs.isEmpty ? "Uncategorized" : block.categoryIDs.map { store.ledger.categoryPath($0) }.joined(separator: " + "))")
                                 .id("timeline.block.\(block.id)")
                                 .padding(.leading, 64).padding(.trailing, 8)
                                 .padding(.top, y(block.start))
@@ -123,7 +123,7 @@ private struct CalendarActivityDetail: View {
                 Section("Estimated activity") {
                     Text(block.activity).font(.headline)
                     Text("\(store.time(block.start))–\(store.time(block.end)) · \(store.duration(block.end.timeIntervalSince(block.start) / 60))")
-                    Text(store.categoryName(block.categoryID)).foregroundStyle(.secondary)
+                    Text(block.categoryIDs.isEmpty ? "Uncategorized" : block.categoryIDs.map { store.ledger.categoryPath($0) }.joined(separator: " + ")).foregroundStyle(.secondary)
                 }
                 Section {
                     ForEach(block.samples.filter { !store.ledger.isLogDeleted($0.id) }) { sample in

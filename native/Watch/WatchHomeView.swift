@@ -4,7 +4,7 @@ import LedgerCore
 struct WatchHomeView: View {
     @EnvironmentObject var store: LedgerStore
     @State private var activity = ""
-    @State private var categoryID = ""
+    @State private var categoryIDs: [String] = []
     @State private var capture = ""
     @State private var saved = false
     @State private var tab = 2
@@ -17,20 +17,17 @@ struct WatchHomeView: View {
                     TextField("Dictate an answer", text: $activity)
                     if let suggestion = store.ledger.suggestedCategory(for: activity) {
                         Text("Suggested: \(store.categoryName(suggestion))").font(.caption)
-                        if categoryID != suggestion {
-                            Button("Use \(store.categoryName(suggestion))") { categoryID = suggestion }
+                        if categoryIDs != [suggestion] {
+                            Button(categoryIDs.isEmpty ? "Use \(store.categoryName(suggestion))" : "Use only \(store.categoryName(suggestion))") { categoryIDs = [suggestion] }
                         } else {
                             Text("Confirmed").font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Picker("Group", selection: $categoryID) {
-                        Text("Uncategorized").tag("")
-                        ForEach(store.ledger.categories) { Text($0.name).tag($0.id) }
-                    }
+                    CategorySelectionPicker(selection: $categoryIDs)
                     Button(saved ? "Saved ✓" : "Save sample") {
                         do {
-                            try store.saveSample(activity: activity, categoryID: categoryID.isEmpty ? nil : categoryID)
-                            activity = ""; categoryID = ""; saved = true
+                            try store.saveSample(activity: activity, categoryIDs: categoryIDs)
+                            activity = ""; categoryIDs = []; saved = true
                         } catch { store.report(error) }
                     }.buttonStyle(.borderedProminent).disabled(activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                     Button("New sample") { store.beginSample() }.font(.caption)
@@ -58,7 +55,7 @@ struct WatchHomeView: View {
                                 Text("\(row.percent, specifier: "%.0f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
                             }.font(.caption)
                         }
-                        Text(store.ledger.settings.showRemainingTime ? "Tracked time + time until bedtime" : "Of time since your first log").font(.caption2).foregroundStyle(.secondary)
+                        Text("Of elapsed waking time · estimates extend to waking boundaries").font(.caption2).foregroundStyle(.secondary)
                         Button("Sync") { store.refresh() }
                         Text(store.companionStatus).font(.caption2).foregroundStyle(.secondary)
                         if let diagnostic = store.companionDiagnostic {
@@ -70,11 +67,11 @@ struct WatchHomeView: View {
         }.tabViewStyle(.verticalPage)
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
-                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryID = "" }
+                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
             }
             .onChange(of: store.sampleRequestID) { _, _ in
                 tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
-                categoryID = ""; saved = false
+                categoryIDs = []; saved = false
             }
     }
 }

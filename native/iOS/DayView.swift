@@ -8,7 +8,7 @@ private struct SelectedGroup: Identifiable {
     var end: Date?
 }
 
-struct DayView: View {
+struct AllocationHistoryView: View {
     @EnvironmentObject var store: LedgerStore
     @State private var selectedGroup: SelectedGroup?
     @State private var managingGroups = false
@@ -55,7 +55,7 @@ struct DayView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
                     if report.remainingMinutes > 0 { Text("Percentages include time remaining until bedtime.") }
-                    else { Text("Percentages use tracked waking time.") }
+                    else { Text("Percentages use waking time on days with logs. Days without logs are excluded.") }
                     Text("Swipe the chart for breakdown, pie, and trend.")
                 }
             }

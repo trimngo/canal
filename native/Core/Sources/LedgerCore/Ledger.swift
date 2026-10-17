@@ -27,6 +27,8 @@ public struct Revision: Codable, Equatable, Comparable, Sendable {
 }
 
 public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
+    public var parentID: String?
+    public var sortOrder: Int?
     public var automaticRole: String?
     public var id: String
     public var name: String
@@ -61,6 +63,8 @@ public struct ReminderTime: Equatable, Sendable {
 public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
 
 public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
+    /// Nil in legacy files. categoryID remains a compatibility mirror of the first selection.
+    public var categoryIDs: [String]?
     public var categoryAssignment: CategoryAssignment?
     public var sampleID: String?
     public var id: String { sampleID ?? String(Int64(end.timeIntervalSince1970)) }
@@ -100,6 +104,8 @@ public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashab
 }
 
 public struct Settings: Codable, Equatable, Sendable {
+    public var wakeUpMinute: Int?
+    public var wakingTimeZoneIdentifier: String?
     public var notificationsAllDay = false
     public var showRemainingTime = false
     public var bedtimeMinute = 22 * 60
@@ -111,10 +117,12 @@ public struct Settings: Codable, Equatable, Sendable {
     public var revision = Revision()
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision, showRemainingTime, bedtimeMinute
+        case wakeUpMinute, wakingTimeZoneIdentifier, notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision, showRemainingTime, bedtimeMinute
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        wakeUpMinute = try values.decodeIfPresent(Int.self, forKey: .wakeUpMinute)
+        wakingTimeZoneIdentifier = try values.decodeIfPresent(String.self, forKey: .wakingTimeZoneIdentifier)
         notificationsAllDay = try values.decodeIfPresent(Bool.self, forKey: .notificationsAllDay) ?? false
         notificationsEnabled = try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         startMinute = try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? 420
@@ -155,6 +163,8 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var targetBudgets: [TargetBudget]?
+    public var wakingOverrides: [WakingOverride]?
     public var reminderImports: [ReminderImportReceipt]?
     public var logDeletions: [LogDeletion]?
     public var groupDeletions: [GroupDeletion]?
@@ -168,6 +178,8 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func nextRevision(writer: String) -> Revision {
         var values = categories.map(\.revision.counter)
+        values.append(contentsOf: (targetBudgets ?? []).map(\.revision.counter))
+        values.append(contentsOf: (wakingOverrides ?? []).map(\.revision.counter))
         values.append(contentsOf: entries.map(\.revision.counter))
         values.append(contentsOf: captures.map(\.revision.counter))
         values.append(contentsOf: (reminderImports ?? []).map(\.revision.counter))
@@ -208,41 +220,15 @@ public struct Ledger: Codable, Equatable, Sendable {
     }
 
     public func inferredSegments(on day: Date, now: Date = Date(), calendar: Calendar = .current, method: InferenceMethod? = nil) -> [InferredSegment] {
-        guard let bounds = calendar.dateInterval(of: .day, for: day), now > bounds.start else { return [] }
-        let eligible = entries(on: day, calendar: calendar).filter { $0.end <= min(bounds.end, now) }
-        // Closed days end at the last observation, rather than assuming the
-        // final activity continued while the person slept.
-        let cutoff = now >= bounds.end ? (eligible.first?.end ?? bounds.start) : now
-        // Keep all raw observations. If timestamps coincide, infer from the latest
-        // revision once, so contradictory observations cannot double-count time.
-        let distinct = Dictionary(eligible.map { ($0.end, $0) }, uniquingKeysWith: {
-            if $0.revision == $1.revision { return $0.id < $1.id ? $1 : $0 }
-            return $0.revision < $1.revision ? $1 : $0
-        }).values.sorted { $0.end < $1.end }
-        let rule = method ?? settings.inferenceMethod
-        func midpoint(_ a: Date, _ b: Date) -> Date { a.addingTimeInterval(b.timeIntervalSince(a) / 2) }
-        return distinct.indices.compactMap { index in
-            let sample = distinct[index]
-            let start: Date
-            if index == 0 || rule == .carryForward { start = sample.end }
-            else { start = midpoint(distinct[index - 1].end, sample.end) }
-            let end: Date
-            if index == distinct.count - 1 { end = cutoff }
-            else if rule == .carryForward { end = distinct[index + 1].end }
-            else { end = midpoint(sample.end, distinct[index + 1].end) }
-            guard end > start else { return nil }
-            return InferredSegment(sampleID: sample.id, start: start, end: end, categoryID: confirmedCategoryID(for: sample))
-        }
+        wakingSegments(on: day, now: now, calendar: calendar, method: method)
     }
 
     public func breakdown(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> [BreakdownRow] {
-        let segments = inferredSegments(on: day, now: now, calendar: calendar)
-        let dayMinutes = segments.reduce(0) { $0 + $1.minutes }
-        let known = Set(categories.map(\.id))
-        var rows = categories.map { category in
-            BreakdownRow(id: category.id, name: category.name, minutes: segments.filter { $0.categoryID == category.id }.reduce(0) { $0 + $1.minutes }, dayMinutes: dayMinutes)
+        let allocation = allocation(on: day, now: now, calendar: calendar)
+        var rows = children(of: nil).map { category in
+            BreakdownRow(id: category.id, name: category.name, minutes: allocation.total(for: category.id, ledger: self), dayMinutes: allocation.wakingMinutes)
         }
-        rows.append(BreakdownRow(id: "uncategorized", name: "Uncategorized", minutes: segments.filter { !known.contains($0.categoryID ?? "") }.reduce(0) { $0 + $1.minutes }, dayMinutes: dayMinutes))
+        rows.append(BreakdownRow(id: "uncategorized", name: "Uncategorized", minutes: allocation.directMinutes["uncategorized", default: 0], dayMinutes: allocation.wakingMinutes))
         return rows
     }
 
@@ -254,18 +240,7 @@ public struct Ledger: Codable, Equatable, Sendable {
     }
 
     public mutating func saveSample(id: String? = nil, at timestamp: Date, activity: String, categoryID: String?, writer: String, now: Date = Date()) throws {
-        if let id, isLogDeleted(id) { throw LedgerError.deletedSample }
-        let text = activity.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.count <= 500 else { throw LedgerError.invalidActivity }
-        guard timestamp.timeIntervalSince1970.isFinite else { throw LedgerError.invalidSlot }
-        guard timestamp <= now else { throw LedgerError.futureSlot }
-        if let categoryID, !categories.contains(where: { $0.id == categoryID }) { throw LedgerError.invalidCategory }
-        let revision = nextRevision(writer: writer)
-        let sampleID = id ?? UUID().uuidString
-        entries.removeAll { $0.id == sampleID }
-        let assignment: CategoryAssignment = categoryID == nil ? .automatic : .manual
-        let entry = CheckIn(end: timestamp, activity: text, categoryID: categoryID, revision: revision, sampleID: sampleID, categoryAssignment: assignment)
-        entries.append(entry)
+        try saveSample(id: id, at: timestamp, activity: activity, categoryIDs: categoryID.map { [$0] } ?? [], writer: writer, now: now)
     }
 
     public mutating func saveCategory(id: String?, name: String, writer: String) throws {
@@ -285,12 +260,18 @@ public struct Ledger: Codable, Equatable, Sendable {
         let deletion = GroupDeletion(id: id, automaticRole: group.automaticRole, revision: nextRevision(writer: writer))
         groupDeletions = (groupDeletions ?? []).filter { $0.id != id } + [deletion]
         categories.removeAll { $0.id == id }
-        for index in entries.indices where entries[index].categoryID == id {
-            let revision = nextRevision(writer: writer)
-            entries[index].categoryID = nil
-            entries[index].categoryAssignment = .automatic
-            entries[index].revision = revision
+        // Keep raw category references, activity, timestamps and IDs. Deleted shares
+        // report as Uncategorized instead of inflating any surviving selection.
+        for index in entries.indices where (entries[index].categoryIDs ?? entries[index].categoryID.map { [$0] } ?? []).contains(id) {
+            entries[index].categoryIDs = entries[index].categoryIDs ?? entries[index].categoryID.map { [$0] }
+            if entries[index].categoryID == id { entries[index].categoryID = nil }
+            entries[index].revision = nextRevision(writer: writer)
         }
+        for index in categories.indices where categories[index].parentID == id {
+            categories[index].parentID = group.parentID
+            categories[index].revision = nextRevision(writer: writer)
+        }
+        try removeIneligibleTargets(writer: writer)
     }
 
     @discardableResult
@@ -311,7 +292,7 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public mutating func saveSettings(_ value: Settings, writer: String) throws {
         _ = try value.notificationMinutes()
-        guard (0..<1440).contains(value.bedtimeMinute) else { throw LedgerError.invalidSchedule }
+        guard (0..<1440).contains(value.bedtimeMinute), (0..<1440).contains(value.wakeUpMinute ?? 420), value.bedtimeMinute != (value.wakeUpMinute ?? 420), value.wakingTimeZoneIdentifier == nil || TimeZone(identifier: value.wakingTimeZoneIdentifier!) != nil else { throw LedgerError.invalidSchedule }
         var revised = value; revised.revision = nextRevision(writer: writer); settings = revised
     }
 
@@ -325,6 +306,10 @@ public struct Ledger: Codable, Equatable, Sendable {
             return result.values.sorted { $0.id < $1.id }
         }
         categories = merged(categories, other.categories, revision: { $0.revision })
+        let budgets = merged(targetBudgets ?? [], other.targetBudgets ?? [], revision: { $0.revision })
+        targetBudgets = budgets.isEmpty ? nil : budgets
+        let schedules = merged(wakingOverrides ?? [], other.wakingOverrides ?? [], revision: { $0.revision })
+        wakingOverrides = schedules.isEmpty ? nil : schedules
         let deletions = merged(groupDeletions ?? [], other.groupDeletions ?? [], revision: { $0.revision })
         groupDeletions = deletions.isEmpty ? nil : deletions
         categories.removeAll { group in deletions.contains { $0.id == group.id } }
@@ -334,7 +319,8 @@ public struct Ledger: Codable, Equatable, Sendable {
         // A concurrent sample may still refer to a deleted group. Preserve its
         // observation and revision, and normalize only that obsolete reference.
         for index in entries.indices where deletions.contains(where: { $0.id == entries[index].categoryID }) {
-            entries[index].categoryID = nil; entries[index].categoryAssignment = .automatic
+            entries[index].categoryIDs = entries[index].categoryIDs ?? entries[index].categoryID.map { [$0] }
+            entries[index].categoryID = nil
         }
         captures = merged(captures, other.captures, revision: { $0.revision })
         let imports = merged(reminderImports ?? [], other.reminderImports ?? [], revision: { $0.revision })

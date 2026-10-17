@@ -47,15 +47,21 @@ extension Ledger {
     public func groupEntryCounts(now: Date = Date()) -> [String: Int] {
         var counts: [String: Int] = [:]
         for entry in activeEntries where entry.end <= now {
-            counts[confirmedCategoryID(for: entry) ?? "uncategorized", default: 0] += 1
+            let ids = confirmedCategoryIDs(for: entry)
+            var counted = Set<String>()
+            for id in ids {
+                counted.insert(id)
+                var node = id
+                while let parent = categoryParents[node] { counted.insert(parent); node = parent }
+            }
+            if allocationCategoryIDs(for: entry).contains("uncategorized") || ids.isEmpty { counted.insert("uncategorized") }
+            for id in counted { counts[id, default: 0] += 1 }
         }
         return counts
     }
 
     public func confirmedCategoryID(for entry: CheckIn) -> String? {
-        guard entry.categoryAssignment != .automatic,
-              let id = entry.categoryID, categories.contains(where: { $0.id == id }) else { return nil }
-        return id
+        confirmedCategoryIDs(for: entry).first
     }
 
     public func unconfirmedMatches(for activity: String) -> [CheckIn] {
@@ -104,6 +110,7 @@ extension Ledger {
             // older paired device. Suggestions are computed only for display.
             guard entry.categoryAssignment == .automatic && entry.categoryID != nil else { continue }
             entries[index].categoryID = nil
+            entries[index].categoryIDs = nil
             // This removes an obsolete derived cache, not a user's edit. Keep
             // its revision so an older Watch cannot create a sync ping-pong by
             // restoring that cache and receiving a newer clearing revision.
@@ -120,6 +127,7 @@ extension Ledger {
         var counter = nextRevision(writer: writer).counter
         for index in entries.indices where selected.contains(entries[index].id) {
             entries[index].categoryID = categoryID
+            entries[index].categoryIDs = categoryID.map { [$0] } ?? []
             entries[index].categoryAssignment = categoryID == nil ? .automatic : .manual
             entries[index].revision = Revision(counter: counter, writer: writer); counter += 1
         }

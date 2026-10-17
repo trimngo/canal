@@ -76,18 +76,7 @@ struct SettingsView: View {
                     var current = store.ledger.settings; current.use24HourTime = value
                     do { try store.saveSettings(current); settings.use24HourTime = value } catch { store.report(error) }
                 }))
-                Toggle("Show time remaining today", isOn: Binding(get: { store.ledger.settings.showRemainingTime }, set: { value in
-                    var current = store.ledger.settings; current.showRemainingTime = value
-                    do { try store.saveSettings(current) } catch { store.report(error) }
-                })).accessibilityIdentifier("settings.remaining")
-                Picker("Bedtime", selection: Binding(get: { store.ledger.settings.bedtimeMinute }, set: { value in
-                    var current = store.ledger.settings; current.bedtimeMinute = value
-                    do { try store.saveSettings(current) } catch { store.report(error) }
-                })) {
-                    ForEach(stepMinutes, id: \.self) { Text(minuteLabel($0)).tag($0) }
-                }.accessibilityIdentifier("settings.bedtime")
-                Text("When enabled, Today’s breakdown and pie include the time from now until bedtime. Percentages use tracked time plus that remaining time.")
-                    .font(.footnote).foregroundStyle(.secondary)
+
             }
             Section {
                 Picker("Method", selection: Binding(get: { store.ledger.settings.inferenceMethod }, set: { value in
@@ -97,11 +86,12 @@ struct SettingsView: View {
                     ForEach(InferenceMethod.allCases) { Text($0.name).tag($0) }
                 }
             } header: { Text("Estimate time") } footer: {
-                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Today covers your first log until now; past days end at the last log. Percentages use tracked time. Changing methods keeps your original samples.")
+                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates extend the first and last activity to your waking boundaries. Today stops at now or bedtime. Days without logs are excluded. Percentages use waking time. Changing methods keeps your original samples.")
             }
             Section {
-                Button("Manage groups") { managingGroups = true }
-            } header: { Text("Activity groups") } footer: {
+                NavigationLink("Waking schedule") { WakingScheduleView() }
+                Button("Categories & targets") { managingGroups = true }
+            } header: { Text("Time allocation") } footer: {
                 Text("Offline suggestions use activity words and confirmed choices. A suggestion never assigns a group until you confirm it. Create and rename groups anytime.")
             }
             Section("Your data") {
