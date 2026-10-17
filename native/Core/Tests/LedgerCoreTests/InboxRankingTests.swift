@@ -393,4 +393,19 @@ final class InboxRankingTests: XCTestCase {
         }
     }
 
+    func testReplenishmentSkipsUnknownLoserPairsWhenKnownBestWasDisplacedLast() throws {
+        var ledger = try legacyRanked(14)
+        for id in ["015", "016"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
+        try finish(&ledger)
+        try ledger.addCapture(text: "Urgent", id: "urgent", writer: "phone")
+        ledger.prepareRanking(writer: "phone")
+        try answerBatch(&ledger) { _ in "urgent" }
+        XCTAssertEqual(ledger.inboxRanking?.topTen?.backlog.last, "009")
+        ledger.setCaptureDone(id: "000", done: true, writer: "phone")
+        ledger.replenishTopTen(writer: "phone")
+        XCTAssertNil(ledger.rankingPair) // 009 already beats every backlog item, including unrelated newcomers.
+        XCTAssertEqual(ledger.rankedCaptureIDs.last, "009")
+        XCTAssertTrue(ledger.topTenIsVerified)
+    }
+
 }
