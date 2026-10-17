@@ -23,6 +23,12 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
+                NavigationLink("Siri via Reminders") { ReminderInboxSetupView() }
+                    .accessibilityIdentifier("settings.reminders")
+            } footer: {
+                Text("Capture an idea in one sentence: ‘Siri, remind me to…’ Connect a list and set it as your default in iPhone Settings.")
+            }
+            Section {
                 Toggle("Every 15 minutes", isOn: $settings.notificationsEnabled)
                 Toggle("All day", isOn: $settings.notificationsAllDay).accessibilityIdentifier("settings.notifications-all-day")
                 if !settings.notificationsAllDay {
@@ -117,7 +123,7 @@ struct SettingsView: View {
                 Text("Your iPhone saves a daily backup in your iCloud Drive after changes, including Watch logs once they sync. Older daily copies are kept. Enable iCloud Drive for Dash in iPhone Settings. An upload-pending backup is still waiting to reach iCloud.")
             }
             Section {
-                Text("Ideas: ‘Siri, create a note in Dash called idea, try shorter lessons.’ Activities: ‘Siri, create a note in Dash called doing, preparing class.’")
+                Text("Direct shortcuts are also available: ‘Siri, capture in Dash’ and ‘Siri, log in Dash.’ Siri may ask for the text. For one-sentence ideas, use Siri via Reminders above.")
                 #if targetEnvironment(simulator)
                 // Unsigned simulator apps have no Siri entitlement. Calling
                 // INPreferences there raises an Objective-C exception.

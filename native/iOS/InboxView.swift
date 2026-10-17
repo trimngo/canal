@@ -74,7 +74,9 @@ struct InboxView: View {
                 }
             }
             Section("Hands-free capture") {
-                Text("Idea: ‘Siri, create a note in Dash called idea, try shorter lessons.’\nActivity: ‘Siri, create a note in Dash called doing, preparing class.’ Say the whole entry in one sentence.")
+                NavigationLink("Set up Siri via Reminders") { ReminderInboxSetupView() }
+                    .accessibilityIdentifier("inbox.reminders")
+                Text("Say ‘Siri, remind me to…’ and Dash imports the idea from your connected list. New items appear when you open Dash; background import is best effort.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
@@ -98,6 +100,7 @@ struct InboxView: View {
                 do { try await Task.sleep(nanoseconds: 4_000_000_000) } catch { return }
                 copiedIdeaCount = nil
             }
+            .task { await ReminderInbox.shared.refresh() }
     }
     private func copyIdeas() {
         let export = store.ledger.inboxExport

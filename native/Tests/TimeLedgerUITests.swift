@@ -210,6 +210,45 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("DashInbox", in: app)
     }
 
+    func testRemindersImportUsesSelectedListAndKeepsDeletedIdeasDeletedAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-reminders-fixture"]; app.launch()
+        app.tabBars.buttons["Settings"].tap(); app.buttons["settings.reminders"].tap()
+        let allow = app.buttons["reminders.allow"]
+        if allow.waitForExistence(timeout: 2) {
+            allow.tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let permission = springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Allow")).firstMatch
+            if permission.waitForExistence(timeout: 5) { permission.tap() }
+        }
+        let create = app.buttons["reminders.create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10)); create.tap()
+        let importNow = app.buttons["reminders.import"]
+        XCTAssertTrue(importNow.waitForExistence(timeout: 20))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 25), .completed)
+        recordScreen("RemindersSetup", in: app)
+        app.tabBars.buttons["Inbox"].tap()
+        XCTAssertTrue(app.staticTexts["Reminders bicycle idea UI fixture"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Completed source UI fixture"].exists)
+        XCTAssertFalse(app.staticTexts["Other list must stay private UI fixture"].exists)
+        recordScreen("RemindersInbox", in: app)
+        let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.actions.")).firstMatch
+        actions.tap(); app.buttons["Delete idea"].tap()
+        app.tabBars.buttons["Settings"].tap()
+        reveal(importNow, in: app); importNow.tap()
+        app.terminate(); app.launchArguments = []; app.launch()
+        app.tabBars.buttons["Settings"].tap(); app.buttons["settings.reminders"].tap()
+        XCTAssertTrue(importNow.waitForExistence(timeout: 20))
+        let reloaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
+        XCTAssertEqual(XCTWaiter.wait(for: [reloaded], timeout: 25), .completed)
+        app.tabBars.buttons["Inbox"].tap()
+        XCTAssertFalse(app.staticTexts["Reminders bicycle idea UI fixture"].exists)
+        app.tabBars.buttons["Settings"].tap()
+        let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
+        XCTAssertFalse(importNow.exists)
+    }
+
     func testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
         app.tabBars.buttons["Inbox"].tap()

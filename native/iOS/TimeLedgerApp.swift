@@ -13,6 +13,7 @@ struct TimeLedgerApp: App {
                 .task {
                     store.start(); LedgerShortcuts.updateAppShortcutParameters()
                     do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) }
+                    await ReminderInbox.shared.refresh()
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--ui-notification-checkin") {
                         NotificationScheduler.shared.presentSample()
@@ -40,8 +41,12 @@ struct TimeLedgerApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
                         store.refresh()
-                        Task { do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) } }
+                        Task {
+                            await ReminderInbox.shared.refresh()
+                            do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) }
+                        }
                     }
+                    if phase == .background { ReminderInbox.shared.scheduleBackgroundRefresh() }
                 }
                 .onChange(of: store.ledger.settings) { _, settings in
                     Task { do { try await NotificationScheduler.shared.apply(settings) } catch { store.report(error) } }

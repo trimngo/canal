@@ -3,9 +3,11 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
+    case reminderImport(ReminderImportReceipt)
     case logDeletion(LogDeletion), category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
+        case .reminderImport(let item): return "reminder-import-\(item.id)"
         case .logDeletion(let item): return "log-deletion-\(item.id)"
         case .category(let item): return "category-\(item.id)"
         case .groupDeletion(let item): return "group-deletion-\(item.id)"
@@ -16,6 +18,7 @@ private enum CloudItem: Codable {
     }
     var revision: Revision {
         switch self {
+        case .reminderImport(let item): return item.revision
         case .logDeletion(let item): return item.revision
         case .category(let item): return item.revision
         case .groupDeletion(let item): return item.revision
@@ -27,6 +30,7 @@ private enum CloudItem: Codable {
     func apply(to ledger: inout Ledger) {
         var remote = Ledger(); remote.categories = []; remote.entries = []; remote.captures = []
         switch self {
+        case .reminderImport(let item): remote.reminderImports = [item]
         case .logDeletion(let item): remote.logDeletions = [item]
         case .category(let item): remote.categories = [item]
         case .groupDeletion(let item): remote.groupDeletions = [item]
@@ -42,6 +46,7 @@ private enum CloudItem: Codable {
         items.append(contentsOf: (ledger.logDeletions ?? []).map(CloudItem.logDeletion))
         items.append(contentsOf: ledger.entries.map(CloudItem.entry))
         items.append(contentsOf: ledger.captures.map(CloudItem.capture))
+        items.append(contentsOf: (ledger.reminderImports ?? []).map(CloudItem.reminderImport))
         items.append(.settings(ledger.settings))
         return items
     }

@@ -155,6 +155,7 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var reminderImports: [ReminderImportReceipt]?
     public var logDeletions: [LogDeletion]?
     public var groupDeletions: [GroupDeletion]?
     public var inboxRanking: InboxRanking?
@@ -169,6 +170,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         var values = categories.map(\.revision.counter)
         values.append(contentsOf: entries.map(\.revision.counter))
         values.append(contentsOf: captures.map(\.revision.counter))
+        values.append(contentsOf: (reminderImports ?? []).map(\.revision.counter))
         values.append(contentsOf: (logDeletions ?? []).map(\.revision.counter))
         values.append(contentsOf: (groupDeletions ?? []).map(\.revision.counter))
         values.append(contentsOf: [settings.revision.counter, inboxRanking?.revision.counter ?? 0])
@@ -335,6 +337,8 @@ public struct Ledger: Codable, Equatable, Sendable {
             entries[index].categoryID = nil; entries[index].categoryAssignment = .automatic
         }
         captures = merged(captures, other.captures, revision: { $0.revision })
+        let imports = merged(reminderImports ?? [], other.reminderImports ?? [], revision: { $0.revision })
+        reminderImports = imports.isEmpty ? nil : imports
         if let ranking = other.inboxRanking, inboxRanking == nil || inboxRanking!.revision < ranking.revision { inboxRanking = ranking }
         if settings.revision < other.settings.revision { settings = other.settings }
     }

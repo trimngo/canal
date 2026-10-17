@@ -236,6 +236,15 @@ final class LedgerStore: ObservableObject {
     }
 
     @discardableResult
+    func importReminders(_ snapshots: [ReminderSnapshot]) throws -> Int {
+        start()
+        var draft = ledger
+        let count = draft.importReminders(snapshots, writer: writer)
+        if draft != ledger { try commit(draft) }
+        return count
+    }
+
+    @discardableResult
     func addCapture(_ text: String, at timestamp: Date = Date()) throws -> Capture {
         var draft = ledger
         let capture = try draft.addCapture(text: text, writer: writer, now: timestamp)

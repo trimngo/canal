@@ -55,6 +55,10 @@ targets:
           UIApplicationSupportsMultipleScenes: true
         INIntentsSupported: [INCreateNoteIntent]
         NSSiriUsageDescription: Save ideas and log current activities in Dash using Siri.
+        NSRemindersFullAccessUsageDescription: Dash reads unfinished reminders from the list you choose and copies them into your idea inbox. It can create a Dash Inbox list when you ask.
+        NSRemindersUsageDescription: Dash imports ideas from your selected Reminders list.
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [com.trimngo.TimeLedger.reminders-refresh]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)
