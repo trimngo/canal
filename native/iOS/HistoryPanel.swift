@@ -5,6 +5,7 @@ import LedgerCore
 struct HistoryPanel: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
+    var expandsBreakdown = false
     let select: (BreakdownRow) -> Void
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
@@ -32,7 +33,7 @@ struct HistoryPanel: View {
                     trend.containerRelativeFrame(.horizontal).id(2)
                 }.scrollTargetLayout()
             }.scrollTargetBehavior(.paging).scrollPosition(id: $page).scrollIndicators(.hidden)
-                .frame(height: page == 0 ? min(250, max(130, CGFloat(report.rows.count) * 60)) : 250)
+                .frame(height: page == 0 ? breakdownHeight : 250)
                 .accessibilityIdentifier("report.pages")
             HStack(spacing: 8) {
                 ForEach(0..<3) { index in
@@ -47,6 +48,10 @@ struct HistoryPanel: View {
         .onChange(of: report.end) { _, _ in
             if !report.rows.contains(where: { $0.id == selectedGroupID }) { clearSelection() }
         }
+    }
+    private var breakdownHeight: CGFloat {
+        let height = max(150, CGFloat(report.rows.count) * 60)
+        return expandsBreakdown ? height : min(250, height)
     }
     private var breakdown: some View {
         ScrollView {

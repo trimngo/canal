@@ -1,14 +1,14 @@
 import SwiftUI
 import LedgerCore
 
-struct DayView: View {
+struct TargetsView: View {
     @EnvironmentObject var store: LedgerStore
     @State private var managingCategories = false
     @State private var reviewing = false
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { _ in
             content(now: Date())
-        }.navigationTitle("Today").navigationBarTitleDisplayMode(.inline)
+        }.navigationTitle("Targets").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("Categories") { managingCategories = true }.accessibilityIdentifier("dashboard.groups")
@@ -66,7 +66,7 @@ struct DayView: View {
                     Text("Configured waking day \(store.dayLabel(day)): \(store.time(bounds.start))–\(store.time(bounds.end)) · \(store.ledger.reportingCalendar().timeZone.identifier)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
-            } header: { Text("Where your time went").textCase(nil).font(.headline).accessibilityIdentifier("dashboard.breakdown-title") }
+            } header: { Text("Allocation vs targets").textCase(nil).font(.headline).accessibilityIdentifier("targets.breakdown-title") }
             Section {
                 ForEach(dashboardCategories(today: today, week: week, targets: targets)) { category in
                     AllocationCategoryRow(category: category, today: today, week: week, target: targets[category.id])

@@ -58,7 +58,7 @@ struct TimeLedgerApp: App {
     }
 }
 
-enum LedgerScreen: Hashable { case calendar, history, inbox, settings }
+enum LedgerScreen: Hashable { case calendar, history, targets, inbox, settings }
 private enum AppTab: Hashable { case today, log, inbox, settings }
 
 struct RootView: View {
@@ -75,6 +75,7 @@ struct RootView: View {
                     switch screen {
                     case .calendar: CalendarHistoryView()
                     case .history: AllocationHistoryView()
+                    case .targets: TargetsView()
                     case .inbox: InboxView()
                     case .settings: SettingsView()
                     }
