@@ -10,6 +10,9 @@ extension Ledger {
     /// Preserve full text and original timestamps; deleted ideas stay excluded.
     public var inboxExport: InboxExport {
         let ranks = Dictionary(uniqueKeysWithValues: rankedCaptureIDs.enumerated().map { ($0.element, $0.offset + 1) })
+        let backlog = Set(backlogCaptures.map(\.id))
+        let inProgress = Set(partiallyRankedCaptures.map(\.id))
+        let now = Date()
         let ideas = captures.filter { $0.deletedAt == nil }.sorted {
             if $0.isDone != $1.isDone { return !$0.isDone }
             let a = ranks[$0.id], b = ranks[$1.id]
@@ -21,10 +24,17 @@ extension Ledger {
         let items = ideas.enumerated().map { index, idea in
             let content = idea.text.replacingOccurrences(of: "\n", with: "\n   ")
             let status = idea.isDone ? "Completed" : "Open"
-            let rank = ranks[idea.id].map { String($0) } ?? "Not ranked"
+            let list: String, rank: String
+            if idea.isDone { list = "Completed"; rank = "Not ranked" }
+            else if idea.isReference == true { list = "Reference"; rank = "Not ranked" }
+            else if idea.isSnoozed(at: now) { list = "Snoozed"; rank = "Not ranked" }
+            else if let position = ranks[idea.id] { list = "Top 10 Priorities"; rank = String(position) }
+            else if backlog.contains(idea.id) { list = "Backlog"; rank = "Evaluated, outside Top 10" }
+            else if inProgress.contains(idea.id) { list = "In progress"; rank = "Placement incomplete" }
+            else { list = "New Ideas"; rank = "Not evaluated" }
             let notes = idea.notes.map { "\n   Notes: " + $0.replacingOccurrences(of: "\n", with: "\n   ") } ?? ""
-            let snooze = idea.snoozedUntil.map { "\n   Snoozed until: " + formatter.string(from: $0) } ?? ""
-            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   Rank: \(rank)\(notes)\(snooze)"
+            let snooze = idea.snoozedUntil.map { "\n   " + ($0 > now ? "Snoozed until: " : "Returned from snooze: ") + formatter.string(from: $0) } ?? ""
+            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(notes)\(snooze)"
         }
         let noun = ideas.count == 1 ? "idea" : "ideas"
         return InboxExport(count: ideas.count, text: (["Dash inbox — \(ideas.count) \(noun)"] + items).joined(separator: "\n\n"))

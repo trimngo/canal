@@ -86,6 +86,7 @@ public struct Capture: Codable, Identifiable, Equatable, Sendable {
     public var deletedAt: Date?
     public var notes: String?
     public var snoozedUntil: Date?
+    public var isReference: Bool?
     // Changes only when starting a fresh review cycle, not when editing notes.
     public var reviewRevision: Revision?
     public var id: String

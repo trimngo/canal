@@ -359,6 +359,10 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; draft.bringBackCapture(capture.id, writer: writer); try commit(draft)
     }
 
+    func setCaptureReference(_ capture: Capture, reference: Bool) throws {
+        var draft = ledger; draft.setCaptureReference(capture.id, reference: reference, writer: writer); try commit(draft)
+    }
+
     func deleteCapture(_ capture: Capture) throws {
         var draft = ledger; draft.setCaptureDeleted(capture.id, deleted: true, writer: writer)
         try commit(draft)
