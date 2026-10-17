@@ -15,12 +15,20 @@ final class TimeLedgerUITests: XCTestCase {
             !frame.isNull && !frame.isInfinite && !frame.isEmpty &&
                 [frame.minX, frame.minY, frame.maxX, frame.maxY].allSatisfy { $0.isFinite }
         }
+        func visibleFrame(_ query: XCUIElementQuery, in bounds: CGRect) -> CGRect? {
+            // Bound indices become stale when a dismissed sheet removes a bar
+            // between XCTest snapshots. Resolve one fresh match instead.
+            let bar = query.firstMatch
+            guard bar.exists else { return nil }
+            let frame = bar.frame
+            return usable(frame) && frame.intersects(bounds) ? frame : nil
+        }
         for _ in 0..<10 {
             let bounds = app.frame
             guard usable(bounds) else { XCTFail("App has no visible bounds"); return }
             // Dismissed sheets can leave offscreen bars with CGRect.null frames.
-            let navigation = app.navigationBars.allElementsBoundByIndex.map(\.frame).first { usable($0) && $0.intersects(bounds) }
-            let tabs = app.tabBars.allElementsBoundByIndex.map(\.frame).first { usable($0) && $0.intersects(bounds) }
+            let navigation = visibleFrame(app.navigationBars, in: bounds)
+            let tabs = visibleFrame(app.tabBars, in: bounds)
             let top = max(bounds.minY, min(navigation?.maxY ?? bounds.minY, bounds.maxY))
             var bottom = min(bounds.maxY, max(tabs?.minY ?? bounds.maxY, top))
             if app.keyboards.firstMatch.exists {
