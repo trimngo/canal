@@ -144,10 +144,11 @@ struct InboxView: View {
         if waiting.isEmpty, !store.ledger.needsTopTenReplenishment, !store.ledger.rankingIsActive {
             return ranked.isEmpty ? "Capture first. Rank whenever you like." : "Up to date · \(ranked.count) priorities"
         }
+        let pending = "\(waiting.count) unseen · \(inProgress.count) in progress."
         if store.ledger.needsTopTenReplenishment {
-            return "Provisional · Review the backlog to confirm your highest priorities. \(waiting.count) new ideas not yet reviewed."
+            return "Provisional · Review the backlog to confirm your highest priorities. " + pending
         }
-        return "Provisional · \(waiting.count) new ideas not yet reviewed."
+        return "Provisional · " + pending
     }
     private func captureRow(_ capture: Capture) -> some View {
         HStack(alignment: .top, spacing: 14) {
