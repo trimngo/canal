@@ -383,7 +383,11 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Done"].tap(); app.terminate(); app.launchArguments = []; app.launch()
         openInbox(app); openRanking(app)
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5)); app.buttons["ranking.first"].tap()
-        app.buttons["ranking.second"].tap()
+        // First-look ordering can reuse a prior answer and finish immediately.
+        for _ in 0..<10 {
+            if !app.buttons["ranking.second"].exists { break }
+            app.buttons["ranking.second"].tap()
+        }
         XCTAssertTrue(app.staticTexts["Review complete"].firstMatch.waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         let field = element(app, "inbox.text"); field.tap(); field.typeText("New idea")
