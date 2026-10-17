@@ -6,8 +6,8 @@ struct DayView: View {
     @State private var managingCategories = false
     @State private var reviewing = false
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { context in
-            content(now: context.date)
+        TimelineView(.periodic(from: Date(), by: 60)) { _ in
+            content(now: Date())
         }.navigationTitle("Today").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
