@@ -66,7 +66,7 @@ final class TimeLedgerUITests: XCTestCase {
         let field = element(app, "checkin.activity")
         XCTAssertTrue(header.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Show pie chart"].exists)
-        XCTAssertTrue(app.buttons["dashboard.targets"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Commitments"].exists)
         XCTAssertFalse(element(app, "allocation.periods").exists)
         XCTAssertFalse(element(app, "report.range").exists)
         XCTAssertFalse(field.exists)
@@ -493,11 +493,14 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(dashboardGroup("music", in: app).exists)
         XCTAssertFalse(element(app, "allocation.periods").exists)
         recordScreen("TodayRestored", in: app)
-        app.buttons["dashboard.targets"].tap()
+        app.tabBars.buttons["Commitments"].tap()
+        app.buttons["commitments.more"].tap()
+        app.buttons["Percentage targets"].tap()
         XCTAssertTrue(element(app, "allocation.periods").waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Rolling 7 days"].exists)
         recordScreen("AllocationDashboard", in: app)
-        app.navigationBars.buttons["Today"].tap()
+        app.navigationBars.buttons["Commitments"].tap()
+        app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "allocation.periods").exists)
         app.buttons["dashboard.groups"].tap()
@@ -529,6 +532,60 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Done"].tap()
         let save = app.buttons["checkin.save"]; reveal(save, in: app); save.tap()
         XCTAssertTrue(app.staticTexts["Saved. You can change it anytime."].waitForExistence(timeout: 5))
+    }
+
+    func testWeeklyCommitmentsCanBeCreatedEditedRemovedAndPersistWithoutDeletingLogs() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(app.staticTexts["Make time for what matters"].waitForExistence(timeout: 5))
+        app.buttons["commitments.add"].tap()
+        element(app, "commitment.category").tap(); app.buttons["Work"].tap()
+        setCommitmentNumber("commitment.hours", to: "0", in: app)
+        setCommitmentNumber("commitment.minutes", to: "0", in: app)
+        XCTAssertFalse(app.buttons["commitment.save"].isEnabled)
+        setCommitmentNumber("commitment.minutes", to: "30", in: app)
+        app.buttons["commitment.save"].tap()
+        let work = app.buttons["commitments.edit.work"]
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 30m this week"))
+        work.tap()
+        setCommitmentNumber("commitment.hours", to: "1", in: app)
+        setCommitmentNumber("commitment.minutes", to: "0", in: app)
+        recordScreen("WeeklyCommitmentEditor", in: app)
+        app.buttons["commitment.save"].tap()
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 1h this week"))
+        app.terminate(); app.launchArguments = []; app.launch()
+        XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 5))
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(work.label.contains("of 1h this week"))
+        work.tap(); app.buttons["commitment.remove"].tap()
+        app.sheets.buttons["Remove commitment"].tap()
+        XCTAssertTrue(app.staticTexts["Make time for what matters"].waitForExistence(timeout: 5))
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        XCTAssertFalse(work.exists)
+        openLogs(app)
+        XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
+    }
+
+    func testWeeklyCommitmentsUseCategoryLogsAndHaveADirectBottomTab() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-commitments-fixture"]; app.launch()
+        XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "allocation.periods").exists)
+        app.tabBars.buttons["Commitments"].tap()
+        let work = app.buttons["commitments.edit.work"], music = app.buttons["commitments.edit.music"]
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); XCTAssertTrue(music.exists)
+        XCTAssertTrue(work.label.contains("of 1h this week"))
+        XCTAssertTrue(music.label.contains("of 10h this week"))
+        XCTAssertFalse(element(app, "allocation.periods").exists)
+        recordScreen("WeeklyCommitments", in: app)
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(element(app, "dashboard.breakdown-title").exists)
+    }
+
+    private func setCommitmentNumber(_ id: String, to value: String, in app: XCUIApplication) {
+        let field = app.textFields[id]
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8)); field.typeText(value)
+        XCTAssertEqual(field.value as? String, value)
     }
 
     private func openHistory(_ app: XCUIApplication) {

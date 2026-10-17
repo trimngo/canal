@@ -163,6 +163,7 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var weeklyCommitments: [WeeklyCommitment]?
     public var targetBudgets: [TargetBudget]?
     public var wakingOverrides: [WakingOverride]?
     public var reminderImports: [ReminderImportReceipt]?
@@ -178,6 +179,7 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func nextRevision(writer: String) -> Revision {
         var values = categories.map(\.revision.counter)
+        values.append(contentsOf: (weeklyCommitments ?? []).map(\.revision.counter))
         values.append(contentsOf: (targetBudgets ?? []).map(\.revision.counter))
         values.append(contentsOf: (wakingOverrides ?? []).map(\.revision.counter))
         values.append(contentsOf: entries.map(\.revision.counter))
@@ -306,6 +308,8 @@ public struct Ledger: Codable, Equatable, Sendable {
             return result.values.sorted { $0.id < $1.id }
         }
         categories = merged(categories, other.categories, revision: { $0.revision })
+        let commitments = merged(weeklyCommitments ?? [], other.weeklyCommitments ?? [], revision: { $0.revision })
+        weeklyCommitments = commitments.isEmpty ? nil : commitments
         let budgets = merged(targetBudgets ?? [], other.targetBudgets ?? [], revision: { $0.revision })
         targetBudgets = budgets.isEmpty ? nil : budgets
         let schedules = merged(wakingOverrides ?? [], other.wakingOverrides ?? [], revision: { $0.revision })

@@ -3,11 +3,13 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
+    case weeklyCommitment(WeeklyCommitment)
     case targetBudget(TargetBudget), wakingOverride(WakingOverride)
     case reminderImport(ReminderImportReceipt)
     case logDeletion(LogDeletion), category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
+        case .weeklyCommitment(let item): return "weekly-commitment-\(item.id)"
         case .targetBudget(let item): return "target-budget-\(item.id)"
         case .wakingOverride(let item): return "waking-override-\(item.id)"
         case .reminderImport(let item): return "reminder-import-\(item.id)"
@@ -21,6 +23,7 @@ private enum CloudItem: Codable {
     }
     var revision: Revision {
         switch self {
+        case .weeklyCommitment(let item): return item.revision
         case .targetBudget(let item): return item.revision
         case .wakingOverride(let item): return item.revision
         case .reminderImport(let item): return item.revision
@@ -35,6 +38,7 @@ private enum CloudItem: Codable {
     func apply(to ledger: inout Ledger) {
         var remote = Ledger(); remote.categories = []; remote.entries = []; remote.captures = []
         switch self {
+        case .weeklyCommitment(let item): remote.weeklyCommitments = [item]
         case .targetBudget(let item): remote.targetBudgets = [item]
         case .wakingOverride(let item): remote.wakingOverrides = [item]
         case .reminderImport(let item): remote.reminderImports = [item]
@@ -49,6 +53,7 @@ private enum CloudItem: Codable {
     }
     static func all(in ledger: Ledger) -> [CloudItem] {
         var items = ledger.categories.map(CloudItem.category)
+        items.append(contentsOf: (ledger.weeklyCommitments ?? []).map(CloudItem.weeklyCommitment))
         items.append(contentsOf: (ledger.groupDeletions ?? []).map(CloudItem.groupDeletion))
         items.append(contentsOf: (ledger.logDeletions ?? []).map(CloudItem.logDeletion))
         items.append(contentsOf: ledger.entries.map(CloudItem.entry))

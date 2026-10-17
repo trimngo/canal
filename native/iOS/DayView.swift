@@ -31,9 +31,7 @@ struct AllocationHistoryView: View {
             .navigationTitle(range == .today ? "Today" : "Your time").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if isHome {
-                        NavigationLink("Targets", value: LedgerScreen.targets).accessibilityIdentifier("dashboard.targets")
-                    } else {
+                    if !isHome {
                         NavigationLink(value: LedgerScreen.calendar) { Label("Calendar", systemImage: "calendar") }
                             .accessibilityIdentifier("dashboard.calendar")
                     }

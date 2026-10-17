@@ -59,7 +59,7 @@ struct TimeLedgerApp: App {
 }
 
 enum LedgerScreen: Hashable { case calendar, history, targets, inbox, settings }
-private enum AppTab: Hashable { case today, log, inbox, settings }
+private enum AppTab: Hashable { case today, commitments, log, inbox, settings }
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
@@ -71,16 +71,11 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack(path: $path) {
-                DayView().navigationDestination(for: LedgerScreen.self) { screen in
-                    switch screen {
-                    case .calendar: CalendarHistoryView()
-                    case .history: AllocationHistoryView()
-                    case .targets: TargetsView()
-                    case .inbox: InboxView()
-                    case .settings: SettingsView()
-                    }
-                }
+                DayView().navigationDestination(for: LedgerScreen.self) { destination($0) }
             }.tabItem { Label("Today", systemImage: "chart.pie") }.tag(AppTab.today)
+            NavigationStack {
+                CommitmentsView().navigationDestination(for: LedgerScreen.self) { destination($0) }
+            }.tabItem { Label("Commitments", systemImage: "checkmark.circle") }.tag(AppTab.commitments)
             NavigationStack { CheckInView() }.tabItem { Label("Log", systemImage: "plus.circle") }.tag(AppTab.log)
             NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(AppTab.inbox)
             NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(AppTab.settings)
@@ -97,6 +92,15 @@ struct RootView: View {
             }
         }
         .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
+    }
+    @ViewBuilder private func destination(_ screen: LedgerScreen) -> some View {
+        switch screen {
+        case .calendar: CalendarHistoryView()
+        case .history: AllocationHistoryView()
+        case .targets: TargetsView()
+        case .inbox: InboxView()
+        case .settings: SettingsView()
+        }
     }
     private func showRequestedCapture() {
         guard store.pendingLogRequest else { return }

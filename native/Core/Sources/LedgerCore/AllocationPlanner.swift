@@ -240,18 +240,23 @@ extension Ledger {
             return InferredSegment(sampleID: sample.id, start: start, end: end, categoryID: confirmedCategoryID(for: sample))
         }
     }
-    public func allocation(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> AllocationPeriod {
+    public func allocation(on day: Date, now: Date = Date(), calendar: Calendar = .current, clippingTo interval: DateInterval? = nil) -> AllocationPeriod {
         let segments = inferredSegments(on: day, now: now, calendar: calendar)
         guard !segments.isEmpty else { return AllocationPeriod() }
         let samples = Dictionary(wakingSamples(on: day, now: now, calendar: calendar).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var period = AllocationPeriod(); period.representedDays = 1
+        var period = AllocationPeriod()
         for segment in segments {
             guard let sample = samples[segment.sampleID] else { continue }
+            let start = max(segment.start, interval?.start ?? segment.start)
+            let end = min(segment.end, interval?.end ?? segment.end)
+            guard end > start else { continue }
+            let minutes = end.timeIntervalSince(start) / 60
             let choices = allocationCategoryIDs(for: sample)
             let ids = choices.isEmpty ? ["uncategorized"] : choices
-            for id in ids { period.directMinutes[id, default: 0] += segment.minutes / Double(ids.count) }
-            period.wakingMinutes += segment.minutes
+            for id in ids { period.directMinutes[id, default: 0] += minutes / Double(ids.count) }
+            period.wakingMinutes += minutes
         }
+        period.representedDays = period.wakingMinutes > 0 ? 1 : 0
         return period
     }
     public func rollingAllocation(now: Date = Date(), calendar: Calendar = .current) -> AllocationPeriod {
