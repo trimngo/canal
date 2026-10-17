@@ -205,6 +205,7 @@ final class LedgerStore: ObservableObject {
 
     func refresh() {
         start(); importSiriCaptures(); companion?.refresh(); cloud?.requestSync()
+        do { try resumeRanking() } catch { report(error) }
         #if os(iOS)
         if storageAvailable { backup?.request(ledger) }
         #endif
@@ -344,6 +345,18 @@ final class LedgerStore: ObservableObject {
 
     func updateCaptureText(_ capture: Capture, text: String) throws {
         var draft = ledger; try draft.updateCaptureText(id: capture.id, text: text, writer: writer); try commit(draft)
+    }
+
+    func updateCapture(_ capture: Capture, text: String, notes: String) throws {
+        var draft = ledger; try draft.updateCapture(id: capture.id, text: text, notes: notes, writer: writer); try commit(draft)
+    }
+
+    func snoozeCapture(_ capture: Capture, until: Date) throws {
+        var draft = ledger; draft.snoozeCapture(capture.id, until: until, writer: writer); try commit(draft)
+    }
+
+    func bringBackCapture(_ capture: Capture) throws {
+        var draft = ledger; draft.bringBackCapture(capture.id, writer: writer); try commit(draft)
     }
 
     func deleteCapture(_ capture: Capture) throws {

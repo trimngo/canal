@@ -22,7 +22,9 @@ extension Ledger {
             let content = idea.text.replacingOccurrences(of: "\n", with: "\n   ")
             let status = idea.isDone ? "Completed" : "Open"
             let rank = ranks[idea.id].map { String($0) } ?? "Not ranked"
-            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   Rank: \(rank)"
+            let notes = idea.notes.map { "\n   Notes: " + $0.replacingOccurrences(of: "\n", with: "\n   ") } ?? ""
+            let snooze = idea.snoozedUntil.map { "\n   Snoozed until: " + formatter.string(from: $0) } ?? ""
+            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   Rank: \(rank)\(notes)\(snooze)"
         }
         let noun = ideas.count == 1 ? "idea" : "ideas"
         return InboxExport(count: ideas.count, text: (["Dash inbox — \(ideas.count) \(noun)"] + items).joined(separator: "\n\n"))

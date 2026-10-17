@@ -4,13 +4,18 @@ import LedgerCore
 
 struct InboxView: View {
     @EnvironmentObject var store: LedgerStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var clock = Date()
     @State private var text = ""
     @FocusState private var focused: Bool
     @State private var showDone = false
     @State private var ranking = false
     @State private var showBacklog = false
+    @State private var showSnoozed = false
     @State private var editing: Capture?
+    @State private var snoozing: Capture?
     @State private var copiedIdeaCount: Int?
+    private var snoozed: [Capture] { store.ledger.snoozedCaptures(at: clock) }
     private var ranked: [Capture] { store.ledger.rankedCaptures }
     private var waiting: [Capture] { store.ledger.unseenCaptures }
     private var inProgress: [Capture] { store.ledger.partiallyRankedCaptures }
@@ -93,6 +98,16 @@ struct InboxView: View {
                     } footer: {
                         Text("Evaluated ideas outside your current priorities. The backlog is unsorted; you can re-rank any idea.")
                     }
+                    Section {
+                        DisclosureGroup(isExpanded: $showSnoozed) {
+                            if snoozed.isEmpty { Text("No snoozed ideas.").foregroundStyle(.secondary) }
+                            ForEach(snoozed) { captureRow($0) }
+                        } label: {
+                            Text("Snoozed (\(snoozed.count))").accessibilityIdentifier("inbox.snoozed")
+                        }
+                    } footer: {
+                        Text("Soonest return first. Due ideas return to the front of New Ideas for a fresh review.")
+                    }
                 }
                 Section { Toggle("Show completed", isOn: $showDone) }
                 Section("Hands-free capture") {
@@ -107,6 +122,7 @@ struct InboxView: View {
                     if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
                 }
                 .sheet(item: $editing) { CaptureEditView(capture: $0) }
+                .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         if !showDone, !waiting.isEmpty {
@@ -138,6 +154,16 @@ struct InboxView: View {
                     do { try store.resumeRanking() } catch { store.report(error) }
                     await ReminderInbox.shared.refresh()
                 }
+                .onChange(of: store.ledger.captures) { _, _ in clock = Date() }
+                .onChange(of: scenePhase) { _, phase in if phase == .active { clock = Date() } }
+                .task(id: snoozed.first?.snoozedUntil) {
+                    guard let due = snoozed.first?.snoozedUntil else { return }
+                    do {
+                        try await Task.sleep(for: .seconds(max(0, due.timeIntervalSinceNow)))
+                        try store.resumeRanking()
+                        clock = Date()
+                    } catch is CancellationError { } catch { store.report(error) }
+                }
         }
     }
     private var rankingStatus: String {
@@ -157,15 +183,21 @@ struct InboxView: View {
             } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3).frame(width: 44, height: 44) }
                 .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
             VStack(alignment: .leading, spacing: 6) {
-                Text(capture.text)
+                Button { focused = false; editing = capture } label: {
+                    Text(capture.text).foregroundStyle(.primary).frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(.borderless).accessibilityIdentifier("inbox.details.\(capture.id)")
                 Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button("Edit idea") { focused = false; editing = capture }
                 if !capture.isDone {
-                    Button("Re-rank this idea") {
-                        do { try store.rerankCapture(capture.id); ranking = true } catch { store.report(error) }
+                    if capture.isSnoozed(at: Date()) {
+                        Button("Bring back now") { bringBack(capture) }
                     }
+                    Button(capture.isSnoozed(at: Date()) ? "Change return date…" : "Snooze…") { focused = false; snoozing = capture }
+                    if !capture.isSnoozed(at: Date()) { Button("Re-rank this idea") {
+                        do { try store.rerankCapture(capture.id); ranking = true } catch { store.report(error) }
+                    } }
                 }
                 Button("Delete idea", role: .destructive) { remove(capture) }
             } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
@@ -173,6 +205,15 @@ struct InboxView: View {
                 .accessibilityIdentifier("inbox.actions.\(capture.id)")
         }.padding(.vertical, 4)
             .swipeActions { Button("Delete", role: .destructive) { remove(capture) } }
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                if !capture.isDone {
+                    if capture.isSnoozed(at: Date()) {
+                        Button("Bring back", systemImage: "arrow.uturn.backward") { bringBack(capture) }.tint(.teal)
+                    } else {
+                        Button("Snooze", systemImage: "moon.zzz") { focused = false; snoozing = capture }.tint(.indigo)
+                    }
+                }
+            }
     }
     private func copyIdeas() {
         let export = store.ledger.inboxExport
@@ -182,9 +223,14 @@ struct InboxView: View {
         focused = false
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
+    private func bringBack(_ capture: Capture) { do { try store.bringBackCapture(capture) } catch { store.report(error) } }
     private func metadata(_ capture: Capture) -> String {
         let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
+        if let due = capture.snoozedUntil, !capture.isDone {
+            if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .shortened))" }
+            if waiting.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
+        }
         if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { return "#\(rank + 1) · \(origin)\(date)" }
         if showDone { return origin + date }
         let status = backlog.contains { $0.id == capture.id } ? "Backlog" : inProgress.contains { $0.id == capture.id } ? "In progress" : "Unseen"
@@ -197,16 +243,23 @@ private struct CaptureEditView: View {
     @Environment(\.dismiss) private var dismiss
     let capture: Capture
     @State private var text: String
+    @State private var notes: String
 
     init(capture: Capture) {
         self.capture = capture
         _text = State(initialValue: capture.text)
+        _notes = State(initialValue: capture.notes ?? "")
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                TextEditor(text: $text).frame(minHeight: 160).accessibilityIdentifier("capture.edit-text")
+                Section("Idea") {
+                    TextEditor(text: $text).frame(minHeight: 100).accessibilityIdentifier("capture.edit-text")
+                }
+                Section("Notes (optional)") {
+                    TextEditor(text: $notes).frame(minHeight: 140).accessibilityIdentifier("capture.edit-notes")
+                }
                 Text("Captured \(capture.createdAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle("Edit idea").navigationBarTitleDisplayMode(.inline)
@@ -215,7 +268,7 @@ private struct CaptureEditView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            do { try store.updateCaptureText(capture, text: text); dismiss() } catch { store.report(error) }
+                            do { try store.updateCapture(capture, text: text, notes: notes); dismiss() } catch { store.report(error) }
                         }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                             .accessibilityIdentifier("capture.edit-save")
                     }
@@ -224,9 +277,45 @@ private struct CaptureEditView: View {
     }
 }
 
+private struct CaptureSnoozeView: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Environment(\.dismiss) private var dismiss
+    let capture: Capture
+    @State private var date = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(capture.text)
+                    Button("Tomorrow") { snooze(days: 1) }.accessibilityIdentifier("snooze.tomorrow")
+                    Button("In a week") { snooze(days: 7) }.accessibilityIdentifier("snooze.week")
+                }
+                Section("Choose a return date") {
+                    DatePicker("Return", selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    Button("Snooze until this date") { save(date) }.accessibilityIdentifier("snooze.custom")
+                }
+                Text("Returns to New Ideas for a fresh review. Your notes and original capture date stay unchanged.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }.navigationTitle("Snooze idea").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+                .onAppear {
+                    if let existing = capture.snoozedUntil, existing > Date() { date = existing }
+                }
+        }
+    }
+    private func snooze(days: Int) {
+        guard let due = Calendar.current.date(byAdding: .day, value: days, to: Date()) else { return }
+        save(due)
+    }
+    private func save(_ date: Date) {
+        do { try store.snoozeCapture(capture, until: date); dismiss() } catch { store.report(error) }
+    }
+}
+
 private struct RankingView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
+    @State private var snoozing: Capture?
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -266,6 +355,7 @@ private struct RankingView: View {
                 Spacer(minLength: 0)
               }.padding(24)
             }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
+                .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
                 .task { do { try store.resumeRanking() } catch { store.report(error) } }
                 .onChange(of: store.ledger.rankingPair, initial: true) { _, _ in
@@ -282,6 +372,8 @@ private struct RankingView: View {
                 Text(capture.text).font(.title3).frame(maxWidth: .infinity, minHeight: 90).padding(12)
             }.buttonStyle(.bordered).accessibilityIdentifier(id)
             HStack {
+                Button("Snooze", systemImage: "moon.zzz") { snoozing = capture }
+                    .accessibilityIdentifier("\(id).snooze")
                 Spacer()
                 Button(role: .destructive) {
                     do { try store.deleteCapture(capture) } catch { store.report(error) }

@@ -82,8 +82,46 @@ public struct InboxRanking: Codable, Equatable, Sendable {
     public var merge: MergeRanking?
     public var insertion: InsertionRanking?
     public var topTen: TopTenRanking?
+    // Remember resets independently of ranking's last-write-wins revision. A
+    // stale ranking received from another device must not revive old answers.
+    public var reviewedSnoozes: [String: Revision]?
     public var revision = Revision()
     public init() {}
+
+    mutating func resetSnoozedReviews(_ captures: [Capture]) {
+        for capture in captures {
+            guard let review = capture.reviewRevision,
+                  reviewedSnoozes?[capture.id] != review else { continue }
+            let id = capture.id
+            ordered.removeAll { $0 == id }
+            topTen?.backlog.removeAll { $0 == id }
+            topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
+            topTen?.presented?.removeAll { $0 == id }
+            topTen?.pending.removeAll { $0 == id }
+            topTen?.deferred?.removeAll { $0 == id }
+            if topTen?.candidate?.item == id { topTen?.candidate = nil }
+            if var tournament = topTen?.tournament {
+                tournament.remaining.removeAll { $0 == id }
+                if tournament.champion == id {
+                    if let next = tournament.remaining.first {
+                        tournament.champion = next; tournament.remaining.removeFirst()
+                        topTen?.tournament = tournament
+                    } else { topTen?.tournament = nil }
+                } else { topTen?.tournament = tournament }
+            }
+            if let old = insertion, old.item == id { insertion = nil }
+            if reviewedSnoozes == nil { reviewedSnoozes = [:] }
+            reviewedSnoozes?[id] = review
+        }
+    }
+
+    mutating func queueReturnedIdeas(_ ids: [String]) {
+        guard isActive else { return }
+        let seen = seenIDs(), evaluated = Set(ordered + (topTen?.backlog ?? []))
+        let returned = ids.filter { !seen.contains($0) && !evaluated.contains($0) && topTen?.candidate?.item != $0 }
+        let waiting = topTen?.pending ?? []
+        topTen?.pending = returned + waiting.filter { !returned.contains($0) }
+    }
 
     public var pair: RankingPair? {
         guard let state = topTen else { return nil }
@@ -325,12 +363,28 @@ public struct InboxRanking: Codable, Equatable, Sendable {
 }
 
 extension Ledger {
-    public var activeCaptures: [Capture] { captures.filter { $0.deletedAt == nil && !$0.isDone } }
+    public var activeCaptures: [Capture] { activeCaptures(at: Date()) }
+    public func activeCaptures(at now: Date) -> [Capture] {
+        captures.filter { $0.deletedAt == nil && !$0.isDone && !$0.isSnoozed(at: now) }
+    }
+    public var snoozedCaptures: [Capture] { snoozedCaptures(at: Date()) }
+    public func snoozedCaptures(at now: Date) -> [Capture] {
+        captures.filter { $0.deletedAt == nil && !$0.isDone && $0.isSnoozed(at: now) }.sorted {
+            $0.snoozedUntil == $1.snoozedUntil ? $0.id < $1.id : $0.snoozedUntil! < $1.snoozedUntil!
+        }
+    }
     private var rankingIDs: [String] {
-        activeCaptures.sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt }.map(\.id)
+        activeCaptures.sorted {
+            // Returned ideas get first review; creation dates never change.
+            if ($0.snoozedUntil != nil) != ($1.snoozedUntil != nil) { return $0.snoozedUntil != nil }
+            if let a = $0.snoozedUntil, let b = $1.snoozedUntil, a != b { return a < b }
+            return $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt
+        }.map(\.id)
     }
     private var rankingProjection: InboxRanking {
         var ranking = inboxRanking ?? InboxRanking()
+        ranking.normalize(ids: rankingIDs)
+        ranking.resetSnoozedReviews(captures)
         ranking.normalize(ids: rankingIDs)
         return ranking
     }
@@ -363,12 +417,17 @@ extension Ledger {
         var revised = ranking; revised.revision = nextRevision(writer: writer); inboxRanking = revised
     }
     public mutating func normalizeInboxRanking(writer: String) {
-        var ranking = inboxRanking ?? InboxRanking()
+        // A partial companion update can deliver captures before their ranking.
+        // Do not mint a newer empty ranking that would shadow the real one.
+        guard inboxRanking != nil else { return }
+        var ranking = rankingProjection
+        ranking.queueReturnedIdeas(activeCaptures.filter { $0.snoozedUntil != nil }.sorted { $0.snoozedUntil! < $1.snoozedUntil! }.map(\.id))
         ranking.advance(ids: rankingIDs)
         saveRanking(ranking, writer: writer)
     }
     public mutating func prepareRanking(writer: String) {
-        var ranking = inboxRanking ?? InboxRanking()
+        normalizeInboxRanking(writer: writer)
+        var ranking = rankingProjection
         ranking.startSession(ids: rankingIDs)
         ranking.recordPresentation()
         saveRanking(ranking, writer: writer)
@@ -379,7 +438,8 @@ extension Ledger {
         saveRanking(ranking, writer: writer)
     }
     public mutating func replenishTopTen(writer: String) {
-        var ranking = inboxRanking ?? InboxRanking()
+        normalizeInboxRanking(writer: writer)
+        var ranking = rankingProjection
         ranking.replenish(ids: rankingIDs)
         saveRanking(ranking, writer: writer)
     }
@@ -397,8 +457,25 @@ extension Ledger {
     }
     public mutating func rerankCapture(_ id: String, writer: String) {
         guard activeCaptures.contains(where: { $0.id == id }) else { return }
-        var ranking = inboxRanking ?? InboxRanking()
+        var ranking = rankingProjection
         ranking.rerank(id, ids: rankingIDs); saveRanking(ranking, writer: writer)
+    }
+    public mutating func snoozeCapture(_ id: String, until: Date, writer: String, now: Date = Date()) {
+        guard until > now, let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone }) else { return }
+        let revision = nextRevision(writer: writer)
+        captures[index].snoozedUntil = until
+        captures[index].reviewRevision = revision
+        captures[index].revision = revision
+        normalizeInboxRanking(writer: writer)
+    }
+    public mutating func bringBackCapture(_ id: String, writer: String, now: Date = Date()) {
+        guard let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone }),
+              captures[index].snoozedUntil != nil else { return }
+        let revision = nextRevision(writer: writer)
+        captures[index].snoozedUntil = now
+        captures[index].reviewRevision = revision
+        captures[index].revision = revision
+        normalizeInboxRanking(writer: writer)
     }
     public mutating func setCaptureDeleted(_ id: String, deleted: Bool, writer: String, now: Date = Date()) {
         guard let index = captures.firstIndex(where: { $0.id == id }) else { return }

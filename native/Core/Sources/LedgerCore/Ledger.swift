@@ -84,6 +84,10 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {
     public var deletedAt: Date?
+    public var notes: String?
+    public var snoozedUntil: Date?
+    // Changes only when starting a fresh review cycle, not when editing notes.
+    public var reviewRevision: Revision?
     public var id: String
     public var text: String
     public var createdAt: Date
@@ -92,6 +96,7 @@ public struct Capture: Codable, Identifiable, Equatable, Sendable {
     public init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), isDone: Bool = false, revision: Revision) {
         self.id = id; self.text = text; self.createdAt = createdAt; self.isDone = isDone; self.revision = revision
     }
+    public func isSnoozed(at now: Date) -> Bool { snoozedUntil.map { $0 > now } ?? false }
 }
 
 public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
@@ -302,6 +307,17 @@ public struct Ledger: Codable, Equatable, Sendable {
         guard captures[index].text != cleaned else { return }
         captures[index].text = cleaned
         captures[index].revision = nextRevision(writer: writer)
+    }
+
+    public mutating func updateCapture(id: String, text: String, notes: String, writer: String) throws {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { throw LedgerError.invalidCapture }
+        guard let index = captures.firstIndex(where: { $0.id == id }), captures[index].deletedAt == nil else { throw LedgerError.deletedCapture }
+        let notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let savedNotes = notes.isEmpty ? nil : notes
+        guard captures[index].text != cleaned || captures[index].notes != savedNotes else { return }
+        let revision = nextRevision(writer: writer)
+        captures[index].text = cleaned; captures[index].notes = savedNotes; captures[index].revision = revision
     }
 
     public mutating func saveSettings(_ value: Settings, writer: String) throws {

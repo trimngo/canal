@@ -693,6 +693,35 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(corrected.waitForExistence(timeout: 5))
     }
 
+    func testInboxNotesSnoozeAndBringBackSurviveRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
+        openInbox(app)
+        let actions = app.buttons["inbox.actions.open"]
+        reveal(actions, in: app); actions.tap(); app.buttons["Edit idea"].tap()
+        let notes = app.textViews["capture.edit-notes"]
+        XCTAssertTrue(notes.waitForExistence(timeout: 5)); notes.tap(); notes.typeText("Called the shop. Next: book a visit.")
+        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        recordScreen("InboxTaskNotes", in: app)
+        app.buttons["capture.edit-save"].tap()
+        reveal(actions, in: app); actions.tap(); app.buttons["Snooze…"].tap()
+        app.buttons["snooze.week"].tap()
+        let snoozed = element(app, "inbox.snoozed")
+        reveal(snoozed, in: app); snoozed.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Returns ")).firstMatch.waitForExistence(timeout: 5))
+        recordScreen("InboxSnoozed", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        reveal(snoozed, in: app); snoozed.tap()
+        reveal(actions, in: app); actions.tap(); app.buttons["Edit idea"].tap()
+        XCTAssertEqual(notes.value as? String, "Called the shop. Next: book a visit.")
+        app.buttons["Cancel"].tap()
+        reveal(actions, in: app); actions.tap(); app.buttons["Bring back now"].tap()
+        let returned = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch
+        for _ in 0..<5 { if returned.exists, returned.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(returned.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["ranking.first"].exists)
+        recordScreen("InboxReturnedFromSnooze", in: app)
+    }
+
     func testInboxAutoFocusesCaptureAndSavingNeverOpensRanking() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
         openInbox(app, capture: true)
