@@ -11,11 +11,24 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func reveal(_ target: XCUIElement, in app: XCUIApplication) {
+        func usable(_ frame: CGRect) -> Bool {
+            !frame.isNull && !frame.isInfinite && !frame.isEmpty &&
+                [frame.minX, frame.minY, frame.maxX, frame.maxY].allSatisfy { $0.isFinite }
+        }
         for _ in 0..<10 {
-            let top = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : app.frame.minY
-            var bottom = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY : app.frame.maxY
-            if app.keyboards.firstMatch.exists { bottom = min(bottom, app.keyboards.firstMatch.frame.minY) }
-            let frame = target.exists ? target.frame : .zero
+            let bounds = app.frame
+            guard usable(bounds) else { XCTFail("App has no visible bounds"); return }
+            // Dismissed sheets can leave offscreen bars with CGRect.null frames.
+            let navigation = app.navigationBars.allElementsBoundByIndex.map(\.frame).first { usable($0) && $0.intersects(bounds) }
+            let tabs = app.tabBars.allElementsBoundByIndex.map(\.frame).first { usable($0) && $0.intersects(bounds) }
+            let top = max(bounds.minY, min(navigation?.maxY ?? bounds.minY, bounds.maxY))
+            var bottom = min(bounds.maxY, max(tabs?.minY ?? bounds.maxY, top))
+            if app.keyboards.firstMatch.exists {
+                let keyboard = app.keyboards.firstMatch.frame
+                if usable(keyboard) { bottom = min(bottom, keyboard.minY) }
+            }
+            let proposed = target.exists ? target.frame : .zero
+            let frame = usable(proposed) ? proposed : .zero
             if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
             // Short drags keep lazy Form rows from being skipped by momentum.
             let height = max(100, bottom - top)
