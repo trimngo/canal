@@ -91,7 +91,7 @@ final class LogDeletionAndScheduleTests: XCTestCase {
         while let pair = ledger.rankingPair { ledger.chooseCapture(min(pair.first, pair.second), from: pair, writer: "phone") }
         ledger.setCaptureDeleted("b", deleted: true, writer: "phone"); ledger.prepareRanking(writer: "phone")
         XCTAssertEqual(ledger.rankedCaptureIDs, ["a", "c"])
-        ledger.setCaptureDeleted("b", deleted: false, writer: "phone"); ledger.prepareRanking(writer: "phone")
+        ledger.setCaptureDeleted("b", deleted: false, writer: "phone"); ledger.replenishTopTen(writer: "phone")
         while let pair = ledger.rankingPair { ledger.chooseCapture(min(pair.first, pair.second), from: pair, writer: "phone") }
         XCTAssertEqual(ledger.rankedCaptureIDs, ["a", "b", "c"])
         ledger.setCaptureDeleted("a", deleted: true, writer: "phone")

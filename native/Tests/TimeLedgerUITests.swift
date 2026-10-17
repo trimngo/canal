@@ -174,13 +174,13 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testInboxIsADirectTabAndCapturesPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         let field = element(app, "inbox.text")
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("Follow up with a client UI test")
         let save = app.buttons["inbox.save"]; reveal(save, in: app); save.tap()
         XCUIDevice.shared.press(.home); app.activate()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["Follow up with a client UI test"].waitForExistence(timeout: 5))
     }
 
@@ -197,16 +197,16 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testSiriNoteHandlerSavesTitleOnlyWithoutOpeningAnEditorAndPersists() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-capture"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
         app.terminate(); app.launchArguments = []; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["One sentence Siri UI fixture"].waitForExistence(timeout: 5))
     }
 
     func testSiriRoutesIdeasAndActivitiesSeparatelyAndPersistsBoth() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-routes"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["Bicycle idea UI fixture"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Bicycle activity UI fixture"].exists)
         openLogs(app)
@@ -215,7 +215,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.terminate(); app.launchArguments = []; app.launch()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Bicycle activity UI fixture"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["Bicycle idea UI fixture"].waitForExistence(timeout: 5))
         recordScreen("DashInbox", in: app)
     }
@@ -240,7 +240,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 25), .completed)
         assertPendingReminders(0, in: app)
         recordScreen("RemindersSetup", in: app)
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["Reminders bicycle idea UI fixture"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Completed source UI fixture"].exists)
         XCTAssertFalse(app.staticTexts["Other list must stay private UI fixture"].exists)
@@ -255,7 +255,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(importNow.waitForExistence(timeout: 20))
         let reloaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
         XCTAssertEqual(XCTWaiter.wait(for: [reloaded], timeout: 25), .completed)
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertFalse(app.staticTexts["Reminders bicycle idea UI fixture"].exists)
         app.tabBars.buttons["Settings"].tap()
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
@@ -264,7 +264,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         app.buttons["inbox.copy-all"].tap()
         XCTAssertTrue(element(app, "inbox.copy-confirmation").waitForExistence(timeout: 5))
         let field = element(app, "inbox.text")
@@ -364,23 +364,24 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap(); openRanking(app)
+        openInbox(app); openRanking(app)
         XCTAssertTrue(app.buttons["ranking.second"].waitForExistence(timeout: 5))
         recordScreen("Ranking", in: app); app.buttons["ranking.second"].tap()
         app.buttons["Done"].tap(); app.terminate(); app.launchArguments = []; app.launch()
-        app.tabBars.buttons["Inbox"].tap(); openRanking(app)
+        openInbox(app); openRanking(app)
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5)); app.buttons["ranking.first"].tap()
         app.buttons["ranking.second"].tap()
-        XCTAssertTrue(app.staticTexts["All ideas ranked"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Batch complete"].firstMatch.waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         let field = element(app, "inbox.text"); field.tap(); field.typeText("New idea")
         app.buttons["inbox.save"].tap()
-        XCTAssertTrue(app.staticTexts["3 ranked · 1 waiting to rank"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["inbox.new-shortcut"].label.contains("1"))
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
     }
 
     func testInboxDeletionHasUndoAndPersistsAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         recordScreen("Inbox", in: app)
         let menu = app.buttons["inbox.actions.a"]; reveal(menu, in: app); menu.tap()
         app.buttons["Delete idea"].tap()
@@ -389,7 +390,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["First idea"].waitForExistence(timeout: 5))
         let restored = app.buttons["inbox.actions.a"]; reveal(restored, in: app); restored.tap()
         app.buttons["Delete idea"].tap()
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Inbox"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
         XCTAssertFalse(app.staticTexts["First idea"].exists)
         XCTAssertTrue(app.staticTexts["Third idea"].exists)
     }
@@ -438,7 +439,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testRankingCanDeleteEitherIdeaUndoAndContinue() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap(); openRanking(app)
+        openInbox(app); openRanking(app)
         let first = app.buttons["ranking.first"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         let deletedText = first.label
@@ -449,21 +450,25 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["ranking.undo-delete"].tap()
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
         app.buttons["ranking.second.delete"].tap()
-        app.buttons["ranking.first"].tap()
-        XCTAssertTrue(app.staticTexts["All ideas ranked"].waitForExistence(timeout: 5))
+        for _ in 0..<10 {
+            if app.buttons["ranking.first"].exists { app.buttons["ranking.first"].tap() }
+            else if app.buttons["ranking.more"].exists { app.buttons["ranking.more"].tap() }
+            else { break }
+        }
+        XCTAssertTrue(app.staticTexts["Batch complete"].waitForExistence(timeout: 5))
         recordScreen("RankingCleanup", in: app)
     }
 
     func testInboxKeyboardDismissesOutsideAndPreservesDraftAcrossTabs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         let field = element(app, "inbox.text"); field.tap(); field.typeText("Keep my draft")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         app.navigationBars["Inbox"].tap()
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         XCTAssertEqual(field.value as? String, "Keep my draft")
-        app.tabBars.buttons["Today"].tap(); app.tabBars.buttons["Inbox"].tap()
+        app.tabBars.buttons["Today"].tap(); openInbox(app)
         XCTAssertEqual(field.value as? String, "Keep my draft")
         field.tap()
         let done = app.buttons["keyboard.done"]
@@ -471,7 +476,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.keyboards.firstMatch.exists)
         app.buttons["inbox.save"].tap()
         XCTAssertTrue(app.staticTexts["Keep my draft"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
     }
 
     func testAllDayNotificationSettingPersistsAndHidesWindowPickers() {
@@ -592,9 +597,10 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testRankedIdeasStayFirstAndNewIdeasHaveTheirOwnSectionAndShortcut() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["Ranked priority 1"].waitForExistence(timeout: 5))
-        XCTAssertTrue(element(app, "inbox.ranked-title").exists)
+        XCTAssertTrue(element(app, "inbox.ranked-title").label.contains("10"))
+        XCTAssertFalse(app.staticTexts["Ranked priority 11"].exists)
         XCTAssertFalse(app.staticTexts["New imported idea"].isHittable)
         recordScreen("InboxRankedFirst", in: app)
         app.buttons["inbox.new-shortcut"].tap()
@@ -624,7 +630,7 @@ final class TimeLedgerUITests: XCTestCase {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 25), .completed)
         assertPendingReminders(1, in: app)
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertFalse(app.staticTexts["Reminders bicycle idea UI fixture"].exists)
 
         app.terminate(); app.launchArguments = ["--ui-reminders-delete-failure"]; app.launch()
@@ -633,7 +639,7 @@ final class TimeLedgerUITests: XCTestCase {
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 25), .completed)
         assertPendingReminders(1, in: app)
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(app.staticTexts["Reminders bicycle idea UI fixture"].waitForExistence(timeout: 5))
 
         app.terminate(); app.launchArguments = []; app.launch()
@@ -643,12 +649,12 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [transferred], timeout: 25), .completed)
         assertPendingReminders(0, in: app)
         recordScreen("ReminderTransferConfirmed", in: app)
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", "Reminders bicycle idea UI fixture")).count, 1)
         XCTAssertTrue(element(app, "inbox.waiting-title").exists)
         app.tabBars.buttons["Settings"].tap()
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.actions.")).firstMatch
         actions.tap(); app.buttons["Edit idea"].tap()
         let editor = app.textViews["capture.edit-text"]
@@ -658,8 +664,72 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(corrected.waitForExistence(timeout: 5))
         recordScreen("InboxIdeaEdited", in: app)
         app.terminate(); app.launch()
-        app.tabBars.buttons["Inbox"].tap()
+        openInbox(app)
         XCTAssertTrue(corrected.waitForExistence(timeout: 5))
+    }
+
+    func testInboxAutoFocusesCaptureAndSavingNeverOpensRanking() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
+        openInbox(app, capture: true)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let field = element(app, "inbox.text")
+        XCTAssertTrue(field.isHittable)
+        recordScreen("InboxCaptureFirst", in: app)
+        field.typeText("Quick capture without ranking")
+        app.buttons["inbox.save"].tap()
+        XCTAssertFalse(app.buttons["inbox.save"].isEnabled)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        XCTAssertTrue(app.buttons["inbox.new-shortcut"].label.contains("4"))
+        app.buttons["inbox.new-shortcut"].tap()
+        XCTAssertTrue(app.staticTexts["Quick capture without ranking"].waitForExistence(timeout: 5))
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        app.buttons["inbox.new-shortcut"].tap()
+        XCTAssertTrue(app.staticTexts["Quick capture without ranking"].waitForExistence(timeout: 5))
+    }
+
+    func testTopTenScreeningBacklogRerankingAndExplicitReplenishment() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
+        openInbox(app); openRanking(app)
+        XCTAssertTrue(app.buttons["ranking.second"].label.contains("Ranked priority 10"))
+        XCTAssertTrue(app.staticTexts["Which is more important to act on now?"].exists)
+        recordScreen("TopTenScreening", in: app)
+        for _ in 0..<3 { app.buttons["ranking.second"].tap() }
+        XCTAssertTrue(app.staticTexts["Batch complete"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        let backlog = element(app, "inbox.backlog"); reveal(backlog, in: app)
+        XCTAssertTrue(backlog.label.contains("7")); backlog.tap()
+        recordScreen("InboxBacklog", in: app)
+        let actions = app.buttons["inbox.actions.new-manual"]; reveal(actions, in: app); actions.tap()
+        app.buttons["Re-rank this idea"].tap()
+        XCTAssertTrue(app.buttons["ranking.second"].waitForExistence(timeout: 5))
+        for _ in 0..<5 {
+            if !app.buttons["ranking.first"].exists { break }
+            app.buttons["ranking.first"].tap()
+        }
+        XCTAssertTrue(app.staticTexts["Batch complete"].waitForExistence(timeout: 5)); app.buttons["Done"].tap()
+        let topActions = app.buttons["inbox.actions.ranked-1"]; reveal(topActions, in: app); topActions.tap()
+        app.buttons["Delete idea"].tap()
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        let refill = app.buttons["inbox.replenish"]; reveal(refill, in: app)
+        XCTAssertTrue(refill.isEnabled); recordScreen("TopTenNeedsReplenishment", in: app); refill.tap()
+        for _ in 0..<15 {
+            if !app.buttons["ranking.first"].exists { break }
+            app.buttons["ranking.first"].tap()
+        }
+        XCTAssertTrue(app.staticTexts["Batch complete"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        let status = element(app, "inbox.ranking-status"); reveal(status, in: app)
+        XCTAssertTrue(status.label.contains("Up to date"))
+    }
+
+    private func openInbox(_ app: XCUIApplication, capture: Bool = false) {
+        app.tabBars.buttons["Inbox"].tap()
+        if !capture, app.keyboards.firstMatch.waitForExistence(timeout: 1) {
+            app.navigationBars["Inbox"].tap()
+            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        }
     }
 
     private func assertPendingReminders(_ count: Int, in app: XCUIApplication) {

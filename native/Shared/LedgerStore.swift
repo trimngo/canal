@@ -130,6 +130,10 @@ final class LedgerStore: ObservableObject {
                 let original = try Data(contentsOf: file)
                 var loaded = try JSONDecoder().decode(Ledger.self, from: original)
                 guard (1...2).contains(loaded.schemaVersion) else { throw StoreError.unsupportedVersion }
+                if let ranking = loaded.inboxRanking, ranking.topTen == nil {
+                    let recovery = directory.appendingPathComponent("ledger-before-top-ten.json")
+                    if !FileManager.default.fileExists(atPath: recovery.path) { try original.write(to: recovery, options: [.atomic]) }
+                }
                 if loaded.schemaVersion == 1 {
                     let backup = directory.appendingPathComponent("ledger-before-instant-samples.json")
                     if !FileManager.default.fileExists(atPath: backup.path) { try original.write(to: backup, options: [.atomic]) }
@@ -165,6 +169,7 @@ final class LedgerStore: ObservableObject {
             }
             draft.ensureDefaultGroups(writer: writer)
             draft.prepareGroupSuggestions(writer: writer)
+            draft.normalizeInboxRanking(writer: writer)
             if draft != ledger {
                 let backup = file.deletingLastPathComponent().appendingPathComponent("ledger-before-confirmed-grouping.json")
                 if FileManager.default.fileExists(atPath: file.path), !FileManager.default.fileExists(atPath: backup.path) {
@@ -220,8 +225,10 @@ final class LedgerStore: ObservableObject {
         #endif
     }
 
-    private func commit(_ draft: Ledger) throws {
+    private func commit(_ value: Ledger) throws {
         guard storageAvailable else { throw StoreError.unavailable }
+        var draft = value
+        draft.normalizeInboxRanking(writer: writer)
         try JSONEncoder().encode(draft).write(to: file, options: [.atomic])
         ledger = draft
         saveObserver?()
@@ -230,6 +237,7 @@ final class LedgerStore: ObservableObject {
     func merge(_ incoming: Ledger) throws {
         guard (1...2).contains(incoming.schemaVersion) else { throw StoreError.unsupportedVersion }
         var draft = ledger; draft.merge(incoming)
+        draft.normalizeInboxRanking(writer: writer)
         draft.prepareGroupSuggestions(writer: writer)
         if draft != ledger { try commit(draft) }
     }
@@ -334,7 +342,7 @@ final class LedgerStore: ObservableObject {
     }
 
     func deleteCapture(_ capture: Capture) throws {
-        var draft = ledger; draft.setCaptureDeleted(capture.id, deleted: true, writer: writer); draft.prepareRanking(writer: writer)
+        var draft = ledger; draft.setCaptureDeleted(capture.id, deleted: true, writer: writer)
         try commit(draft)
         captureDeletion = draft.captures.first { $0.id == capture.id }; canUndoCaptureDeletion = true
     }
@@ -345,12 +353,14 @@ final class LedgerStore: ObservableObject {
                   ledger.captures.first(where: { $0.id == deleted.id })?.revision == deleted.revision else {
                 canUndoCaptureDeletion = false; return
             }
-            var draft = ledger; draft.setCaptureDeleted(deleted.id, deleted: false, writer: writer); draft.prepareRanking(writer: writer)
+            var draft = ledger; draft.setCaptureDeleted(deleted.id, deleted: false, writer: writer)
             try commit(draft); captureDeletion = nil; canUndoCaptureDeletion = false
         } catch { report(error) }
     }
 
     func prepareRanking() throws { var draft = ledger; draft.prepareRanking(writer: writer); if draft != ledger { try commit(draft) } }
+    func resumeRanking() throws { var draft = ledger; draft.normalizeInboxRanking(writer: writer); if draft != ledger { try commit(draft) } }
+    func replenishTopTen() throws { var draft = ledger; draft.replenishTopTen(writer: writer); if draft != ledger { try commit(draft) } }
     func chooseCapture(_ preferred: String, pair: RankingPair) throws {
         var draft = ledger; draft.chooseCapture(preferred, from: pair, writer: writer); try commit(draft)
     }
@@ -361,6 +371,7 @@ final class LedgerStore: ObservableObject {
         let recovery = file.deletingLastPathComponent().appendingPathComponent("ledger-before-restore-\(UUID().uuidString).json")
         if FileManager.default.fileExists(atPath: file.path) { try Data(contentsOf: file).write(to: recovery, options: [.atomic]) }
         var draft = ledger; draft.merge(saved.ledger); draft.prepareGroupSuggestions(writer: writer)
+        draft.normalizeInboxRanking(writer: writer)
         // An explicitly selected backup can recover an unreadable ledger while
         // retaining its original bytes in a separate recovery file.
         try JSONEncoder().encode(draft).write(to: file, options: [.atomic])

@@ -8,10 +8,17 @@ struct InboxView: View {
     @FocusState private var focused: Bool
     @State private var showDone = false
     @State private var ranking = false
+    @State private var showBacklog = false
     @State private var editing: Capture?
     @State private var copiedIdeaCount: Int?
     private var ranked: [Capture] { store.ledger.rankedCaptures }
     private var waiting: [Capture] { store.ledger.unrankedCaptures }
+    private var backlog: [Capture] { store.ledger.backlogCaptures }
+    private var rankButtonTitle: String {
+        if store.ledger.rankingIsActive { return "Continue ranking" }
+        let count = min(5, waiting.count)
+        return "Rank \(count) new \(count == 1 ? "idea" : "ideas")"
+    }
     private var completed: [Capture] {
         store.ledger.captures.filter { $0.deletedAt == nil && $0.isDone }.sorted { $0.createdAt > $1.createdAt }
     }
@@ -21,20 +28,13 @@ struct InboxView: View {
                 Section {
                     TextField("Get it out of your head…", text: $text, axis: .vertical).lineLimit(1...4)
                         .focused($focused).accessibilityIdentifier("inbox.text")
-                    Button("Capture") {
-                        do { try store.addCapture(text); text = ""; focused = false } catch { store.report(error) }
+                    Button("Save") {
+                        do { try store.addCapture(text); text = ""; focused = true } catch { store.report(error) }
                     }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                         .accessibilityIdentifier("inbox.save")
                 }
                 if store.canUndoCaptureDeletion {
                     Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
-                }
-                Section {
-                    Toggle("Show completed", isOn: $showDone)
-                    if !showDone {
-                        Text(waiting.isEmpty ? "All ideas ranked" : "\(ranked.count) ranked · \(waiting.count) waiting to rank")
-                            .foregroundStyle(.secondary).accessibilityIdentifier("inbox.ranking-status")
-                    }
                 }
                 if showDone {
                     Section("Completed (\(completed.count))") {
@@ -43,24 +43,40 @@ struct InboxView: View {
                     }
                 } else {
                     Section {
-                        if ranked.isEmpty { Text("Rank your new ideas to decide what to do next.").foregroundStyle(.secondary) }
+                        if ranked.isEmpty { Text("Your highest priorities will appear here when you choose to rank ideas.").foregroundStyle(.secondary) }
                         ForEach(ranked) { captureRow($0) }
+                        if store.ledger.needsTopTenReplenishment {
+                            Button(store.ledger.rankingIsActive ? "Continue ranking" : "Review backlog to refill priorities") {
+                                do { try store.replenishTopTen(); focused = false; ranking = true } catch { store.report(error) }
+                            }.accessibilityIdentifier("inbox.replenish")
+                        }
                     } header: {
-                        Text("Ranked (\(ranked.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.ranked-title")
+                        Text("Top 10 Priorities (\(ranked.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.ranked-title")
+                    } footer: {
+                        Text(rankingStatus).accessibilityIdentifier("inbox.ranking-status")
                     }
                     Section {
                         if waiting.isEmpty {
-                            Text("No ideas waiting to rank.").foregroundStyle(.secondary).id("inbox.waiting")
+                            Text("No new ideas to review.").foregroundStyle(.secondary).id("inbox.waiting")
                         } else {
-                            Button(store.ledger.rankingPair == nil ? "Rank new ideas" : "Continue ranking") {
+                            Button(rankButtonTitle) {
                                 do { try store.prepareRanking(); focused = false; ranking = true } catch { store.report(error) }
                             }.accessibilityIdentifier("inbox.rank").id("inbox.waiting")
                             ForEach(waiting) { captureRow($0) }
                         }
                     } header: {
-                        Text("New · waiting to rank (\(waiting.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.waiting-title")
+                        Text("New Ideas (\(waiting.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.waiting-title")
+                    }
+                    Section {
+                        DisclosureGroup("Backlog (\(backlog.count))", isExpanded: $showBacklog) {
+                            if backlog.isEmpty { Text("No backlog ideas yet.").foregroundStyle(.secondary) }
+                            ForEach(backlog) { captureRow($0) }
+                        }.accessibilityIdentifier("inbox.backlog")
+                    } footer: {
+                        Text("Evaluated ideas outside your current priorities. The backlog is unsorted; you can re-rank any idea.")
                     }
                 }
+                Section { Toggle("Show completed", isOn: $showDone) }
                 Section("Hands-free capture") {
                     NavigationLink("Set up Siri via Reminders") { ReminderInboxSetupView() }
                         .accessibilityIdentifier("inbox.reminders")
@@ -96,8 +112,21 @@ struct InboxView: View {
                     do { try await Task.sleep(nanoseconds: 4_000_000_000) } catch { return }
                     copiedIdeaCount = nil
                 }
-                .task { await ReminderInbox.shared.refresh() }
+                .task {
+                    await Task.yield(); focused = true
+                    do { try store.resumeRanking() } catch { store.report(error) }
+                    await ReminderInbox.shared.refresh()
+                }
         }
+    }
+    private var rankingStatus: String {
+        if waiting.isEmpty, !store.ledger.needsTopTenReplenishment, !store.ledger.rankingIsActive {
+            return ranked.isEmpty ? "Capture first. Rank whenever you like." : "Up to date · \(ranked.count) priorities"
+        }
+        if store.ledger.needsTopTenReplenishment {
+            return "Provisional · Review the backlog to confirm your highest priorities. \(waiting.count) new ideas not yet reviewed."
+        }
+        return "Provisional · \(waiting.count) new ideas not yet reviewed."
     }
     private func captureRow(_ capture: Capture) -> some View {
         HStack(alignment: .top, spacing: 14) {
@@ -135,7 +164,9 @@ struct InboxView: View {
         let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
         if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { return "#\(rank + 1) · \(origin)\(date)" }
-        return showDone ? origin + date : "\(origin)Waiting to rank · \(date)"
+        if showDone { return origin + date }
+        let status = backlog.contains { $0.id == capture.id } ? "Backlog" : "New"
+        return "\(origin)\(status) · \(date)"
     }
 }
 
@@ -182,14 +213,26 @@ private struct RankingView: View {
                 if let pair,
                    let first = store.ledger.activeCaptures.first(where: { $0.id == pair.first }),
                    let second = store.ledger.activeCaptures.first(where: { $0.id == pair.second }) {
-                    Text("Which is more important to act on?").font(.title2.bold()).multilineTextAlignment(.center)
+                    Text("Which is more important to act on now?").font(.title2.bold()).multilineTextAlignment(.center)
                     choice(first, pair: pair, id: "ranking.first")
                     Text("or").foregroundStyle(.secondary)
                     choice(second, pair: pair, id: "ranking.second")
                     Text("Every choice is saved. You can pause anytime.").font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    Label("All ideas ranked", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
-                    Text("New ideas will wait for a few comparisons to find their place.").foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Label("Batch complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
+                    Text(store.ledger.topTenIsVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")
+                        .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    if !store.ledger.unrankedCaptures.isEmpty {
+                        let count = min(5, store.ledger.unrankedCaptures.count)
+                        Button("Rank \(count) more \(count == 1 ? "idea" : "ideas")") {
+                            do { try store.prepareRanking() } catch { store.report(error) }
+                        }.buttonStyle(.borderedProminent).accessibilityIdentifier("ranking.more")
+                    }
+                    if store.ledger.needsTopTenReplenishment {
+                        Button("Review backlog to refill priorities") {
+                            do { try store.replenishTopTen() } catch { store.report(error) }
+                        }.accessibilityIdentifier("ranking.replenish")
+                    }
                 }
                 if store.canUndoCaptureDeletion {
                     HStack {
@@ -202,8 +245,8 @@ private struct RankingView: View {
               }.padding(24)
             }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-                .task { do { try store.prepareRanking() } catch { store.report(error) } }
-                .onChange(of: store.ledger.captures) { _, _ in do { try store.prepareRanking() } catch { store.report(error) } }
+                .task { do { try store.resumeRanking() } catch { store.report(error) } }
+                .onChange(of: store.ledger.captures) { _, _ in do { try store.resumeRanking() } catch { store.report(error) } }
         }
     }
     private func choice(_ capture: Capture, pair: RankingPair, id: String) -> some View {

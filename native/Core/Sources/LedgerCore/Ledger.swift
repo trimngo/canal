@@ -292,6 +292,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         let revision = nextRevision(writer: writer)
         guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
         captures[index].isDone = done; captures[index].revision = revision
+        normalizeInboxRanking(writer: writer)
     }
 
     public mutating func updateCaptureText(id: String, text: String, writer: String) throws {
