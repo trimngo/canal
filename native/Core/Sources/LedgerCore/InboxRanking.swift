@@ -49,6 +49,9 @@ public struct TopTenRanking: Codable, Equatable, Sendable {
     var candidate: TopTenInsertion?
     var tournament: BacklogTournament?
     var pending: [String] = []
+    // Optional for ledgers saved before separate unseen/in-progress queues.
+    var presented: [String]?
+    var deferred: [String]?
     var replenishing = false
 }
 
@@ -106,6 +109,30 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         for (a, b) in zip(ids, ids.dropFirst()) { remember(a, b) }
     }
 
+    private mutating func recordPresentation() {
+        guard let pair else { return }
+        var seen = Set(topTen?.presented ?? [])
+        seen.insert(pair.first); seen.insert(pair.second)
+        topTen?.presented = seen.sorted()
+    }
+
+    func seenIDs() -> Set<String> {
+        var seen = Set(topTen?.presented ?? [])
+        for edge in topTen?.preferences ?? [] { seen.insert(edge.winner); seen.insert(edge.loser) }
+        if let pair { seen.insert(pair.first); seen.insert(pair.second) }
+        return seen
+    }
+
+    // Finish the current answer, then give untouched candidates their first look.
+    mutating func yieldToUnseen() {
+        guard let candidate = topTen?.candidate, topTen?.replenishing != true,
+              !(topTen?.pending.isEmpty ?? true) else { return }
+        var deferred = topTen?.deferred ?? []
+        if !deferred.contains(candidate.item) { deferred.append(candidate.item) }
+        topTen?.deferred = deferred
+        topTen?.candidate = nil
+    }
+
     mutating func normalize(ids: [String]) {
         if topTen == nil {
             topTen = TopTenRanking()
@@ -121,8 +148,8 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                 for run in old.runs + old.nextRuns { rememberChain(run) }
                 rememberChain(old.merged + old.left)
                 rememberChain(old.merged + old.right)
-                // Resume the unfinished migration as a small, explicit batch.
-                topTen?.pending = Array(ids.filter { !ordered.contains($0) }.prefix(5))
+                // Resume all remaining work from the unfinished legacy session.
+                topTen?.pending = ids.filter { !ordered.contains($0) }
             }
             merge = nil; insertion = nil
         }
@@ -137,6 +164,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         topTen?.backlog.removeAll { ordered.contains($0) }
         let evaluated = Set(ordered + (topTen?.backlog ?? []))
         topTen?.pending.removeAll { !valid.contains($0) || evaluated.contains($0) }
+        topTen?.deferred?.removeAll { !valid.contains($0) || evaluated.contains($0) }
         if var candidate = topTen?.candidate {
             if !valid.contains(candidate.item) || ordered.contains(candidate.item) { topTen?.candidate = nil }
             else if candidate.base != ordered {
@@ -180,14 +208,17 @@ public struct InboxRanking: Codable, Equatable, Sendable {
     }
     var isActive: Bool {
         guard let state = topTen else { return false }
-        return state.candidate != nil || state.tournament != nil || !state.pending.isEmpty || state.replenishing
+        return state.candidate != nil || state.tournament != nil || !state.pending.isEmpty || !(state.deferred?.isEmpty ?? true) || state.replenishing
     }
 
-    mutating func startBatch(ids: [String], limit: Int) {
+    mutating func startSession(ids: [String]) {
         normalize(ids: ids)
         if !isActive {
-            let batch = Array(newIDs(ids: ids).prefix(max(1, min(limit, 5))))
-            topTen?.pending = batch
+            // Snapshot waiting ideas without a session-size limit. New arrivals
+            // remain available for the next explicit session, never replacing a pair.
+            let seen = seenIDs(), waiting = newIDs(ids: ids)
+            topTen?.pending = waiting.filter { !seen.contains($0) }
+            topTen?.deferred = waiting.filter { seen.contains($0) }
         }
         advance(ids: ids)
     }
@@ -213,7 +244,9 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                     topTen?.candidate = candidate
                 }
                 if let pair {
-                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(pair.first, pair.second) else { return }
+                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(pair.first, pair.second) else {
+                        recordPresentation(); return
+                    }
                     apply(winner)
                 } else {
                     ordered.insert(candidate.item, at: min(candidate.low, ordered.count))
@@ -229,7 +262,9 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             }
             if var tournament = topTen?.tournament {
                 if let next = tournament.remaining.first {
-                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(tournament.champion, next) else { return }
+                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(tournament.champion, next) else {
+                        recordPresentation(); return
+                    }
                     tournament.remaining.removeFirst(); tournament.champion = winner
                     topTen?.tournament = tournament
                 } else {
@@ -248,6 +283,11 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             }
             if let next = topTen?.pending.first {
                 topTen?.pending.removeFirst()
+                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
+                continue
+            }
+            if let next = topTen?.deferred?.first {
+                topTen?.deferred?.removeFirst()
                 topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
                 continue
             }
@@ -285,6 +325,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
         // Interrupted candidates remain discoverable in New Ideas or Backlog.
         topTen?.candidate = nil; topTen?.tournament = nil
+        topTen?.deferred = nil
         topTen?.replenishing = false; topTen?.pending = [id]
         advance(ids: ids)
     }
@@ -303,6 +344,14 @@ extension Ledger {
     public var rankedCaptureIDs: [String] { rankingProjection.ordered }
     public var rankedCaptures: [Capture] { captures(in: rankedCaptureIDs) }
     public var unrankedCaptures: [Capture] { captures(in: rankingProjection.newIDs(ids: rankingIDs)) }
+    public var unseenCaptures: [Capture] {
+        let seen = rankingProjection.seenIDs()
+        return unrankedCaptures.filter { !seen.contains($0.id) }
+    }
+    public var partiallyRankedCaptures: [Capture] {
+        let seen = rankingProjection.seenIDs()
+        return unrankedCaptures.filter { seen.contains($0.id) }
+    }
     public var backlogCaptures: [Capture] {
         let backlog = Set(rankingProjection.backlogIDs(ids: rankingIDs))
         return activeCaptures.filter { backlog.contains($0.id) }.sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt }
@@ -325,9 +374,9 @@ extension Ledger {
         ranking.advance(ids: rankingIDs)
         saveRanking(ranking, writer: writer)
     }
-    public mutating func prepareRanking(writer: String, limit: Int = 5) {
+    public mutating func prepareRanking(writer: String) {
         var ranking = inboxRanking ?? InboxRanking()
-        ranking.startBatch(ids: rankingIDs, limit: limit)
+        ranking.startSession(ids: rankingIDs)
         saveRanking(ranking, writer: writer)
     }
     public mutating func replenishTopTen(writer: String) {
@@ -339,7 +388,7 @@ extension Ledger {
         normalizeInboxRanking(writer: writer)
         guard var ranking = inboxRanking, ranking.pair == expected,
               preferred == expected.first || preferred == expected.second else { return }
-        ranking.apply(preferred); ranking.advance(ids: rankingIDs)
+        ranking.apply(preferred); ranking.yieldToUnseen(); ranking.advance(ids: rankingIDs)
         // Every answer advances the revision even if the next pair has the same IDs.
         ranking.revision = nextRevision(writer: writer); inboxRanking = ranking
     }

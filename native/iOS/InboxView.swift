@@ -12,11 +12,12 @@ struct InboxView: View {
     @State private var editing: Capture?
     @State private var copiedIdeaCount: Int?
     private var ranked: [Capture] { store.ledger.rankedCaptures }
-    private var waiting: [Capture] { store.ledger.unrankedCaptures }
+    private var waiting: [Capture] { store.ledger.unseenCaptures }
+    private var inProgress: [Capture] { store.ledger.partiallyRankedCaptures }
     private var backlog: [Capture] { store.ledger.backlogCaptures }
     private var rankButtonTitle: String {
         if store.ledger.rankingIsActive { return "Continue ranking" }
-        let count = min(5, waiting.count)
+        let count = waiting.count
         return "Rank \(count) new \(count == 1 ? "idea" : "ideas")"
     }
     private var completed: [Capture] {
@@ -66,6 +67,21 @@ struct InboxView: View {
                         }
                     } header: {
                         Text("New Ideas (\(waiting.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.waiting-title")
+                    } footer: {
+                        Text("Ideas you haven't seen in a comparison yet.")
+                    }
+                    if !inProgress.isEmpty {
+                        Section {
+                            Button("Continue ranking") {
+                                do { try store.prepareRanking(); focused = false; ranking = true } catch { store.report(error) }
+                            }.accessibilityIdentifier("inbox.continue")
+                            ForEach(inProgress) { captureRow($0) }
+                        } header: {
+                            Text("In progress (\(inProgress.count))").textCase(nil).font(.headline)
+                                .accessibilityIdentifier("inbox.progress-title")
+                        } footer: {
+                            Text("Already seen, but not fully ranked. Your answers are saved; unseen ideas get a first look before these are finished.")
+                        }
                     }
                     Section {
                         DisclosureGroup(isExpanded: $showBacklog) {
@@ -170,7 +186,7 @@ struct InboxView: View {
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
         if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { return "#\(rank + 1) · \(origin)\(date)" }
         if showDone { return origin + date }
-        let status = backlog.contains { $0.id == capture.id } ? "Backlog" : "New"
+        let status = backlog.contains { $0.id == capture.id } ? "Backlog" : inProgress.contains { $0.id == capture.id } ? "In progress" : "Unseen"
         return "\(origin)\(status) · \(date)"
     }
 }
@@ -224,11 +240,11 @@ private struct RankingView: View {
                     choice(second, pair: pair, id: "ranking.second")
                     Text("Every choice is saved. You can pause anytime.").font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    Label("Batch complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
+                    Label("Review complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
                     Text(store.ledger.topTenIsVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
                     if !store.ledger.unrankedCaptures.isEmpty {
-                        let count = min(5, store.ledger.unrankedCaptures.count)
+                        let count = store.ledger.unrankedCaptures.count
                         Button("Rank \(count) more \(count == 1 ? "idea" : "ideas")") {
                             do { try store.prepareRanking() } catch { store.report(error) }
                         }.buttonStyle(.borderedProminent).accessibilityIdentifier("ranking.more")

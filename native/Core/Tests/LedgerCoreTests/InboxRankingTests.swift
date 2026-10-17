@@ -204,8 +204,8 @@ final class InboxRankingTests: XCTestCase {
         }
     }
 
-    func testBatchIsCappedAtFiveAndCaptureDoesNotStartOrInterruptRanking() throws {
-        var ledger = try fixture((0..<8).map { String(format: "%03d", $0) })
+    func testSessionReviewsAllWaitingIdeasAndCaptureDoesNotStartOrInterruptRanking() throws {
+        var ledger = try fixture((0..<18).map { String(format: "%03d", $0) })
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertNil(ledger.rankingPair); XCTAssertTrue(ledger.rankedCaptureIDs.isEmpty)
         ledger.prepareRanking(writer: "phone")
@@ -215,11 +215,77 @@ final class InboxRankingTests: XCTestCase {
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair, pair); XCTAssertEqual(ledger.inboxRanking, originalState)
         try answerBatch(&ledger) { min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 5)
-        XCTAssertEqual(Set(ledger.unrankedCaptures.map(\.id)), ["000", "001", "002", "newest"])
+        XCTAssertEqual(ledger.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
+        XCTAssertEqual(ledger.backlogCaptures.count, 8)
+        XCTAssertEqual(ledger.unrankedCaptures.map(\.id), ["newest"])
         XCTAssertFalse(ledger.rankingIsActive)
         ledger.prepareRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "newest")
+    }
+
+    func testUnseenCandidatesGetFirstLookBeforePartialInsertionsResume() throws {
+        var ledger = try legacyRanked()
+        let date = Date(timeIntervalSince1970: 100)
+        for (index, id) in ["a", "b", "c"].enumerated() {
+            try ledger.addCapture(text: id, id: id, writer: "phone", now: date.addingTimeInterval(Double(index)))
+        }
+        XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["c", "b", "a"])
+        XCTAssertTrue(ledger.partiallyRankedCaptures.isEmpty)
+        ledger.prepareRanking(writer: "phone")
+        for (id, remaining) in [("c", 2), ("b", 1), ("a", 0)] {
+            let pair = try XCTUnwrap(ledger.rankingPair)
+            XCTAssertEqual(pair.first, id)
+            XCTAssertEqual(pair.second, "009") // Every candidate first meets the threshold.
+            XCTAssertEqual(ledger.unseenCaptures.count, remaining)
+            XCTAssertTrue(ledger.partiallyRankedCaptures.contains { $0.id == id })
+            ledger.chooseCapture(id, from: pair, writer: "phone")
+            ledger = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        }
+        XCTAssertTrue(ledger.unseenCaptures.isEmpty)
+        XCTAssertEqual(Set(ledger.partiallyRankedCaptures.map(\.id)), ["a", "b", "c"])
+        XCTAssertEqual(ledger.rankingPair?.first, "a") // Last first-look candidate can now finish.
+        let scores: [String: Double] = ["a": 1.5, "b": 3.5, "c": 5.5]
+        try answerBatch(&ledger) {
+            (scores[$0.first] ?? Double($0.first)!) < (scores[$0.second] ?? Double($0.second)!) ? $0.first : $0.second
+        }
+        XCTAssertEqual(ledger.rankedCaptureIDs, ["000", "001", "a", "002", "003", "b", "004", "005", "c", "006"])
+        XCTAssertTrue(ledger.partiallyRankedCaptures.isEmpty)
+        XCTAssertTrue(ledger.topTenIsVerified)
+    }
+
+    func testSeeingWithoutAnswerMovesToProgressAndSurvivesBackupSyncAndRerank() throws {
+        var ledger = try legacyRanked()
+        try ledger.addCapture(text: "Seen", id: "seen", writer: "phone")
+        ledger.prepareRanking(writer: "phone")
+        let pair = try XCTUnwrap(ledger.rankingPair)
+        XCTAssertEqual(ledger.partiallyRankedCaptures.map(\.id), ["seen"])
+        XCTAssertTrue(ledger.unseenCaptures.isEmpty)
+        var restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        var watch = Ledger(); watch.merge(restored)
+        XCTAssertEqual(watch.partiallyRankedCaptures.map(\.id), ["seen"])
+        restored.prepareRanking(writer: "phone")
+        XCTAssertEqual(restored.rankingPair, pair)
+        restored.rerankCapture("000", writer: "phone")
+        XCTAssertTrue(restored.partiallyRankedCaptures.contains { $0.id == "seen" })
+        XCTAssertFalse(restored.unseenCaptures.contains { $0.id == "seen" })
+        restored.setCaptureDeleted("seen", deleted: true, writer: "phone")
+        XCTAssertFalse(restored.partiallyRankedCaptures.contains { $0.id == "seen" })
+        restored.setCaptureDeleted("seen", deleted: false, writer: "phone")
+        XCTAssertTrue(restored.partiallyRankedCaptures.contains { $0.id == "seen" })
+        try finish(&restored)
+    }
+
+    func testPreviousTopTenStateWithoutPresentationFieldsRemainsRecoverable() throws {
+        var ledger = try legacyRanked()
+        try ledger.addCapture(text: "Partial", id: "partial", writer: "phone")
+        try ledger.addCapture(text: "Not shown", id: "unseen", writer: "phone", now: Date(timeIntervalSince1970: 1))
+        ledger.prepareRanking(writer: "phone")
+        ledger.inboxRanking?.topTen?.presented = nil
+        ledger.inboxRanking?.topTen?.deferred = nil
+        let restored = try JSONDecoder().decode(Ledger.self, from: JSONEncoder().encode(ledger))
+        XCTAssertEqual(restored.partiallyRankedCaptures.map(\.id), ["partial"])
+        XCTAssertEqual(restored.unseenCaptures.map(\.id), ["unseen"])
+        XCTAssertEqual(restored.rankingPair, ledger.rankingPair)
     }
 
     func testUnsortedBacklogReplenishmentFindsTrueBestAndCanPauseAtEveryAnswer() throws {
