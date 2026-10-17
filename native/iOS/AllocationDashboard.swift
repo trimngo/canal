@@ -22,6 +22,18 @@ struct DayView: View {
             .sheet(isPresented: $managingCategories) { GroupManagerView() }
             .sheet(isPresented: $reviewing) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
     }
+    private func dashboardCategories(today: AllocationPeriod, week: AllocationPeriod, targets: [String: Double]) -> [LedgerCategory] {
+        let categories = store.ledger.children(of: nil)
+        func priority(_ category: LedgerCategory) -> Int {
+            if targets[category.id] != nil { return 0 }
+            if today.total(for: category.id, ledger: store.ledger) > 0 || week.total(for: category.id, ledger: store.ledger) > 0 { return 1 }
+            return 2
+        }
+        return categories.enumerated().sorted {
+            let lhs = priority($0.element), rhs = priority($1.element)
+            return lhs == rhs ? $0.offset < $1.offset : lhs < rhs
+        }.map(\.element)
+    }
     private func content(now: Date) -> some View {
         let day = store.ledger.wakingDay(containing: now)
         let today = store.ledger.allocation(on: day, now: now)
@@ -56,7 +68,7 @@ struct DayView: View {
                 }
             } header: { Text("Where your time went").textCase(nil).font(.headline).accessibilityIdentifier("dashboard.breakdown-title") }
             Section {
-                ForEach(store.ledger.children(of: nil)) { category in
+                ForEach(dashboardCategories(today: today, week: week, targets: targets)) { category in
                     AllocationCategoryRow(category: category, today: today, week: week, target: targets[category.id])
                 }
                 if today.directMinutes["uncategorized", default: 0] > 0 || week.directMinutes["uncategorized", default: 0] > 0 {
