@@ -19,6 +19,11 @@ final class CompanionSync: NSObject, WCSessionDelegate {
     private let session: WCSession?
     private var activationRequested = false
     private var delivery = CompanionDeliveryState()
+    private var quick = CompanionQuickDelivery()
+    private var quickID: String?
+    private var quickTimeout: Task<Void, Never>?
+    private var quickRetry = CompanionRetry()
+    private var quickRetryTask: Task<Void, Never>?
     private var retry = CompanionRetry()
     private var retryTask: Task<Void, Never>?
     nonisolated private let incomingWrites = CompanionWriteCounter()
@@ -44,7 +49,59 @@ final class CompanionSync: NSObject, WCSessionDelegate {
 
     func refresh() {
         retryTask?.cancel(); retryTask = nil; retry.reset()
+        quickRetryTask?.cancel(); quickRetryTask = nil; quickRetry.reset()
         send()
+    }
+
+    func hasReceivedSample(_ entry: CheckIn) -> Bool { quick.hasReceived(entry) }
+
+    private var queuedStatus: String {
+        guard let store else { return "Sync queued" }
+        #if os(watchOS)
+        return quick.recentLogsReceived(in: store.ledger) ? "Recent logs received by iPhone" : "Saved on Watch · waiting for iPhone"
+        #else
+        return quick.recentLogsReceived(in: store.ledger) ? "Recent logs received by Watch" : "Saved on iPhone · sync queued"
+        #endif
+    }
+
+    private func sendQuickly() {
+        guard let session, session.isReachable, let store, quickRetryTask == nil else { return }
+        let id = UUID().uuidString
+        do {
+            guard let data = try quick.prepare(store.ledger, id: id) else { return }
+            quickID = id
+            session.sendMessageData(data, replyHandler: { [weak self] response in
+                let receipt = try? JSONDecoder().decode(CompanionQuickReceipt.self, from: response)
+                Task { @MainActor in
+                    guard let self, self.quickID == id else { return }
+                    guard let receipt, receipt.id == id, receipt.saved else { self.quickFailed(id); return }
+                    self.quickTimeout?.cancel(); self.quickTimeout = nil; self.quickID = nil
+                    self.quick.finish(id: id, saved: true)
+                    self.quickRetry.reset(); self.store?.companionDiagnostic = nil
+                    self.store?.companionStatus = self.queuedStatus
+                    self.send() // Pick up responses saved while this receipt was in flight.
+                }
+            }, errorHandler: { [weak self] _ in
+                Task { @MainActor in self?.quickFailed(id) }
+            })
+            quickTimeout = Task { @MainActor [weak self] in
+                do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
+                self?.quickFailed(id)
+            }
+        } catch { store.companionStatus = queuedStatus }
+    }
+
+    private func quickFailed(_ id: String) {
+        guard quickID == id else { return }
+        quickTimeout?.cancel(); quickTimeout = nil; quickID = nil
+        quick.finish(id: id, saved: false)
+        store?.companionStatus = queuedStatus
+        // Background file delivery remains queued even if immediate delivery fails.
+        guard quickRetryTask == nil, let delay = quickRetry.nextDelay() else { return }
+        quickRetryTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: delay * 1_000_000_000) } catch { return }
+            self?.quickRetryTask = nil; self?.send()
+        }
     }
 
     private func connectionFailed(_ error: Error) {
@@ -79,7 +136,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         #endif
     }
     func send() {
-        guard let session, let store, retryTask == nil else { return }
+        guard let session, let store else { return }
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-companion-unavailable") {
             connectionFailed(NSError(domain: NSCocoaErrorDomain, code: 4099))
@@ -99,10 +156,14 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             return
         }
         #endif
+        // Unlike file transfers, a reachable Watch can wake its paired iPhone
+        // for an interactive message. Never wait behind an older history file.
+        sendQuickly()
+        guard retryTask == nil else { return }
         // WatchConnectivity already queues delivery while the other device is
         // unreachable. Never cancel that queue on foreground, save, or merge.
         guard session.outstandingFileTransfers.isEmpty else {
-            store.companionStatus = "Saved on this device · sync queued"
+            store.companionStatus = queuedStatus
             return
         }
         var transferID: String?
@@ -118,11 +179,36 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             temporaryFile = url
             try data.write(to: url, options: [.atomic])
             session.transferFile(url, metadata: ["schema": 2, "transferID": id])
-            store.companionStatus = "Saved on this device · sync queued"
+            store.companionStatus = queuedStatus
         } catch {
             if let transferID { delivery.finish(id: transferID, succeeded: false) }
             if let temporaryFile { try? FileManager.default.removeItem(at: temporaryFile) }
             connectionFailed(error)
+        }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.quickRetryTask?.cancel(); self.quickRetryTask = nil; self.quickRetry.reset()
+            self.send()
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessageData data: Data, replyHandler: @escaping (Data) -> Void) {
+        incomingWrites.begin()
+        let result = Result { try JSONDecoder().decode(CompanionQuickPacket.self, from: data) }
+        let writes = incomingWrites
+        Task { @MainActor [weak self] in
+            defer { writes.end(); self?.completeBackgroundTasksIfReady() }
+            var receipt = CompanionQuickReceipt(id: "", saved: false)
+            do {
+                let packet = try result.get(); receipt.id = packet.id
+                guard let store = self?.store else { replyHandler(Data()); return }
+                try store.merge(packet.ledger) // Atomic disk commit precedes the receipt.
+                receipt.saved = true
+            } catch { /* Sender retains its local save and background fallback. */ }
+            replyHandler((try? JSONEncoder().encode(receipt)) ?? Data())
         }
     }
 
@@ -164,7 +250,8 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             else {
                 self.retryTask?.cancel(); self.retryTask = nil; self.retry.reset()
                 self.store?.companionDiagnostic = nil
-                self.store?.companionStatus = "Synced with paired device"
+                // File handoff alone does not acknowledge an app-level save.
+                self.store?.companionStatus = self.queuedStatus
                 self.send() // Include edits committed while the previous file was in flight.
             }
         }
