@@ -24,5 +24,8 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxNotesSnoozeAndBringBackSurviveRelaunch \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxAutoFocusesCaptureAndSavingNeverOpensRanking \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUnseenIdeasStaySeparateFromPausedRankingsAfterRelaunch \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingEditsCompletesAndMovesToReferenceWithoutLeavingReview \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCustomDaySnoozeOffersMondayAndKeepsTaskInSnoozedSection \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted \
     test
 fi
