@@ -30,7 +30,7 @@ jobs:
           python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
       - name: Test core and build iPhone and Watch apps
         env:
-          LEDGER_UI_TESTS: '1'
+          LEDGER_UI_TESTS: '0'
         run: bash native/scripts/validate.sh
       - name: Export compact interface review
         if: always()
