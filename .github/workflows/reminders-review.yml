@@ -1,0 +1,52 @@
+name: Reminders inbox verification
+on:
+  push:
+    branches: ['review/native-reminders-inbox']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Verify core and both native app builds
+        run: bash native/scripts/validate.sh
+      - name: Verify Reminders import and existing capture flows
+        run: |
+          cd native
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build -resultBundlePath build/ReminderTests.xcresult -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRemindersImportUsesSelectedListAndKeepsDeletedIdeasDeletedAfterRelaunch -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSiriRoutesIdeasAndActivitiesSeparatelyAndPersistsBoth -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxDeletionHasUndoAndPersistsAfterRelaunch -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxKeyboardDismissesOutsideAndPreservesDraftAcrossTabs -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHomeShowsDashboardAndKeepsLoggingOnItsOwnTab -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRemainingTimePreferenceSurvivesRelaunch CODE_SIGNING_ALLOWED=NO test
+      - name: Export screenshots and summaries
+        if: always()
+        run: |
+          mkdir -p review
+          if [ ! -d native/build/ReminderTests.xcresult ]; then exit 0; fi
+          xcrun xcresulttool get test-results summary --path native/build/ReminderTests.xcresult > review/summary.json
+          xcrun xcresulttool export attachments --path native/build/ReminderTests.xcresult --output-path attachments
+          python3 - <<'PY'
+          import json,pathlib,shutil
+          root=pathlib.Path('attachments')
+          manifest=json.loads((root/'manifest.json').read_text())
+          shutil.copy(root/'manifest.json','review/manifest.json')
+          for test in manifest:
+              items=test.get('attachments',[])
+              for a in items:
+                  name=a.get('suggestedHumanReadableName','')
+                  if name.startswith('Review-'):
+                      shutil.copy(root/a['exportedFileName'],pathlib.Path('review')/(pathlib.Path(name).stem+'.png'))
+              snapshots=sorted([a for a in items if 'UI Snapshot' in a.get('suggestedHumanReadableName','')],key=lambda a:a.get('timestamp',0),reverse=True)[:1]
+              for a in snapshots: shutil.copy(root/a['exportedFileName'],pathlib.Path('review')/('diagnostic-'+a['exportedFileName']+'.plist'))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reminders-inbox-verification
+          path: review
+          retention-days: 1
