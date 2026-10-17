@@ -50,7 +50,7 @@ public struct TopTenRanking: Codable, Equatable, Sendable {
     var tournament: BacklogTournament?
     var pending: [String] = []
     // Optional for ledgers saved before separate unseen/in-progress queues.
-    var presented: [String]?
+    var presented: [String]? = []
     var deferred: [String]?
     var replenishing = false
 }
@@ -109,7 +109,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         for (a, b) in zip(ids, ids.dropFirst()) { remember(a, b) }
     }
 
-    private mutating func recordPresentation() {
+    mutating func recordPresentation() {
         guard let pair else { return }
         var seen = Set(topTen?.presented ?? [])
         seen.insert(pair.first); seen.insert(pair.second)
@@ -119,7 +119,9 @@ public struct InboxRanking: Codable, Equatable, Sendable {
     func seenIDs() -> Set<String> {
         var seen = Set(topTen?.presented ?? [])
         for edge in topTen?.preferences ?? [] { seen.insert(edge.winner); seen.insert(edge.loser) }
-        if let pair { seen.insert(pair.first); seen.insert(pair.second) }
+        // Older saves did not record presentation separately. Their active
+        // pair is the best available evidence of what had already been shown.
+        if topTen?.presented == nil, let pair { seen.insert(pair.first); seen.insert(pair.second) }
         return seen
     }
 
@@ -244,9 +246,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                     topTen?.candidate = candidate
                 }
                 if let pair {
-                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(pair.first, pair.second) else {
-                        recordPresentation(); return
-                    }
+                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(pair.first, pair.second) else { return }
                     apply(winner)
                 } else {
                     ordered.insert(candidate.item, at: min(candidate.low, ordered.count))
@@ -262,9 +262,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             }
             if var tournament = topTen?.tournament {
                 if let next = tournament.remaining.first {
-                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(tournament.champion, next) else {
-                        recordPresentation(); return
-                    }
+                    guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(tournament.champion, next) else { return }
                     tournament.remaining.removeFirst(); tournament.champion = winner
                     topTen?.tournament = tournament
                 } else {
@@ -377,6 +375,12 @@ extension Ledger {
     public mutating func prepareRanking(writer: String) {
         var ranking = inboxRanking ?? InboxRanking()
         ranking.startSession(ids: rankingIDs)
+        ranking.recordPresentation()
+        saveRanking(ranking, writer: writer)
+    }
+    public mutating func markRankingPresented(writer: String) {
+        guard var ranking = inboxRanking else { return }
+        ranking.recordPresentation()
         saveRanking(ranking, writer: writer)
     }
     public mutating func replenishTopTen(writer: String) {
@@ -388,7 +392,9 @@ extension Ledger {
         normalizeInboxRanking(writer: writer)
         guard var ranking = inboxRanking, ranking.pair == expected,
               preferred == expected.first || preferred == expected.second else { return }
+        ranking.recordPresentation()
         ranking.apply(preferred); ranking.yieldToUnseen(); ranking.advance(ids: rankingIDs)
+        ranking.recordPresentation()
         // Every answer advances the revision even if the next pair has the same IDs.
         ranking.revision = nextRevision(writer: writer); inboxRanking = ranking
     }

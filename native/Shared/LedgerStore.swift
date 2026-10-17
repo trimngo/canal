@@ -359,6 +359,7 @@ final class LedgerStore: ObservableObject {
     }
 
     func prepareRanking() throws { var draft = ledger; draft.prepareRanking(writer: writer); if draft != ledger { try commit(draft) } }
+    func markRankingPresented() throws { var draft = ledger; draft.markRankingPresented(writer: writer); if draft != ledger { try commit(draft) } }
     func resumeRanking() throws { var draft = ledger; draft.normalizeInboxRanking(writer: writer); if draft != ledger { try commit(draft) } }
     func replenishTopTen() throws { var draft = ledger; draft.replenishTopTen(writer: writer); if draft != ledger { try commit(draft) } }
     func chooseCapture(_ preferred: String, pair: RankingPair) throws {

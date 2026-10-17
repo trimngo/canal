@@ -288,6 +288,23 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(restored.rankingPair, ledger.rankingPair)
     }
 
+    func testBackgroundAdvanceDoesNotMarkANeverDisplayedIdeaAsSeen() throws {
+        var ledger = try legacyRanked()
+        try ledger.addCapture(text: "Older unseen", id: "older", writer: "phone", now: Date(timeIntervalSince1970: 100))
+        try ledger.addCapture(text: "Shown", id: "shown", writer: "phone", now: Date(timeIntervalSince1970: 200))
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.partiallyRankedCaptures.map(\.id), ["shown"])
+        // Delete the current candidate outside the ranking screen. Advancing
+        // the saved session is not evidence that the next candidate was seen.
+        ledger.setCaptureDeleted("shown", deleted: true, writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "older")
+        XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["older"])
+        XCTAssertTrue(ledger.partiallyRankedCaptures.isEmpty)
+        ledger.markRankingPresented(writer: "phone")
+        XCTAssertEqual(ledger.partiallyRankedCaptures.map(\.id), ["older"])
+        XCTAssertTrue(ledger.unseenCaptures.isEmpty)
+    }
+
     func testUnsortedBacklogReplenishmentFindsTrueBestAndCanPauseAtEveryAnswer() throws {
         var ledger = try legacyRanked()
         for id in ["011", "015", "020"] { try ledger.addCapture(text: id, id: id, writer: "phone") }

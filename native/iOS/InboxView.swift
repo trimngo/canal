@@ -267,6 +267,9 @@ private struct RankingView: View {
             }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
                 .task { do { try store.resumeRanking() } catch { store.report(error) } }
+                .onChange(of: store.ledger.rankingPair, initial: true) { _, _ in
+                    do { try store.markRankingPresented() } catch { store.report(error) }
+                }
                 .onChange(of: store.ledger.captures) { _, _ in do { try store.resumeRanking() } catch { store.report(error) } }
         }
     }
