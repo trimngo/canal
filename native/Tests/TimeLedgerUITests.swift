@@ -224,6 +224,7 @@ final class TimeLedgerUITests: XCTestCase {
         let create = app.buttons["reminders.create"]
         XCTAssertTrue(create.waitForExistence(timeout: 10)); create.tap()
         let importNow = app.buttons["reminders.import"]
+        reveal(importNow, in: app)
         XCTAssertTrue(importNow.waitForExistence(timeout: 20))
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 25), .completed)
@@ -239,6 +240,7 @@ final class TimeLedgerUITests: XCTestCase {
         reveal(importNow, in: app); importNow.tap()
         app.terminate(); app.launchArguments = []; app.launch()
         app.tabBars.buttons["Settings"].tap(); app.buttons["settings.reminders"].tap()
+        reveal(importNow, in: app)
         XCTAssertTrue(importNow.waitForExistence(timeout: 20))
         let reloaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
         XCTAssertEqual(XCTWaiter.wait(for: [reloaded], timeout: 25), .completed)
