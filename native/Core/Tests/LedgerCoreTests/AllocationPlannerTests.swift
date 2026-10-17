@@ -26,12 +26,12 @@ final class AllocationPlannerTests: XCTestCase {
     }
     func testEqualSplitSiblingsAndCrossParentCategories() throws {
         var ledger = try fixture()
-        try ledger.saveSample(at: now, activity: "Two things", categoryIDs: ["teaching", "music", "music"], writer: "test", now: now)
+        try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Two things", categoryIDs: ["teaching", "music", "music"], writer: "test", now: now)
         let period = ledger.allocation(on: now, now: now, calendar: utc)
-        XCTAssertEqual(period.directMinutes["teaching"], 120)
-        XCTAssertEqual(period.directMinutes["music"], 120)
-        XCTAssertEqual(period.total(for: "work", ledger: ledger), 120)
-        XCTAssertEqual(period.directMinutes.values.reduce(0, +), 240)
+        XCTAssertEqual(period.directMinutes["teaching"], 30)
+        XCTAssertEqual(period.directMinutes["music"], 30)
+        XCTAssertEqual(period.total(for: "work", ledger: ledger), 30)
+        XCTAssertEqual(period.directMinutes.values.reduce(0, +), 60)
         XCTAssertNoThrow(try ledger.validateCategories(["teaching", "votion"]))
         XCTAssertThrowsError(try ledger.validateCategories(["work", "teaching"]))
         XCTAssertEqual(ledger.categoryConflicts("work", with: ["music", "teaching"]), ["teaching"])
@@ -67,14 +67,14 @@ final class AllocationPlannerTests: XCTestCase {
     func testDeletionKeepsRawLogsPromotesChildrenAndPreservesSplitShare() throws {
         var ledger = try fixture()
         try ledger.saveTargets(["work": 30, "music": 15], effectiveAt: now.addingTimeInterval(-3600), writer: "test")
-        try ledger.saveSample(at: now, activity: "Both", categoryIDs: ["work", "music"], writer: "test", now: now)
+        try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Both", categoryIDs: ["work", "music"], writer: "test", now: now)
         let timestamp = ledger.entries[0].end, id = ledger.entries[0].id
         try ledger.deleteCategory(id: "work", writer: "test")
         XCTAssertEqual(ledger.entries[0].end, timestamp); XCTAssertEqual(ledger.entries[0].id, id)
         XCTAssertNil(ledger.categoryParents["teaching"])
         let period = ledger.allocation(on: now, now: now, calendar: utc)
-        XCTAssertEqual(period.directMinutes["music"], 120)
-        XCTAssertEqual(period.directMinutes["uncategorized"], 120)
+        XCTAssertEqual(period.directMinutes["music"], 30)
+        XCTAssertEqual(period.directMinutes["uncategorized"], 30)
         var stale = try fixture(); stale.merge(ledger); ledger.merge(stale)
         XCTAssertEqual(ledger.allocation(on: now, now: now, calendar: utc), period)
     }
@@ -97,50 +97,50 @@ final class AllocationPlannerTests: XCTestCase {
         try ledger.saveTargets([:], effectiveAt: now.addingTimeInterval(1), writer: "test")
         XCTAssertEqual(ledger.currentBudget(at: now.addingTimeInterval(1))?.unallocated, 100)
     }
-    func testMidpointAndCarryForwardExtendWakingBoundariesAndCapToday() throws {
+    func testMidpointAndCarryForwardStartAtFirstLogAndCapToday() throws {
         var ledger = try fixture()
         try ledger.saveSample(at: date("2026-10-17T09:00:00Z"), activity: "Teaching", categoryIDs: ["teaching"], writer: "test", now: now)
         try ledger.saveSample(at: date("2026-10-17T10:00:00Z"), activity: "Music", categoryIDs: ["music"], writer: "test", now: now)
         var segments = ledger.inferredSegments(on: now, now: now, calendar: utc)
-        XCTAssertEqual(segments.first?.start, date("2026-10-17T07:00:00Z"))
+        XCTAssertEqual(segments.first?.start, date("2026-10-17T09:00:00Z"))
         XCTAssertEqual(segments.first?.end, date("2026-10-17T09:30:00Z"))
         XCTAssertEqual(segments.last?.end, now)
         segments = ledger.inferredSegments(on: now, now: now, calendar: utc, method: .carryForward)
-        XCTAssertEqual(segments.first?.minutes, 180)
+        XCTAssertEqual(segments.first?.minutes, 60)
         let completed = ledger.allocation(on: now, now: now.addingTimeInterval(86400), calendar: utc)
-        XCTAssertEqual(completed.wakingMinutes, 900)
-        XCTAssertEqual(completed.directMinutes.values.reduce(0, +), 900)
+        XCTAssertEqual(completed.wakingMinutes, 780)
+        XCTAssertEqual(completed.directMinutes.values.reduce(0, +), 780)
         XCTAssertEqual(ledger.allocation(on: now, now: date("2026-10-17T06:00:00Z"), calendar: utc).wakingMinutes, 0)
     }
     func testRollingSevenCalendarDaysUseWeightedWakingHoursAndExcludeEmptyDays() throws {
         var ledger = try fixture()
         try ledger.saveSample(at: date("2026-10-16T09:00:00Z"), activity: "Work", categoryIDs: ["work"], writer: "test", now: now)
-        try ledger.saveSample(at: now, activity: "Music", categoryIDs: ["music"], writer: "test", now: now)
+        try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Music", categoryIDs: ["music"], writer: "test", now: now)
         try ledger.saveSample(at: date("2026-10-10T10:00:00Z"), activity: "Outside window", categoryIDs: ["music"], writer: "test", now: now)
         let period = ledger.rollingAllocation(now: now, calendar: utc)
         XCTAssertEqual(period.representedDays, 2); XCTAssertEqual(period.requestedDays, 7)
-        XCTAssertEqual(period.wakingMinutes, 1140)
-        XCTAssertEqual(period.percent(period.directMinutes["work", default: 0]), 900.0 / 1140 * 100, accuracy: 0.0001)
+        XCTAssertEqual(period.wakingMinutes, 840)
+        XCTAssertEqual(period.percent(period.directMinutes["work", default: 0]), 780.0 / 840 * 100, accuracy: 0.0001)
         XCTAssertFalse(ledger.allocation(on: date("2026-10-15T11:00:00Z"), now: now, calendar: utc).sufficient)
         XCTAssertEqual(ledger.history(range: .week, now: now, calendar: utc).trackedMinutes, period.wakingMinutes)
     }
     func testUncategorizedDaysAreSufficientAndCoincidentSamplesCountOnce() throws {
         var ledger = Ledger()
-        try ledger.saveSample(at: now, activity: "First", categoryIDs: ["work"], writer: "test", now: now)
-        try ledger.saveSample(at: now, activity: "Correction", categoryIDs: [], writer: "test", now: now)
+        try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "First", categoryIDs: ["work"], writer: "test", now: now)
+        try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Correction", categoryIDs: [], writer: "test", now: now)
         let period = ledger.allocation(on: now, now: now, calendar: utc)
         XCTAssertEqual(ledger.entries.count, 2)
         XCTAssertEqual(period.representedDays, 1)
-        XCTAssertEqual(period.directMinutes["uncategorized"], 240)
-        XCTAssertEqual(period.directMinutes.values.reduce(0, +), 240)
+        XCTAssertEqual(period.directMinutes["uncategorized"], 60)
+        XCTAssertEqual(period.directMinutes.values.reduce(0, +), 60)
     }
     func testOvernightPeriodsCrossMidnightAndAdjustmentsDoNotOverlap() throws {
         var ledger = Ledger(); ledger.settings.wakeUpMinute = 20 * 60; ledger.settings.bedtimeMinute = 4 * 60
         let morning = date("2026-10-18T02:00:00Z"), day = date("2026-10-17T12:00:00Z")
         try ledger.saveSample(at: date("2026-10-18T01:00:00Z"), activity: "Night work", categoryIDs: ["work"], writer: "test", now: morning)
         XCTAssertEqual(ledger.wakingDay(containing: morning, calendar: utc), utc.startOfDay(for: day))
-        XCTAssertEqual(ledger.allocation(on: day, now: morning, calendar: utc).wakingMinutes, 360)
-        XCTAssertEqual(ledger.history(range: .today, now: morning, calendar: utc).trackedMinutes, 360)
+        XCTAssertEqual(ledger.allocation(on: day, now: morning, calendar: utc).wakingMinutes, 60)
+        XCTAssertEqual(ledger.history(range: .today, now: morning, calendar: utc).trackedMinutes, 60)
         try ledger.saveWakingOverride(on: morning, wake: 3 * 60, bed: 12 * 60, calendar: utc, writer: "test")
         XCTAssertEqual(ledger.wakingBounds(on: day, calendar: utc)?.end, date("2026-10-18T03:00:00Z"))
     }
@@ -182,12 +182,12 @@ final class AllocationPlannerTests: XCTestCase {
     func testAllSevenDaysAreRepresentedAndOlderSamplesCannotFillMissingDays() throws {
         var ledger = Ledger()
         for offset in -7...0 {
-            let stamp = utc.date(byAdding: .day, value: offset, to: now)!
+            let stamp = utc.date(byAdding: .day, value: offset, to: now.addingTimeInterval(-3600))!
             try ledger.saveSample(at: stamp, activity: "Work", categoryIDs: ["work"], writer: "test", now: now)
         }
         let period = ledger.rollingAllocation(now: now, calendar: utc)
         XCTAssertEqual(period.representedDays, 7)
-        XCTAssertEqual(period.wakingMinutes, 6 * 900 + 240)
+        XCTAssertEqual(period.wakingMinutes, 6 * 720 + 60)
         XCTAssertEqual(period.percent(period.directMinutes["work", default: 0]), 100)
         for entry in ledger.activeEntries where utc.isDate(entry.end, inSameDayAs: now) { ledger.setLogDeleted(entry.id, deleted: true, writer: "test") }
         XCTAssertFalse(ledger.allocation(on: now, now: now, calendar: utc).sufficient)
@@ -222,7 +222,7 @@ final class AllocationPlannerTests: XCTestCase {
     }
     func testOldJSONMissingPlannerFieldsUsesSafeDefaultsWithoutChangingRawLog() throws {
         var ledger = Ledger()
-        ledger.entries = [CheckIn(end: now, activity: "Existing", categoryID: "work", revision: Revision(counter: 1, writer: "old"))]
+        ledger.entries = [CheckIn(end: now.addingTimeInterval(-3600), activity: "Existing", categoryID: "work", revision: Revision(counter: 1, writer: "old"))]
         var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(ledger)) as! [String: Any]
         for key in ["targetBudgets", "wakingOverrides"] { json.removeValue(forKey: key) }
         var settings = json["settings"] as! [String: Any]
@@ -232,7 +232,7 @@ final class AllocationPlannerTests: XCTestCase {
         XCTAssertEqual(restored.entries, ledger.entries)
         XCTAssertNil(restored.targetBudgets); XCTAssertNil(restored.wakingOverrides)
         XCTAssertEqual(restored.wakingSchedule(on: now, calendar: utc).wake, 420)
-        XCTAssertEqual(restored.allocation(on: now, now: now, calendar: utc).directMinutes["work"], 240)
+        XCTAssertEqual(restored.allocation(on: now, now: now, calendar: utc).directMinutes["work"], 60)
     }
 
 }

@@ -311,17 +311,17 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Show pie chart"].tap()
         let chart = element(app, "report.pie.chart")
         XCTAssertTrue(chart.waitForExistence(timeout: 5))
-        // Waking-boundary extrapolation makes Work the large first slice.
+        // The fixture is 75% Uncategorized, starting clockwise from twelve.
         chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 70, dy: 0)).tap()
         let selection = element(app, "report.pie.selection")
-        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Work"), object: selection)
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Uncategorized"), object: selection)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
         recordScreen("SelectedPieSlice", in: app)
-        let work = app.buttons["report.pie.group.uncategorized"]; reveal(work, in: app); work.tap()
-        XCTAssertTrue(selection.label.contains("Uncategorized"))
+        let work = app.buttons["report.pie.group.work"]; reveal(work, in: app); work.tap()
+        XCTAssertTrue(selection.label.contains("Work"))
         XCTAssertTrue(selection.label.contains("%"))
         chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 70, dy: 0)).tap()
-        XCTAssertTrue(selection.label.contains("Work"))
+        XCTAssertTrue(selection.label.contains("Uncategorized"))
     }
 
     func testGroupCountsAndDeletionPreserveAllTimeLogsAfterRelaunch() {

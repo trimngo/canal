@@ -234,7 +234,7 @@ extension Ledger {
         func midpoint(_ a: Date, _ b: Date) -> Date { a.addingTimeInterval(b.timeIntervalSince(a) / 2) }
         return distinct.indices.compactMap { index in
             let sample = distinct[index]
-            let start = index == 0 ? bounds.start : (rule == .carryForward ? sample.end : midpoint(distinct[index - 1].end, sample.end))
+            let start = index == 0 ? sample.end : (rule == .carryForward ? sample.end : midpoint(distinct[index - 1].end, sample.end))
             let end = index == distinct.count - 1 ? cutoff : (rule == .carryForward ? distinct[index + 1].end : midpoint(sample.end, distinct[index + 1].end))
             guard end > start else { return nil }
             return InferredSegment(sampleID: sample.id, start: start, end: end, categoryID: confirmedCategoryID(for: sample))

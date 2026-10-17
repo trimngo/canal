@@ -110,13 +110,12 @@ final class GroupingTests: XCTestCase {
         XCTAssertEqual(ledger.suggestedCategory(for: "Showering"), "personal")
     }
 
-    func testInstantaneousSampleEstimatesWakingTimeWithoutUnestimatedRow() throws {
+    func testZeroDurationSampleProducesFinitePercentagesWithoutUnestimatedRow() throws {
         var ledger = Ledger()
         try ledger.saveSample(at: now, activity: "Work", categoryID: nil, writer: "phone", now: now)
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let rows = ledger.breakdown(on: now, now: now, calendar: calendar)
-        XCTAssertTrue(rows.allSatisfy { $0.percent.isFinite })
-        XCTAssertEqual(rows.first { $0.id == "uncategorized" }?.percent, 100)
+        XCTAssertTrue(rows.allSatisfy { $0.percent.isFinite && $0.percent == 0 })
         XCTAssertFalse(rows.contains { $0.id == "unlogged" })
     }
 

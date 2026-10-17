@@ -55,7 +55,7 @@ struct WatchHomeView: View {
                                 Text("\(row.percent, specifier: "%.0f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
                             }.font(.caption)
                         }
-                        Text("Of elapsed waking time · estimates extend to waking boundaries").font(.caption2).foregroundStyle(.secondary)
+                        Text("Since first log · estimates stop at now or bedtime").font(.caption2).foregroundStyle(.secondary)
                         Button("Sync") { store.refresh() }
                         Text(store.companionStatus).font(.caption2).foregroundStyle(.secondary)
                         if let diagnostic = store.companionDiagnostic {

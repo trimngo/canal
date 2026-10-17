@@ -21,7 +21,7 @@ struct WakingScheduleView: View {
                 }.disabled(wake == bed).accessibilityIdentifier("waking.save")
                 Text("\(store.duration(Double((bed - wake + 1440) % 1440))) per typical waking day").font(.footnote)
             } header: { Text("Typical waking hours") } footer: {
-                Text("An earlier bedtime clock time means the next morning. Today ends at now or bedtime, whichever comes first. Estimates extend to wake-up and bedtime only on days with logs. Logs outside the waking period stay saved but do not contribute to these estimates.")
+                Text("An earlier bedtime clock time means the next morning. Today ends at now or bedtime, whichever comes first. Estimates start at the first log, never before it, and extend to bedtime only on days with logs. Logs outside the waking period stay saved but do not contribute to these estimates.")
             }
             Section {
                 DatePicker("Waking date", selection: $selectedDay, displayedComponents: .date).environment(\.timeZone, cal.timeZone)

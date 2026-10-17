@@ -55,7 +55,7 @@ struct AllocationHistoryView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
                     if report.remainingMinutes > 0 { Text("Percentages include time remaining until bedtime.") }
-                    else { Text("Percentages use waking time on days with logs. Days without logs are excluded.") }
+                    else { Text("Percentages start at each day’s first log and end at now or bedtime. Days without logs are excluded.") }
                     Text("Swipe the chart for breakdown, pie, and trend.")
                 }
             }

@@ -86,7 +86,7 @@ struct SettingsView: View {
                     ForEach(InferenceMethod.allCases) { Text($0.name).tag($0) }
                 }
             } header: { Text("Estimate time") } footer: {
-                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates extend the first and last activity to your waking boundaries. Today stops at now or bedtime. Days without logs are excluded. Percentages use waking time. Changing methods keeps your original samples.")
+                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates start at your first log and extend the last activity to bedtime. Today stops at now or bedtime. Days without logs are excluded. Percentages use time since the first log. Changing methods keeps your original samples.")
             }
             Section {
                 NavigationLink("Waking schedule") { WakingScheduleView() }

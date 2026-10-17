@@ -16,11 +16,11 @@ final class HistoryAndBackupTests: XCTestCase {
         let ledger = try fixture(), now = date("2026-10-15T11:00:00Z")
         let week = ledger.history(range: .week, now: now, calendar: calendar)
         XCTAssertEqual(week.samples.count, 4)
-        XCTAssertEqual(week.trackedMinutes, 1140, accuracy: 0.001)
-        XCTAssertEqual(try XCTUnwrap(week.rows.first { $0.id == "work" }).minutes, 300, accuracy: 0.001)
-        XCTAssertEqual(try XCTUnwrap(week.rows.first { $0.id == "work" }).percent, 300.0 / 1140 * 100, accuracy: 0.001)
+        XCTAssertEqual(week.trackedMinutes, 900, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(week.rows.first { $0.id == "work" }).minutes, 60, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(week.rows.first { $0.id == "work" }).percent, 60.0 / 900 * 100, accuracy: 0.001)
         XCTAssertEqual(week.rows.reduce(0) { $0 + $1.percent }, 100, accuracy: 0.001)
-        XCTAssertEqual(ledger.history(range: .allTime, now: now, calendar: calendar).trackedMinutes, 2040, accuracy: 0.001)
+        XCTAssertEqual(ledger.history(range: .allTime, now: now, calendar: calendar).trackedMinutes, 1680, accuracy: 0.001)
         XCTAssertEqual(ledger.entries.count, 6)
     }
     func testCustomRangeIncludesWholeSelectedDatesAndExcludesNextMidnight() throws {
@@ -28,7 +28,7 @@ final class HistoryAndBackupTests: XCTestCase {
         try ledger.saveSample(at: date("2026-10-15T00:00:00Z"), activity: "Boundary", categoryID: nil, writer: "test", now: now)
         let report = ledger.history(range: .custom, start: date("2026-10-14T23:00:00Z"), end: date("2026-10-14T01:00:00Z"), now: now, calendar: calendar)
         XCTAssertEqual(report.samples.count, 2)
-        XCTAssertEqual(report.trackedMinutes, 900, accuracy: 0.001)
+        XCTAssertEqual(report.trackedMinutes, 780, accuracy: 0.001)
         XCTAssertFalse(report.samples.contains { $0.activity == "Boundary" })
     }
     func testLegacyRemainingTimePreferenceDoesNotChangeWakingPercentages() throws {
@@ -38,7 +38,7 @@ final class HistoryAndBackupTests: XCTestCase {
         try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Reading", categoryID: "leisure", writer: "test", now: now)
         ledger.settings.showRemainingTime = true
         let report = ledger.history(range: .today, now: now, calendar: berlin)
-        XCTAssertEqual(report.trackedMinutes, 360, accuracy: 0.001)
+        XCTAssertEqual(report.trackedMinutes, 60, accuracy: 0.001)
         XCTAssertEqual(report.remainingMinutes, 0)
         XCTAssertFalse(report.rows.contains { $0.id == "remaining" })
         XCTAssertEqual(report.rows.first?.percent, 100)

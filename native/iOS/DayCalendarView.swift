@@ -24,7 +24,12 @@ struct DayCalendarView: View {
     private var height: CGFloat { CGFloat(bounds.duration / 3600) * hourHeight }
     private func y(_ date: Date) -> CGFloat { CGFloat(date.timeIntervalSince(bounds.start) / 3600) * hourHeight }
     private var hours: [Date] {
-        stride(from: 0.0, through: bounds.duration, by: 3600).map { bounds.start.addingTimeInterval($0) }
+        let calendar = store.ledger.reportingCalendar()
+        var result: [Date] = [bounds.start]
+        var hour = calendar.dateInterval(of: .hour, for: bounds.start)?.start ?? bounds.start
+        if hour <= bounds.start { hour = hour.addingTimeInterval(3600) }
+        while hour <= bounds.end { result.append(hour); hour = hour.addingTimeInterval(3600) }
+        return result
     }
     private var samples: [CheckIn] { store.ledger.wakingSamples(on: day, now: now) }
     private var blocks: [CalendarActivity] {

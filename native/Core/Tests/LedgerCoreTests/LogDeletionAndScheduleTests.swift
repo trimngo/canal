@@ -17,7 +17,7 @@ final class LogDeletionAndScheduleTests: XCTestCase {
         ledger.setLogDeleted("b", deleted: true, writer: "phone")
         let report = ledger.history(range: .allTime, now: now)
         XCTAssertEqual(Set(report.samples.map(\.id)), Set(["a", "c"]))
-        XCTAssertEqual(report.trackedMinutes, try XCTUnwrap(ledger.wakingBounds(on: now)).start.distance(to: now) / 60, accuracy: 0.001)
+        XCTAssertEqual(report.trackedMinutes, 60, accuracy: 0.001)
         XCTAssertFalse(report.rows.contains { $0.id == "personal" })
         XCTAssertEqual(ledger.groupEntryCounts(now: now), ["work": 1, "rest": 1])
         XCTAssertEqual(ledger.entries, raw)

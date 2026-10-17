@@ -34,7 +34,7 @@ struct DayView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Today").font(.subheadline.bold())
-                        Text(today.sufficient ? "\(store.duration(today.wakingMinutes)) waking" : "Insufficient data").font(.caption).foregroundStyle(.secondary)
+                        Text(today.sufficient ? "\(store.duration(today.wakingMinutes)) since first log" : "Insufficient data").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 4) {
@@ -51,7 +51,7 @@ struct DayView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let bounds = store.ledger.wakingBounds(on: day) {
-                    Text("Waking day \(store.dayLabel(day)): \(store.time(bounds.start))–\(store.time(bounds.end)) · \(store.ledger.reportingCalendar().timeZone.identifier)")
+                    Text("Configured waking day \(store.dayLabel(day)): \(store.time(bounds.start))–\(store.time(bounds.end)) · \(store.ledger.reportingCalendar().timeZone.identifier)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             } header: { Text("Where your time went").textCase(nil).font(.headline).accessibilityIdentifier("dashboard.breakdown-title") }
@@ -66,7 +66,7 @@ struct DayView: View {
                     }
                 }
             } footer: {
-                Text("Percentages use waking hours, not just the time between logs. Differences are percentage points from your target; more time is not necessarily better. Expand a category for its breakdown.")
+                Text("Percentages use time from the first log to now or bedtime. Time before the first log is excluded. Differences are percentage points from your target; more time is not necessarily better. Expand a category for its breakdown.")
             }
             Section {
                 HStack { Text("Unallocated target"); Spacer(); Text("\(max(0, 100 - allocated), specifier: "%.1f")%").bold() }
