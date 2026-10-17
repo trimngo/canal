@@ -286,7 +286,10 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             }
             if let next = topTen?.deferred?.first {
                 topTen?.deferred?.removeFirst()
-                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
+                // This candidate already had a first comparison. Search the
+                // current list directly, reusing its answers even if #10 changed.
+                // Inserting at index 10 naturally returns it to the backlog.
+                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: false)
                 continue
             }
             return

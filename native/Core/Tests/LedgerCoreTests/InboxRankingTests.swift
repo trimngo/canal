@@ -275,6 +275,25 @@ final class InboxRankingTests: XCTestCase {
         try finish(&restored)
     }
 
+    func testFirstLookQueueStillUsesAtMostFiveAnswersPerCandidateAsThresholdChanges() throws {
+        var ledger = try legacyRanked()
+        var scores: [String: Double] = [:]
+        for i in 0..<20 {
+            let id = "candidate-\(i)"
+            scores[id] = Double(i) / 3 - 2
+            try ledger.addCapture(text: id, id: id, writer: "phone", now: Date(timeIntervalSince1970: Double(i + 100)))
+        }
+        ledger.prepareRanking(writer: "phone")
+        var answers: [String: Int] = [:]
+        try answerBatch(&ledger) { pair in
+            answers[pair.first, default: 0] += 1
+            return (scores[pair.first] ?? Double(pair.first)!) < (scores[pair.second] ?? Double(pair.second)!) ? pair.first : pair.second
+        }
+        XCTAssertEqual(answers.count, 20)
+        XCTAssertTrue(answers.values.allSatisfy { $0 <= 5 }, "\(answers)")
+        XCTAssertTrue(ledger.topTenIsVerified)
+    }
+
     func testPreviousTopTenStateWithoutPresentationFieldsRemainsRecoverable() throws {
         var ledger = try legacyRanked()
         try ledger.addCapture(text: "Partial", id: "partial", writer: "phone")
