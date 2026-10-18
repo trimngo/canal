@@ -38,16 +38,19 @@ final class AutomaticBackup {
             while let ledger = self.requested {
                 self.requested = nil
                 do {
-                    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-                    let payload = try encoder.encode(ledger)
-                    if payload != self.lastWritten || self.lastURL == nil {
-                        let data = try LedgerBackup(ledger: ledger).encoded()
-                        let writer = self.writer
-                        let url = try await Task.detached(priority: .utility) {
-                            try Self.write(data, writer: writer)
-                        }.value
-                        self.lastURL = url; self.lastWritten = payload
-                    }
+                    let previous = self.lastWritten, existingURL = self.lastURL, writer = self.writer
+                    // Encoding a growing log history is background work too,
+                    // not just writing its bytes. Keep ranking taps responsive.
+                    let result = try await Task.detached(priority: .utility) {
+                        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                        let payload = try encoder.encode(ledger)
+                        let url: URL
+                        if payload != previous || existingURL == nil {
+                            url = try Self.write(LedgerBackup(ledger: ledger).encoded(), writer: writer)
+                        } else { url = existingURL! }
+                        return (payload, url)
+                    }.value
+                    self.lastWritten = result.0; self.lastURL = result.1
                     if let url = self.lastURL {
                         self.updateUploadStatus(url)
                         self.pollUpload(url)

@@ -16,12 +16,12 @@ struct InboxView: View {
     @State private var snoozing: Capture?
     @State private var copiedIdeaCount: Int?
     private var snoozed: [Capture] { store.ledger.snoozedCaptures(at: clock) }
-    private var ranked: [Capture] { store.ledger.rankedCaptures }
-    private var waiting: [Capture] { store.ledger.unseenCaptures }
-    private var inProgress: [Capture] { store.ledger.partiallyRankedCaptures }
-    private var backlog: [Capture] { store.ledger.backlogCaptures }
+    private var ranked: [Capture] { store.inbox.ranked }
+    private var waiting: [Capture] { store.inbox.unseen }
+    private var inProgress: [Capture] { store.inbox.inProgress }
+    private var backlog: [Capture] { store.inbox.backlog }
     private var rankButtonTitle: String {
-        if store.ledger.rankingIsActive { return "Continue ranking" }
+        if store.inbox.isActive { return "Continue ranking" }
         let count = waiting.count
         return "Rank \(count) new \(count == 1 ? "idea" : "ideas")"
     }
@@ -51,10 +51,10 @@ struct InboxView: View {
                     Section {
                         if ranked.isEmpty { Text("Your highest priorities will appear here when you choose to rank ideas.").foregroundStyle(.secondary) }
                         ForEach(ranked) { captureRow($0) }
-                        if store.ledger.needsTopTenReplenishment {
-                            Button(store.ledger.rankingIsActive || !store.ledger.unrankedCaptures.isEmpty ? "Continue ranking" : "Review backlog to refill priorities") {
+                        if store.inbox.needsReview {
+                            Button(store.inbox.isActive || store.inbox.unrankedCount > 0 ? "Continue ranking" : "Review backlog to refill priorities") {
                                 do {
-                                    if store.ledger.rankingIsActive { try store.prepareRanking() }
+                                    if store.inbox.isActive { try store.prepareRanking() }
                                     else { try store.replenishTopTen() }
                                     focused = false; ranking = true
                                 } catch { store.report(error) }
@@ -100,7 +100,7 @@ struct InboxView: View {
                             Text("Backlog (\(backlog.count))").accessibilityIdentifier("inbox.backlog")
                         }
                     } footer: {
-                        Text("Evaluated ideas outside your current priorities. The backlog is unsorted; you can re-rank any idea.")
+                        Text("Ideas outside your current priorities. Their saved comparisons help find replacements when a priority is completed. You can re-rank any idea.")
                     }
                     Section {
                         DisclosureGroup(isExpanded: $showSnoozed) {
@@ -182,12 +182,12 @@ struct InboxView: View {
         }
     }
     private var rankingStatus: String {
-        if waiting.isEmpty, !store.ledger.needsTopTenReplenishment, !store.ledger.rankingIsActive {
+        if store.inbox.isVerified {
             return ranked.isEmpty ? "Capture first. Rank whenever you like." : "Up to date · \(ranked.count) priorities"
         }
         let pending = "\(waiting.count) unseen · \(inProgress.count) in progress."
-        if store.ledger.needsTopTenReplenishment {
-            return "Provisional · Review the backlog to confirm your highest priorities. " + pending
+        if store.inbox.needsReview {
+            return "Provisional · Continue ranking to confirm your next priorities using saved answers. " + pending
         }
         return "Provisional · " + pending
     }
@@ -258,7 +258,7 @@ struct InboxView: View {
             if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .shortened))" }
             if waiting.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
         }
-        if let rank = store.ledger.rankedCaptureIDs.firstIndex(of: capture.id) { return "#\(rank + 1) · \(origin)\(date)" }
+        if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { return "#\(rank + 1) · \(origin)\(date)" }
         if showDone { return origin + date }
         let status = backlog.contains { $0.id == capture.id } ? "Backlog" : inProgress.contains { $0.id == capture.id } ? "In progress" : "Unseen"
         return "\(origin)\(status) · \(date)"
@@ -373,7 +373,7 @@ private struct RankingView: View {
         NavigationStack {
             ScrollView {
               VStack(spacing: 24) {
-                let pair = store.ledger.rankingPair
+                let pair = store.inbox.pair
                 if let pair,
                    let first = store.ledger.activeCaptures.first(where: { $0.id == pair.first }),
                    let second = store.ledger.activeCaptures.first(where: { $0.id == pair.second }) {
@@ -381,18 +381,26 @@ private struct RankingView: View {
                     choice(first, pair: pair, id: "ranking.first")
                     Text("or").foregroundStyle(.secondary)
                     choice(second, pair: pair, id: "ranking.second")
-                    Text("Finish placing this idea, then review the newest waiting idea. Every choice is saved; you can pause anytime.").font(.footnote).foregroundStyle(.secondary)
+                    if store.inbox.isTournamentReview {
+                        Text("Finding your next priorities · \(store.inbox.confirmedCount) of \(min(10, store.ledger.activeCaptures.count)) positions confirmed")
+                            .font(.subheadline).accessibilityIdentifier("ranking.tournament-progress")
+                        Text("Earlier comparisons are reused. Every choice is saved; you can pause and keep using your current list.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        Text("Finish placing this idea, then review the newest waiting idea. Every choice is saved; you can pause anytime.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 } else {
                     Label("Review complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
-                    Text(store.ledger.topTenIsVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")
+                    Text(store.inbox.isVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    if !store.ledger.unrankedCaptures.isEmpty {
-                        let count = store.ledger.unrankedCaptures.count
+                    if store.inbox.unrankedCount > 0 {
+                        let count = store.inbox.unrankedCount
                         Button("Rank \(count) more \(count == 1 ? "idea" : "ideas")") {
                             do { try store.prepareRanking() } catch { store.report(error) }
                         }.buttonStyle(.borderedProminent).accessibilityIdentifier("ranking.more")
                     }
-                    if store.ledger.needsTopTenReplenishment {
+                    if store.inbox.needsReview {
                         Button("Review backlog to refill priorities") {
                             do { try store.replenishTopTen() } catch { store.report(error) }
                         }.accessibilityIdentifier("ranking.replenish")
@@ -412,7 +420,7 @@ private struct RankingView: View {
                 .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
                 .task { do { try store.resumeRanking() } catch { store.report(error) } }
-                .onChange(of: store.ledger.rankingPair, initial: true) { _, _ in
+                .onChange(of: store.inbox.pair, initial: true) { _, _ in
                     do { try store.markRankingPresented() } catch { store.report(error) }
                 }
                 .onChange(of: store.ledger.captures) { _, _ in do { try store.resumeRanking() } catch { store.report(error) } }

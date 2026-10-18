@@ -828,6 +828,42 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(status.label.contains("Up to date"))
     }
 
+    func testSavedTournamentCanPauseCaptureAndResumeAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-tournament-fixture"]; app.launch()
+        openInbox(app)
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        let refill = app.buttons["inbox.replenish"]; reveal(refill, in: app); refill.tap()
+        XCTAssertTrue(element(app, "ranking.tournament-progress").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "ranking.tournament-progress").label.contains("9 of 10"))
+        recordScreen("SavedTournamentReview", in: app)
+        app.buttons["ranking.first"].tap()
+        let first = app.buttons["ranking.first"].label, second = app.buttons["ranking.second"].label
+        app.navigationBars["Rank ideas"].buttons["Done"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        reveal(refill, in: app); refill.tap()
+        XCTAssertEqual(app.buttons["ranking.first"].label, first)
+        XCTAssertEqual(app.buttons["ranking.second"].label, second)
+        app.navigationBars["Rank ideas"].buttons["Done"].tap()
+        let field = element(app, "inbox.text"); reveal(field, in: app); field.tap()
+        field.typeText("A new idea during tournament review")
+        app.buttons["inbox.save"].tap()
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        let rankNew = app.buttons["inbox.rank"]; reveal(rankNew, in: app); rankNew.tap()
+        XCTAssertEqual(app.buttons["ranking.first"].label, "A new idea during tournament review")
+        recordScreen("CaptureDuringTournament", in: app)
+        app.buttons["ranking.second"].tap() // Place the new idea below the current nine.
+        for _ in 0..<40 {
+            if !app.buttons["ranking.first"].exists { break }
+            app.buttons["ranking.first"].tap()
+        }
+        XCTAssertTrue(app.staticTexts["Review complete"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        let status = element(app, "inbox.ranking-status"); reveal(status, in: app)
+        XCTAssertTrue(status.label.contains("Up to date"))
+        recordScreen("SavedTournamentPriorities", in: app)
+    }
+
     func testContinueRankingChoosesNewCaptureBeforeOlderPartialAndKeepsItsAnswers() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
         openInbox(app); openRanking(app)

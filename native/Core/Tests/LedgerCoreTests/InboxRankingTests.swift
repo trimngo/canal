@@ -322,7 +322,7 @@ final class InboxRankingTests: XCTestCase {
         ledger.setCaptureDone(id: "000", done: true, writer: "phone")
         ledger.replenishTopTen(writer: "phone")
         let backlogPair = try XCTUnwrap(ledger.rankingPair)
-        XCTAssertNotNil(ledger.inboxRanking?.topTen?.tournament)
+        XCTAssertNotNil(ledger.inboxRanking?.priorityTournament)
         try ledger.addCapture(text: "New urgent candidate", id: "newest", writer: "watch")
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair, backlogPair)
@@ -330,7 +330,7 @@ final class InboxRankingTests: XCTestCase {
         ledger.replenishTopTen(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "newest")
         XCTAssertEqual(ledger.captures.count, 14)
-        XCTAssertNotNil(ledger.inboxRanking?.topTen?.tournament) // Tournament answers remain reusable.
+        XCTAssertNotNil(ledger.inboxRanking?.priorityTournament) // Tournament answers remain reusable.
         try answerBatch(&ledger) { min($0.first, $0.second) }
         XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "newest" })
@@ -515,11 +515,8 @@ final class InboxRankingTests: XCTestCase {
         let remaining = ledger.rankedCaptureIDs.filter { $0 != "005" }
         ledger.rerankCapture("005", writer: "phone")
         XCTAssertEqual(ledger.rankedCaptureIDs, remaining)
-        try answerBatch(&ledger) { $0.first == "005" ? $0.second : min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs.last, "005")
-        XCTAssertTrue(ledger.needsTopTenReplenishment)
-        XCTAssertFalse(ledger.topTenIsVerified)
-        ledger.replenishTopTen(writer: "phone")
+        // A continuous session now verifies replacements too, not just the
+        // selected idea's provisional insertion. It may appear on either side.
         try answerBatch(&ledger) { $0.first == "005" ? $0.second : $0.second == "005" ? $0.first : min($0.first, $0.second) }
         XCTAssertEqual(ledger.rankedCaptureIDs, remaining + ["010"])
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "005" })

@@ -5,7 +5,14 @@ import LedgerCore
 @MainActor
 final class LedgerStore: ObservableObject {
     static let shared = LedgerStore()
-    @Published private(set) var ledger = Ledger()
+    @Published private(set) var ledger = Ledger() { didSet { inboxCache = nil } }
+    private var inboxCache: (snapshot: InboxRankingSnapshot, nextReturn: Date?)?
+    var inbox: InboxRankingSnapshot {
+        if let cached = inboxCache, cached.nextReturn.map({ $0 > Date() }) ?? true { return cached.snapshot }
+        let snapshot = ledger.inboxSnapshot
+        inboxCache = (snapshot, ledger.snoozedCaptures.first?.snoozedUntil)
+        return snapshot
+    }
     @Published var sampleRequestID = UUID()
     @Published var pendingLogRequest = false
     @Published var quickReplyDraft: String?
@@ -102,6 +109,22 @@ final class LedgerStore: ObservableObject {
                 try fixture.addCapture(text: "New manual idea", id: "new-manual", writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-tournament-fixture") {
+                var fixture = Ledger(), ranking = InboxRanking()
+                for index in 1...26 {
+                    let id = "priority-\(index)"
+                    try fixture.addCapture(text: "Priority \(index)", id: id, writer: "fixture", now: Date().addingTimeInterval(Double(index - 60)))
+                    if index <= 10 { ranking.ordered.append(id) }
+                }
+                ranking.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranking
+                fixture.prepareRanking(writer: "fixture")
+                while let pair = fixture.rankingPair {
+                    // All incoming ideas are initially below the known ten.
+                    fixture.chooseCapture(pair.second, from: pair, writer: "fixture")
+                }
+                fixture.setCaptureDone(id: "priority-1", done: true, writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-export-fixture") {
                 var fixture = Ledger()
                 try fixture.addCapture(text: "Idea to analyze\nKeep every line", id: "open", writer: "fixture")
@@ -132,6 +155,10 @@ final class LedgerStore: ObservableObject {
                 guard (1...2).contains(loaded.schemaVersion) else { throw StoreError.unsupportedVersion }
                 if let ranking = loaded.inboxRanking, ranking.topTen == nil {
                     let recovery = directory.appendingPathComponent("ledger-before-top-ten.json")
+                    if !FileManager.default.fileExists(atPath: recovery.path) { try original.write(to: recovery, options: [.atomic]) }
+                }
+                if let ranking = loaded.inboxRanking, ranking.priorityTournament == nil {
+                    let recovery = directory.appendingPathComponent("ledger-before-priority-tournament.json")
                     if !FileManager.default.fileExists(atPath: recovery.path) { try original.write(to: recovery, options: [.atomic]) }
                 }
                 if loaded.schemaVersion == 1 {

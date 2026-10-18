@@ -9,9 +9,10 @@ extension Ledger {
     /// Export the whole inbox, independently of the screen's completed filter.
     /// Preserve full text and original timestamps; deleted ideas stay excluded.
     public var inboxExport: InboxExport {
-        let ranks = Dictionary(uniqueKeysWithValues: rankedCaptureIDs.enumerated().map { ($0.element, $0.offset + 1) })
-        let backlog = Set(backlogCaptures.map(\.id))
-        let inProgress = Set(partiallyRankedCaptures.map(\.id))
+        let snapshot = inboxSnapshot
+        let ranks = Dictionary(uniqueKeysWithValues: snapshot.ranked.enumerated().map { ($0.element.id, $0.offset + 1) })
+        let backlog = Set(snapshot.backlog.map(\.id))
+        let inProgress = Set(snapshot.inProgress.map(\.id))
         let now = Date()
         let ideas = captures.filter { $0.deletedAt == nil }.sorted {
             if $0.isDone != $1.isDone { return !$0.isDone }
