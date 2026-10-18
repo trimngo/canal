@@ -828,6 +828,31 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(status.label.contains("Up to date"))
     }
 
+    func testContinueRankingChoosesNewCaptureBeforeOlderPartialAndKeepsItsAnswers() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
+        openInbox(app); openRanking(app)
+        XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
+        let partial = app.buttons["ranking.first"].label
+        app.buttons["ranking.first"].tap() // Save its win over #10.
+        XCTAssertEqual(app.buttons["ranking.first"].label, partial)
+        app.navigationBars["Rank ideas"].buttons["Done"].tap()
+        let field = element(app, "inbox.text"); reveal(field, in: app); field.tap()
+        field.typeText("Newest idea should be reviewed first")
+        app.buttons["inbox.save"].tap()
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        let resume = app.buttons["inbox.continue"]; reveal(resume, in: app); resume.tap()
+        XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["ranking.first"].label, "Newest idea should be reviewed first")
+        XCTAssertTrue(app.buttons["ranking.second"].label.contains("Ranked priority 10"))
+        recordScreen("NewestIdeaOnContinue", in: app)
+        app.buttons["ranking.second"].tap() // Screening a low priority idea takes one answer.
+        XCTAssertEqual(app.buttons["ranking.first"].label, partial)
+        XCTAssertFalse(app.buttons["ranking.second"].label.contains("Ranked priority 10"))
+        recordScreen("OlderPartialResumesWithAnswers", in: app)
+    }
+
     func testUnseenIdeasStaySeparateFromPausedRankingsAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
         openInbox(app); openRanking(app)

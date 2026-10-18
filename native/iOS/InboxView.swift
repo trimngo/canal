@@ -52,8 +52,12 @@ struct InboxView: View {
                         if ranked.isEmpty { Text("Your highest priorities will appear here when you choose to rank ideas.").foregroundStyle(.secondary) }
                         ForEach(ranked) { captureRow($0) }
                         if store.ledger.needsTopTenReplenishment {
-                            Button(store.ledger.rankingIsActive ? "Continue ranking" : "Review backlog to refill priorities") {
-                                do { try store.replenishTopTen(); focused = false; ranking = true } catch { store.report(error) }
+                            Button(store.ledger.rankingIsActive || !store.ledger.unrankedCaptures.isEmpty ? "Continue ranking" : "Review backlog to refill priorities") {
+                                do {
+                                    if store.ledger.rankingIsActive { try store.prepareRanking() }
+                                    else { try store.replenishTopTen() }
+                                    focused = false; ranking = true
+                                } catch { store.report(error) }
                             }.accessibilityIdentifier("inbox.replenish")
                         }
                     } header: {
@@ -73,7 +77,7 @@ struct InboxView: View {
                     } header: {
                         Text("New Ideas (\(waiting.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.waiting-title")
                     } footer: {
-                        Text("Ideas you haven't seen in a comparison yet.")
+                        Text("Ideas you haven't seen in a comparison yet. Newest first; returning snoozed ideas get priority.")
                     }
                     if !inProgress.isEmpty {
                         Section {
@@ -85,7 +89,7 @@ struct InboxView: View {
                             Text("In progress (\(inProgress.count))").textCase(nil).font(.headline)
                                 .accessibilityIdentifier("inbox.progress-title")
                         } footer: {
-                            Text("Not yet placed. Continue to finish each idea’s position before moving to another. Your answers are saved.")
+                            Text("Unfinished ideas keep their saved answers. Continue reviews returning snoozes first, then the newest ideas.")
                         }
                     }
                     Section {
@@ -377,7 +381,7 @@ private struct RankingView: View {
                     choice(first, pair: pair, id: "ranking.first")
                     Text("or").foregroundStyle(.secondary)
                     choice(second, pair: pair, id: "ranking.second")
-                    Text("Finish placing this idea, then review the next. Every choice is saved; you can pause anytime.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Finish placing this idea, then review the newest waiting idea. Every choice is saved; you can pause anytime.").font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Label("Review complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
                     Text(store.ledger.topTenIsVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")

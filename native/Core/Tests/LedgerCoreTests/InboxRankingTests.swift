@@ -44,7 +44,7 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertLessThanOrEqual(try finish(&ledger), 4)
         XCTAssertEqual(ledger.rankedCaptureIDs, ["a", "c", "e", "g", "h", "i", "k", "m", "o"])
     }
-    func testCaptureArrivingMidSortIsRetainedAndRankedAfterTheCurrentSession() throws {
+    func testCaptureArrivingMidSortIsRetainedAndRankedDuringTheCurrentSession() throws {
         var ledger = try fixture(["d", "b", "a", "c"])
         ledger.prepareRanking(writer: "phone")
         let pair = try XCTUnwrap(ledger.rankingPair)
@@ -105,12 +105,12 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(ledger.rankingPair?.first, "newer")
         let pair = try XCTUnwrap(ledger.rankingPair)
         try ledger.addCapture(text: "Arrived while comparing", id: "newest", writer: "phone", now: baseline.addingTimeInterval(2))
-        ledger.prepareRanking(writer: "phone")
+        ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair, pair)
         while ledger.inboxRanking?.topTen?.candidate?.item == "newer", let current = ledger.rankingPair {
             ledger.chooseCapture(current.first, from: current, writer: "phone")
         }
-        XCTAssertEqual(ledger.rankingPair?.first, "older")
+        XCTAssertEqual(ledger.rankingPair?.first, "newest")
         try finish(&ledger)
         XCTAssertTrue(ledger.rankedCaptureIDs.contains("newest"))
         XCTAssertEqual(ledger.rankedCaptureIDs.filter { $0 == "a" || $0 == "b" }, ["a", "b"])
@@ -216,11 +216,10 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(ledger.rankingPair, pair); XCTAssertEqual(ledger.inboxRanking, originalState)
         try answerBatch(&ledger) { min($0.first, $0.second) }
         XCTAssertEqual(ledger.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
-        XCTAssertEqual(ledger.backlogCaptures.count, 8)
-        XCTAssertEqual(ledger.unrankedCaptures.map(\.id), ["newest"])
+        XCTAssertEqual(ledger.backlogCaptures.count, 9)
+        XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "newest" })
+        XCTAssertTrue(ledger.unrankedCaptures.isEmpty)
         XCTAssertFalse(ledger.rankingIsActive)
-        ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair?.first, "newest")
     }
 
     func testQualifyingIdeaFinishesPlacementBeforeTheNextUnseenIdea() throws {
@@ -261,9 +260,117 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertFalse(ledger.topTenIsVerified)
     }
 
-    func testPreviouslyDeferredWinnersResumeBeforeUnseenWithoutRepeatingTheThreshold() throws {
+    func testContinueRanksNewestBeforeOlderPartialAndRestoresSavedBounds() throws {
         var ledger = try legacyRanked()
-        for id in ["winner", "current", "unseen"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
+        let date = Date(timeIntervalSince1970: 100)
+        try ledger.addCapture(text: "Older waiting", id: "waiting", writer: "phone", now: date)
+        try ledger.addCapture(text: "Partly placed", id: "partial", writer: "phone", now: date.addingTimeInterval(1))
+        ledger.prepareRanking(writer: "phone")
+        let threshold = try XCTUnwrap(ledger.rankingPair)
+        ledger.chooseCapture("partial", from: threshold, writer: "phone")
+        let paused = try XCTUnwrap(ledger.rankingPair)
+        XCTAssertNotEqual(paused.second, "009")
+        let savedChoices = ledger.inboxRanking?.topTen?.preferences
+        try ledger.addCapture(text: "Newest capture", id: "newest", writer: "watch", now: date.addingTimeInterval(2))
+        ledger.normalizeInboxRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair, paused) // Incoming data cannot replace a visible pair.
+        ledger = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        var phone = Ledger(); phone.merge(ledger)
+        phone.prepareRanking(writer: "phone")
+        let newest = try XCTUnwrap(phone.rankingPair)
+        XCTAssertEqual(newest.first, "newest"); XCTAssertEqual(newest.second, "009")
+        XCTAssertEqual(phone.inboxRanking?.topTen?.preferences, savedChoices)
+        phone.chooseCapture(newest.second, from: newest, writer: "phone")
+        XCTAssertEqual(phone.rankingPair?.first, "partial")
+        XCTAssertEqual(phone.rankingPair?.second, paused.second)
+        var answers = 1 // The earlier win against #10 remains saved.
+        while let pair = phone.rankingPair, pair.first == "partial" {
+            answers += 1
+            guard answers <= 5 else { XCTFail("Repeated previous comparisons"); return }
+            phone.chooseCapture("partial", from: pair, writer: "phone")
+        }
+        XCTAssertEqual(phone.rankedCaptureIDs.first, "partial")
+        XCTAssertEqual(phone.rankingPair?.first, "waiting")
+        XCTAssertTrue(phone.backlogCaptures.contains { $0.id == "newest" })
+        XCTAssertEqual(phone.captures.count, 13)
+    }
+
+    func testResumeIncludesReminderImportsByOriginalCreationDateRatherThanImportTime() throws {
+        var ledger = try legacyRanked()
+        let date = Date(timeIntervalSince1970: 100)
+        try ledger.addCapture(text: "Paused", id: "paused", writer: "phone", now: date)
+        ledger.prepareRanking(writer: "phone")
+        try ledger.addCapture(text: "New native", id: "native", writer: "phone", now: date.addingTimeInterval(20))
+        ledger.importReminders([
+            ReminderSnapshot(identifiers: ["old"], title: "Imported late but created earlier", createdAt: date.addingTimeInterval(-10)),
+            ReminderSnapshot(identifiers: ["new"], title: "Newest original reminder", createdAt: date.addingTimeInterval(30))
+        ], writer: "phone", now: date.addingTimeInterval(1000))
+        ledger.prepareRanking(writer: "phone")
+        var order: [String] = []
+        while let pair = ledger.rankingPair {
+            order.append(pair.first)
+            ledger.chooseCapture(pair.second, from: pair, writer: "phone")
+        }
+        XCTAssertEqual(order, ["reminder-new", "native", "paused", "reminder-old"])
+        XCTAssertEqual(ledger.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
+    }
+
+    func testContinuePrioritizesNewIdeasOverAnUnfinishedBacklogTournament() throws {
+        var ledger = try legacyRanked()
+        for id in ["011", "012", "013"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
+        try finish(&ledger)
+        ledger.setCaptureDone(id: "000", done: true, writer: "phone")
+        ledger.replenishTopTen(writer: "phone")
+        let backlogPair = try XCTUnwrap(ledger.rankingPair)
+        XCTAssertNotNil(ledger.inboxRanking?.topTen?.tournament)
+        try ledger.addCapture(text: "New urgent candidate", id: "newest", writer: "watch")
+        ledger.normalizeInboxRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair, backlogPair)
+        // This was the Top 10 section's Continue action: it must refresh too.
+        ledger.replenishTopTen(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "newest")
+        XCTAssertEqual(ledger.captures.count, 14)
+        XCTAssertNotNil(ledger.inboxRanking?.topTen?.tournament) // Tournament answers remain reusable.
+        try answerBatch(&ledger) { min($0.first, $0.second) }
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
+        XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "newest" })
+    }
+
+    func testPartlyRankedNewerIdeaIsNotDelayedByOlderUnseenIdeas() throws {
+        var ledger = try legacyRanked()
+        let date = Date(timeIntervalSince1970: 100)
+        try ledger.addCapture(text: "Recent partial", id: "recent", writer: "phone", now: date.addingTimeInterval(10))
+        ledger.prepareRanking(writer: "phone")
+        let pair = try XCTUnwrap(ledger.rankingPair)
+        ledger.chooseCapture(pair.first, from: pair, writer: "phone")
+        let partial = ledger.rankingPair
+        ledger.importReminders([ReminderSnapshot(identifiers: ["old"], title: "Old unseen import", createdAt: date)], writer: "phone")
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, partial?.first)
+        XCTAssertEqual(ledger.rankingPair?.second, partial?.second)
+        XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["reminder-old"])
+    }
+
+    func testReturnedSnoozeStillComesBeforeNewlyCreatedIdeasOnContinue() throws {
+        var ledger = try legacyRanked()
+        try ledger.addCapture(text: "Return later", id: "returning", writer: "phone", now: Date(timeIntervalSince1970: 1))
+        ledger.snoozeCapture("returning", until: Date().addingTimeInterval(3600), writer: "phone")
+        try ledger.addCapture(text: "Paused newer idea", id: "paused", writer: "phone")
+        ledger.prepareRanking(writer: "phone")
+        let visible = ledger.rankingPair
+        ledger.bringBackCapture("returning", writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, visible?.first)
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "returning")
+        XCTAssertEqual(ledger.rankingPair?.second, "009")
+        XCTAssertTrue(ledger.unrankedCaptures.contains { $0.id == "paused" })
+    }
+
+    func testPreviouslyDeferredWinnersKeepAnswersWhileNewerIdeasGoFirst() throws {
+        var ledger = try legacyRanked()
+        for (index, id) in ["winner", "unseen", "current"].enumerated() {
+            try ledger.addCapture(text: id, id: id, writer: "phone", now: Date(timeIntervalSince1970: Double(100 + index)))
+        }
         ledger.normalizeInboxRanking(writer: "phone")
         // This is the persisted state produced by build 32 after screening a
         // winner, moving it aside, and presenting a different candidate.
@@ -276,16 +383,20 @@ final class InboxRankingTests: XCTestCase {
         ledger = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
         let active = try XCTUnwrap(ledger.rankingPair)
         ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair, active) // Keep the already visible comparison.
-        ledger.chooseCapture("009", from: active, writer: "phone")
+        let resumed = try XCTUnwrap(ledger.rankingPair)
+        XCTAssertEqual(resumed.first, active.first)
+        XCTAssertEqual(resumed.second, active.second)
+        ledger.chooseCapture("009", from: resumed, writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "unseen")
+        let unseen = try XCTUnwrap(ledger.rankingPair)
+        ledger.chooseCapture(unseen.second, from: unseen, writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "winner")
         XCTAssertNotEqual(ledger.rankingPair?.second, "009") // The saved answer still counts.
-        XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["unseen"])
         while let pair = ledger.rankingPair, pair.first == "winner" {
             ledger.chooseCapture("winner", from: pair, writer: "phone")
         }
         XCTAssertEqual(ledger.rankedCaptureIDs.first, "winner")
-        XCTAssertEqual(ledger.rankingPair?.first, "unseen")
+        XCTAssertNil(ledger.rankingPair)
         XCTAssertEqual(ledger.captures.count, 13)
     }
 
@@ -422,7 +533,12 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(ledger.rankingPair?.first, "pending")
         ledger.rerankCapture("011", writer: "phone")
         XCTAssertTrue(ledger.unrankedCaptures.contains { $0.id == "pending" })
-        XCTAssertLessThanOrEqual(try answerBatch(&ledger) { _ in "011" }, 5)
+        var answers = 0
+        while let pair = ledger.rankingPair, pair.first == "011" {
+            answers += 1
+            guard answers <= 5 else { XCTFail("Too many insertion comparisons"); return }
+            ledger.chooseCapture("011", from: pair, writer: "phone")
+        }
         XCTAssertEqual(ledger.rankedCaptureIDs.first, "011")
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "009" })
         XCTAssertFalse(ledger.topTenIsVerified) // The interrupted new idea still needs review.
@@ -497,7 +613,7 @@ final class InboxRankingTests: XCTestCase {
         watch.merge(phone)
         XCTAssertEqual(watch.rankedCaptureIDs, phone.rankedCaptureIDs)
         XCTAssertEqual(watch.backlogCaptures, phone.backlogCaptures)
-        XCTAssertTrue(watch.unrankedCaptures.contains { $0.id == "watch-new" })
+        XCTAssertTrue(watch.backlogCaptures.contains { $0.id == "watch-new" })
     }
 
     func testTopTenMatchesFullOrderingAcrossArrivalOrdersVacanciesAndRestores() throws {

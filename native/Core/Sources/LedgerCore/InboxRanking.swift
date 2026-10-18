@@ -51,8 +51,8 @@ public struct TopTenRanking: Codable, Equatable, Sendable {
     var pending: [String] = []
     // Optional for ledgers saved before separate unseen/in-progress queues.
     var presented: [String]? = []
-    // Recover candidates parked by the earlier first-look flow without
-    // discarding their comparisons. Finish these before taking a fresh idea.
+    // Decode parked candidates from earlier versions. Their saved answers are
+    // reused when they reach the front of the creation-date queue.
     var deferred: [String]?
     var replenishing = false
 }
@@ -115,14 +115,6 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         }
     }
 
-    mutating func queueReturnedIdeas(_ ids: [String]) {
-        guard isActive else { return }
-        let seen = seenIDs(), evaluated = Set(ordered + (topTen?.backlog ?? []))
-        let returned = ids.filter { !seen.contains($0) && !evaluated.contains($0) && topTen?.candidate?.item != $0 }
-        let waiting = topTen?.pending ?? []
-        topTen?.pending = returned + waiting.filter { !returned.contains($0) }
-    }
-
     public var pair: RankingPair? {
         guard let state = topTen else { return nil }
         if let candidate = state.candidate {
@@ -132,6 +124,9 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             if candidate.low < candidate.high {
                 return RankingPair(first: candidate.item, second: candidate.base[(candidate.low + candidate.high) / 2], revision: revision)
             }
+            // A backlog tournament can be paused behind a newer candidate.
+            // Settle that candidate before exposing the tournament's pair.
+            return nil
         }
         if let tournament = state.tournament, let next = tournament.remaining.first {
             return RankingPair(first: tournament.champion, second: next, revision: revision)
@@ -245,24 +240,30 @@ public struct InboxRanking: Codable, Equatable, Sendable {
 
     mutating func startSession(ids: [String]) {
         normalize(ids: ids)
-        if !isActive {
-            // Snapshot waiting ideas without a session-size limit. New arrivals
-            // remain available for the next explicit session, never replacing a pair.
-            let seen = seenIDs(), waiting = newIDs(ids: ids)
-            topTen?.pending = waiting.filter { !seen.contains($0) }
-            topTen?.deferred = waiting.filter { seen.contains($0) }
+        let waiting = newIDs(ids: ids)
+        if let newest = waiting.first {
+            // Explicit Continue refreshes the queue. A paused older candidate
+            // remains discoverable; its saved answers reconstruct its bounds.
+            if topTen?.candidate?.item != newest { topTen?.candidate = nil }
+            let current = topTen?.candidate?.item
+            topTen?.pending = waiting.filter { $0 != current }
+            topTen?.deferred = nil
         }
-        advance(ids: ids)
+        advance(ids: ids, includeNewIdeas: true)
     }
     mutating func replenish(ids: [String]) {
         normalize(ids: ids)
+        if !newIDs(ids: ids).isEmpty { startSession(ids: ids); return }
         if !isActive { topTen?.replenishing = true }
         advance(ids: ids)
     }
 
-    /// Advance only already-authorized work. Never starts another new-idea batch.
-    mutating func advance(ids: [String]) {
+    /// Keep a visible comparison stable. Between candidates, refresh eligible
+    /// ideas in date order so a running session never drains an old snapshot.
+    /// Passive normalization of an idle inbox cannot start ranking.
+    mutating func advance(ids: [String], includeNewIdeas: Bool = false) {
         normalize(ids: ids)
+        let activeSession = includeNewIdeas || isActive
         while true {
             if var candidate = topTen?.candidate {
                 if !candidate.screening {
@@ -290,6 +291,15 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                 }
                 continue
             }
+            if activeSession && (topTen?.tournament == nil || includeNewIdeas) {
+                let waiting = newIDs(ids: ids)
+                topTen?.pending = Array(waiting.dropFirst())
+                topTen?.deferred = nil
+                if let next = waiting.first {
+                    topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
+                    continue
+                }
+            }
             if var tournament = topTen?.tournament {
                 if let next = tournament.remaining.first {
                     guard let winner = PreferenceGraph(topTen?.preferences ?? []).winner(tournament.champion, next) else { return }
@@ -308,19 +318,6 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                     continue
                 }
                 topTen?.replenishing = false
-            }
-            if let next = topTen?.deferred?.first {
-                topTen?.deferred?.removeFirst()
-                // This candidate already had a first comparison. Search the
-                // current list directly, reusing its answers even if #10 changed.
-                // Inserting at index 10 naturally returns it to the backlog.
-                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: false)
-                continue
-            }
-            if let next = topTen?.pending.first {
-                topTen?.pending.removeFirst()
-                topTen?.candidate = TopTenInsertion(item: next, base: ordered, high: ordered.count, screening: ordered.count == 10)
-                continue
             }
             return
         }
@@ -357,7 +354,8 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         // Interrupted candidates remain discoverable in New Ideas or Backlog.
         topTen?.candidate = nil; topTen?.tournament = nil
         topTen?.deferred = nil
-        topTen?.replenishing = false; topTen?.pending = [id]
+        topTen?.replenishing = false; topTen?.pending = []
+        topTen?.candidate = TopTenInsertion(item: id, base: ordered, high: ordered.count, screening: ordered.count == 10)
         advance(ids: ids)
     }
 }
@@ -426,7 +424,6 @@ extension Ledger {
         // Do not mint a newer empty ranking that would shadow the real one.
         guard inboxRanking != nil else { return }
         var ranking = rankingProjection
-        ranking.queueReturnedIdeas(activeCaptures.filter { $0.snoozedUntil != nil }.sorted { $0.snoozedUntil! < $1.snoozedUntil! }.map(\.id))
         ranking.advance(ids: rankingIDs)
         saveRanking(ranking, writer: writer)
     }
@@ -455,7 +452,7 @@ extension Ledger {
         ranking.recordPresentation()
         // Keep comparing this candidate until its position is settled. advance
         // updates the top ten before presenting another candidate.
-        ranking.apply(preferred); ranking.advance(ids: rankingIDs)
+        ranking.apply(preferred); ranking.advance(ids: rankingIDs, includeNewIdeas: true)
         ranking.recordPresentation()
         // Every answer advances the revision even if the next pair has the same IDs.
         ranking.revision = nextRevision(writer: writer); inboxRanking = ranking
