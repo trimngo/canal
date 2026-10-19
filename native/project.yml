@@ -87,6 +87,8 @@ targets:
       - package: LedgerCore
       - target: TimeLedgerWatchIntents
         embed: true
+      - target: TimeLedgerWatchWidgets
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.watchkitapp
@@ -107,6 +109,9 @@ targets:
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.trimngo.TimeLedger
         WKRunsIndependentlyOfCompanionApp: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.trimngo.TimeLedger.watchkitapp.quick-log
+            CFBundleURLSchemes: [canal-dash]
         INIntentsSupported: [INCreateNoteIntent]
         NSSiriUsageDescription: Save ideas and log current activities in Dash using Siri.
         ITSAppUsesNonExemptEncryption: false
@@ -120,6 +125,29 @@ targets:
         com.apple.developer.icloud-services: [CloudKit]
         com.apple.developer.siri: true
         keychain-access-groups: [$(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp]
+  TimeLedgerWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources: [WatchWidgets]
+    dependencies:
+      - package: LedgerCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.watchkitapp.widgets
+        APPLICATION_EXTENSION_API_ONLY: YES
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(LEDGER_WATCH_WIDGETS_PROFILE_NAME)
+    info:
+      path: Generated/WatchWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: Dash Log
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
   TimeLedgerWatchIntents:
     type: app-extension
     platform: watchOS
@@ -159,6 +187,16 @@ targets:
       path: Generated/WatchIntents.entitlements
       properties:
         keychain-access-groups: [$(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp]
+  TimeLedgerWatchUITests:
+    type: bundle.ui-testing
+    platform: watchOS
+    sources: [WatchTests]
+    dependencies:
+      - target: TimeLedgerWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.watchkitapp.UITests
+        GENERATE_INFOPLIST_FILE: YES
   TimeLedgerUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -183,3 +221,5 @@ schemes:
     build:
       targets:
         TimeLedgerWatch: all
+    test:
+      targets: [TimeLedgerWatchUITests]

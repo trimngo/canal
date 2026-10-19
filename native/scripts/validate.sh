@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate
-python3 -m unittest discover -s TestsPython -p 'test_siri_packaging.py' -v
+python3 -m unittest discover -s TestsPython -v
 swift test --package-path Core
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
   -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
@@ -13,6 +13,9 @@ xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch \
 
 python3 scripts/validate-siri-support.py --apps \
   build/Build/Products/Debug-iphonesimulator/TimeLedger.app \
+  build/Build/Products/Debug-watchsimulator/TimeLedgerWatch.app
+
+python3 scripts/validate-watch-complication.py --apps \
   build/Build/Products/Debug-watchsimulator/TimeLedgerWatch.app
 
 if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then

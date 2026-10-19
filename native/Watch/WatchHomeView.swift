@@ -56,6 +56,12 @@ struct WatchHomeView: View {
                             }.font(.caption)
                         }
                         Text("Since today’s first log · through now").font(.caption2).foregroundStyle(.secondary)
+                        #if DEBUG
+                        if ProcessInfo.processInfo.arguments.contains("--ui-watch-inspect-ledger") {
+                            Text("\(store.ledger.entries.count)").accessibilityIdentifier("watch.debug.sample-count")
+                            Text(store.ledger.entries.last?.activity ?? "No logs").accessibilityIdentifier("watch.debug.last-sample")
+                        }
+                        #endif
                         Button("Sync") { store.refresh() }
                         Text(store.companionStatus).font(.caption2).foregroundStyle(.secondary)
                         if let diagnostic = store.companionDiagnostic {
