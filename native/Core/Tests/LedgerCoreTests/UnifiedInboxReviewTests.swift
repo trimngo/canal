@@ -50,6 +50,22 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertTrue(ledger.topTenIsVerified)
     }
 
+    func testReviewPrioritizesNewestEvenInAnOlderTreeWithAnUnresolvedLargeBranch() throws {
+        var ledger = Ledger()
+        let oldIDs = (0..<32).map { String(format: "%03d", $0) }
+        for id in oldIDs { try ledger.addCapture(text: id, id: id, writer: "phone", now: Date(timeIntervalSince1970: 0)) }
+        try ledger.addCapture(text: "Newest", id: "newest", writer: "phone")
+        var ranking = InboxRanking()
+        // The previous engine could append a new leaf after a large unresolved
+        // branch. Review must not make the user finish that branch first.
+        ranking.priorityTournament = PriorityTournament(ids: oldIDs + ["newest"])
+        ledger.inboxRanking = ranking
+        ledger.prepareRanking(writer: "phone")
+        XCTAssertEqual(ledger.rankingPair?.first, "newest")
+        try finish(&ledger)
+        XCTAssertEqual(ledger.rankedCaptureIDs, Array(oldIDs.prefix(10)))
+    }
+
     func testBackgroundArrivalPreservesQuestionThenNextAnswerReviewsNewest() throws {
         var ledger = try ranked()
         try ledger.addCapture(text: "Already reviewing", id: "old-candidate", writer: "phone")

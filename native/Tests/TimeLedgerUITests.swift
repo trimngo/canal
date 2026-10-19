@@ -442,14 +442,20 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Hours in each category by day"].exists)
     }
 
-    func testLegacySnoozeForTodayReturnsBeforeItsOldClockTime() {
+    func testLegacySnoozeForTodayUsesEightAMInsteadOfItsOldClockTime() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-snooze-today"]; app.launch()
         openInbox(app)
         let idea = app.staticTexts["Due at beginning of today"]
-        reveal(idea, in: app); XCTAssertTrue(idea.exists)
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch.exists)
-        XCTAssertTrue(element(app, "inbox.waiting-title").label.contains("1"))
-        recordScreen("SnoozeReturnsAtStartOfDay", in: app)
+        if Calendar.current.component(.hour, from: Date()) < 8 {
+            let snoozed = element(app, "inbox.snoozed"); reveal(snoozed, in: app); snoozed.tap()
+            reveal(idea, in: app); XCTAssertTrue(idea.exists)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Returns ")).firstMatch.exists)
+        } else {
+            reveal(idea, in: app); XCTAssertTrue(idea.exists)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch.exists)
+            XCTAssertTrue(element(app, "inbox.waiting-title").label.contains("1"))
+        }
+        recordScreen("SnoozeReturnsAtEightAM", in: app)
     }
 
     func testPieSlicesAndLegendSelectLabelsInsideChart() {

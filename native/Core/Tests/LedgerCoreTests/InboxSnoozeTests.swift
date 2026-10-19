@@ -45,7 +45,7 @@ final class InboxSnoozeTests: XCTestCase {
         var ledger = try ranked()
         // A past simulated snooze lets the normal Date-based projection see it due.
         let now = Date()
-        ledger.snoozeCapture("a", until: now.addingTimeInterval(-1), writer: "phone", now: now.addingTimeInterval(-86400))
+        ledger.snoozeCapture("a", until: now.addingTimeInterval(-86400), writer: "phone", now: now.addingTimeInterval(-2 * 86400))
         try ledger.addCapture(text: "Brand new", id: "new", writer: "watch", now: now)
         XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["new", "a"])
         XCTAssertTrue(ledger.partiallyRankedCaptures.isEmpty)

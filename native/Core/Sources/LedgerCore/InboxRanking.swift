@@ -264,7 +264,11 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         if !includeNewIdeas, pair != nil { return }
         guard includeNewIdeas || isActive else { return }
         var tree = priorityTournament ?? PriorityTournament(ids: ids)
-        tree.synchronize(ids: ids)
+        if includeNewIdeas, tree.leaves.compactMap({ $0 }) != ids {
+            // Older saves appended arrivals at the end of the tree. Reorder
+            // at Review/answer boundaries, keeping every saved preference.
+            tree = PriorityTournament(ids: ids)
+        } else { tree.synchronize(ids: ids) }
         let graph = PreferenceGraph(topTen?.preferences ?? [])
         tree.advance(reviewOrder: ids, knownLeader: { graph.soleLeader(in: $0) }) { graph.winner($0, $1) }
         priorityTournament = tree
