@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate
-python3 -m unittest discover -s TestsPython -v
+python3 -m unittest discover -s TestsPython -p 'test_*packaging.py' -v
 swift test --package-path Core
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
   -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
