@@ -271,7 +271,8 @@ final class LedgerStore: ObservableObject {
     }
 
     private func importSiriCaptures() {
-        #if os(watchOS)
+        // The unsigned Watch simulator cannot access the device-only Siri queue.
+        #if os(watchOS) && !targetEnvironment(simulator)
         do {
             let pending = try SiriCaptureQueue.pending()
             guard !pending.isEmpty else { return }

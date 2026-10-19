@@ -44,7 +44,7 @@ final class WatchQuickLogUITests: XCTestCase {
     }
 
     private func assertCount(_ expected: String, _ app: XCUIApplication) {
-        let count = app.staticTexts["watch.debug.sample-count"]
+        let count = app.descendants(matching: .any).matching(identifier: "watch.debug.sample-count").firstMatch
         // The narrow Watch screen may require scrolling below the summary.
         for _ in 0..<5 {
             if count.exists { break }
