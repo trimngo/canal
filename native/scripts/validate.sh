@@ -22,6 +22,7 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
     -parallel-testing-enabled NO \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDashboardRefreshesImmediatelyAfterMultipleLabelsAndKeepsPieInSync \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDashboardGroupingReviewStartsWithVisiblePeriod \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryLineTrendsAndUnitsAreOnMainDashboard \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHistoryRangesAndSwipeablePieAndTrend \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHomeShowsDashboardAndKeepsLoggingOnItsOwnTab \
