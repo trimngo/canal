@@ -11,8 +11,7 @@ struct GroupEntriesView: View {
     let rangeEnd: Date?
     let management: Bool
     @State private var allDays: Bool
-    @State private var creatingFor: CheckIn?
-    @State private var showingNewGroup = false
+    @State private var categorizing: CheckIn?
     @State private var groupName = ""
     @State private var editing: CheckIn?
     @State private var error: String?
@@ -66,21 +65,7 @@ struct GroupEntriesView: View {
                         Text("Group: \(store.categoryNames(for: entry))")
                             .font(.caption).foregroundStyle(.secondary)
                         suggestion(for: entry)
-                        Menu {
-                            ForEach(store.ledger.orderedCategories) { group in
-                                Button(store.ledger.categoryPath(group.id)) {
-                                    do { try store.categorize(entry, categoryID: group.id) } catch { self.error = error.localizedDescription }
-                                }
-                            }
-                            Divider()
-                            Button("Select multiple categories…") { editing = entry }
-                            Button("Create new group…", systemImage: "plus") { groupName = ""; creatingFor = entry; showingNewGroup = true }
-                            if store.ledger.confirmedCategoryID(for: entry) != nil {
-                                Button("Move to Uncategorized") {
-                                    do { try store.categorize(entry, categoryID: nil) } catch { self.error = error.localizedDescription }
-                                }
-                            }
-                        } label: {
+                        Button { categorizing = entry } label: {
                             Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
                         }.accessibilityIdentifier("group.choose.\(entry.id)")
                     }.padding(.vertical, 5)
@@ -115,12 +100,8 @@ struct GroupEntriesView: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: { Text("Logs are kept. This category’s shares become Uncategorized; children are promoted.") }
-                .alert("New group", isPresented: $showingNewGroup, presenting: creatingFor) { entry in
-                    TextField("Group name", text: $groupName)
-                    Button("Create & categorize") {
-                        do { try store.categorize(entry, categoryID: nil, newGroupName: groupName) } catch { self.error = error.localizedDescription }
-                    }
-                    Button("Cancel", role: .cancel) {}
+                .sheet(item: $categorizing) { entry in
+                    GroupAssignmentView(entry: entry, selection: store.ledger.confirmedCategoryIDs(for: entry))
                 }
                 .sheet(item: $editing) { entry in
                     NavigationStack {
@@ -158,4 +139,31 @@ struct GroupEntriesView: View {
 
 struct GroupManagerView: View {
     var body: some View { NavigationStack { CategoriesView() } }
+}
+
+
+private struct GroupAssignmentView: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Environment(\.dismiss) private var dismiss
+    let entry: CheckIn
+    @State var selection: [String]
+    @State private var error: String?
+    var body: some View {
+        NavigationStack {
+            CategorySelectionList(selection: $selection)
+                .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
+                .safeAreaInset(edge: .bottom) {
+                    if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            do { try store.categorize(entry, categoryIDs: selection); dismiss() }
+                            catch { self.error = error.localizedDescription }
+                        }.accessibilityIdentifier("group-selection.done")
+                    }
+                }
+        }
+    }
 }

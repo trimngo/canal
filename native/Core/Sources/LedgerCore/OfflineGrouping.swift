@@ -118,17 +118,22 @@ extension Ledger {
     }
 
     public mutating func confirmCategory(for id: String, categoryID: String?, includeMatching: Bool = false, writer: String) throws {
-        if let categoryID, !categories.contains(where: { $0.id == categoryID }) { throw LedgerError.invalidCategory }
+        try confirmCategories(for: id, categoryIDs: categoryID.map { [$0] } ?? [], includeMatching: includeMatching, writer: writer)
+    }
+
+    public mutating func confirmCategories(for id: String, categoryIDs: [String], includeMatching: Bool = false, writer: String) throws {
+        let ids = Array(Set(categoryIDs)).sorted()
+        try validateCategories(ids)
         guard let chosen = activeEntries.first(where: { $0.id == id }) else { return }
         let key = OfflineGrouping.normalized(chosen.activity)
         let selected = Set(activeEntries.filter {
-            $0.id == id || (includeMatching && categoryID != nil && confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key)
+            $0.id == id || (includeMatching && !ids.isEmpty && confirmedCategoryID(for: $0) == nil && OfflineGrouping.normalized($0.activity) == key)
         }.map(\.id))
         var counter = nextRevision(writer: writer).counter
         for index in entries.indices where selected.contains(entries[index].id) {
-            entries[index].categoryID = categoryID
-            entries[index].categoryIDs = categoryID.map { [$0] } ?? []
-            entries[index].categoryAssignment = categoryID == nil ? .automatic : .manual
+            entries[index].categoryID = ids.first
+            entries[index].categoryIDs = ids
+            entries[index].categoryAssignment = ids.isEmpty ? .automatic : .manual
             entries[index].revision = Revision(counter: counter, writer: writer); counter += 1
         }
     }

@@ -129,13 +129,46 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
-        app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
+        app.buttons["Choose group"].tap(); app.buttons["category-select.social"].tap(); app.buttons["group-selection.done"].tap()
         let undo = app.buttons["group.undo"]
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
-        app.buttons["Choose group"].tap(); app.buttons["Socializing"].tap()
+        app.buttons["Choose group"].tap(); app.buttons["category-select.social"].tap(); app.buttons["group-selection.done"].tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(dashboardGroup("social", in: app).waitForExistence(timeout: 5))
+    }
+
+    func testGroupPickerKeepsMultipleSelectionsWhileCreatingAndCanCancel() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        app.buttons["Choose group"].tap()
+        let work = app.buttons["category-select.work"], personal = app.buttons["category-select.personal"]
+        work.tap(); personal.tap()
+        XCTAssertEqual(work.value as? String, "Selected")
+        XCTAssertEqual(personal.value as? String, "Selected")
+        let create = app.buttons["category-select.create"]; reveal(create, in: app); create.tap()
+        app.alerts.textFields["Group name"].typeText("Creative Practice")
+        app.alerts.buttons["Create"].tap()
+        XCTAssertTrue(app.navigationBars["Choose groups"].waitForExistence(timeout: 5))
+        let created = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "category-select.", "Creative Practice")).firstMatch
+        reveal(created, in: app); XCTAssertEqual(created.value as? String, "Selected")
+        reveal(work, in: app); XCTAssertEqual(work.value as? String, "Selected")
+        reveal(personal, in: app); XCTAssertEqual(personal.value as? String, "Selected")
+        recordScreen("MultiGroupPickerWithNewGroup", in: app)
+        app.buttons["group-selection.done"].tap()
+        app.buttons["group.done"].tap()
+        let row = dashboardGroup("work", in: app); reveal(row, in: app); row.tap()
+        let choose = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "group.choose.")).firstMatch
+        reveal(choose, in: app); choose.tap()
+        XCTAssertEqual(work.value as? String, "Selected")
+        XCTAssertEqual(personal.value as? String, "Selected")
+        personal.tap(); app.navigationBars["Choose groups"].buttons["Cancel"].tap()
+        reveal(choose, in: app); choose.tap()
+        XCTAssertEqual(personal.value as? String, "Selected") // Cancel never changes the log.
+        app.buttons["group-selection.done"].tap()
+        app.terminate(); app.launchArguments = []; app.launch()
+        let group = dashboardGroup("personal", in: app); reveal(group, in: app)
+        XCTAssertTrue(group.exists)
     }
 
     func testDashboardCreatesAndRenamesANewGroup() {
@@ -144,7 +177,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Choose group"].tap(); app.buttons["Create new group…"].tap()
         let field = app.alerts.textFields["Group name"]
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Creative Practice")
-        app.alerts.buttons["Create & categorize"].tap()
+        app.alerts.buttons["Create"].tap()
+        app.buttons["group-selection.done"].tap()
         app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.open.", "Creative Practice")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))

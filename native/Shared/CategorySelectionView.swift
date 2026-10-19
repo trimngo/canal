@@ -7,7 +7,6 @@ struct CategorySelectionPicker: View {
     @EnvironmentObject var store: LedgerStore
     @Binding var selection: [String]
     @State private var showing = false
-    @State private var replacing: String?
     private var title: String {
         selection.isEmpty ? "Uncategorized" : selection.map { store.ledger.categoryPath($0) }.joined(separator: " + ")
     }
@@ -16,40 +15,69 @@ struct CategorySelectionPicker: View {
             HStack { Text("Categories"); Spacer(); Text(title).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         }.sheet(isPresented: $showing) {
             NavigationStack {
-                List {
-                    Button("Uncategorized") { selection = [] }
-                    ForEach(store.ledger.orderedCategories) { category in
-                        Button {
-                            if selection.contains(category.id) { selection.removeAll { $0 == category.id } }
-                            else if store.ledger.categoryConflicts(category.id, with: selection).isEmpty { selection.append(category.id) }
-                            else { replacing = category.id }
-                        } label: {
-                            HStack {
-                                Text(store.ledger.categoryPath(category.id))
-                                Spacer()
-                                if selection.contains(category.id) { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                            }
-                        }.accessibilityIdentifier("category-select.\(category.id)")
-                    }
-                    Text("Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected.").font(.footnote).foregroundStyle(.secondary)
-                }
-                .navigationTitle("Categories")
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showing = false } } }
-                .alert("Replace conflicting categories?", isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } })) {
-                    Button("Replace") {
-                        if let id = replacing {
-                            let conflicts = Set(store.ledger.categoryConflicts(id, with: selection))
-                            selection.removeAll { conflicts.contains($0) }; selection.append(id)
-                        }
-                        replacing = nil
-                    }
-                    Button("Cancel", role: .cancel) { replacing = nil }
-                } message: {
-                    if let id = replacing {
-                        Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
-                    }
-                }
+                CategorySelectionList(selection: $selection)
+                    .navigationTitle("Choose groups")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showing = false } } }
             }
         }
+    }
+}
+
+
+/// Keeps the picker open while checking groups or creating another one.
+struct CategorySelectionList: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Binding var selection: [String]
+    @State private var replacing: String?
+    @State private var creating = false
+    @State private var groupName = ""
+    @State private var error: String?
+    var body: some View {
+        List {
+            Button("Uncategorized") { selection = [] }
+            ForEach(store.ledger.orderedCategories) { category in
+                Button {
+                    if selection.contains(category.id) { selection.removeAll { $0 == category.id } }
+                    else if store.ledger.categoryConflicts(category.id, with: selection).isEmpty { selection.append(category.id) }
+                    else { replacing = category.id }
+                } label: {
+                    HStack {
+                        Text(store.ledger.categoryPath(category.id))
+                        Spacer()
+                        if selection.contains(category.id) { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                    }
+                }.accessibilityIdentifier("category-select.\(category.id)")
+                    .accessibilityValue(selection.contains(category.id) ? "Selected" : "Not selected")
+                    .accessibilityAddTraits(selection.contains(category.id) ? .isSelected : [])
+            }
+            Button("Create new group…", systemImage: "plus") { groupName = ""; creating = true }
+                .accessibilityIdentifier("category-select.create")
+            if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("category-select.error") }
+            Text("Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected.").font(.footnote).foregroundStyle(.secondary)
+        }
+            .alert("New group", isPresented: $creating) {
+                TextField("Group name", text: $groupName)
+                Button("Create") {
+                    do {
+                        let id = try store.saveCategory(id: nil, name: groupName)
+                        selection.append(id); error = nil
+                    } catch { self.error = error.localizedDescription }
+                }.disabled(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) { }
+            }
+            .alert("Replace conflicting categories?", isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } })) {
+                Button("Replace") {
+                    if let id = replacing {
+                        let conflicts = Set(store.ledger.categoryConflicts(id, with: selection))
+                        selection.removeAll { conflicts.contains($0) }; selection.append(id)
+                    }
+                    replacing = nil
+                }
+                Button("Cancel", role: .cancel) { replacing = nil }
+            } message: {
+                if let id = replacing {
+                    Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
+                }
+            }
     }
 }

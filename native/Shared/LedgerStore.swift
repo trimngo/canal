@@ -429,8 +429,12 @@ final class LedgerStore: ObservableObject {
         start(); refresh()
     }
 
-    func saveCategory(id: String?, name: String) throws {
-        var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer); try commit(draft)
+    @discardableResult
+    func saveCategory(id: String?, name: String) throws -> String {
+        var draft = ledger; try draft.saveCategory(id: id, name: name, writer: writer)
+        let savedID = id ?? draft.categories.last!.id
+        try commit(draft)
+        return savedID
     }
 
     func editCategory(id: String?, name: String, parent: String?) throws {
@@ -456,6 +460,16 @@ final class LedgerStore: ObservableObject {
         }
         guard let current = draft.entries.first(where: { $0.id == entry.id }) else { return }
         try draft.confirmCategory(for: current.id, categoryID: destination, includeMatching: includeMatching, writer: writer)
+        try commitCategorization(draft)
+    }
+
+    func categorize(_ entry: CheckIn, categoryIDs: [String]) throws {
+        var draft = ledger
+        try draft.confirmCategories(for: entry.id, categoryIDs: categoryIDs, writer: writer)
+        try commitCategorization(draft)
+    }
+
+    private func commitCategorization(_ draft: Ledger) throws {
         let changed = draft.entries.compactMap { updated -> (before: CheckIn, after: CheckIn)? in
             guard let original = ledger.entries.first(where: { $0.id == updated.id }),
                   original.categoryIDs != updated.categoryIDs || original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment else { return nil }

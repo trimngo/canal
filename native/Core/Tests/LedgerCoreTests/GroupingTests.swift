@@ -4,6 +4,26 @@ import XCTest
 final class GroupingTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func testConfirmMultipleGroupsPreservesRawLogAndRejectsConflictsAtomically() throws {
+        var ledger = Ledger()
+        try ledger.saveSample(id: "sample", at: now, activity: "Original activity", categoryID: nil, writer: "watch", now: now)
+        let original = ledger.entries[0]
+        try ledger.confirmCategories(for: "sample", categoryIDs: ["work", "personal", "work"], writer: "phone")
+        XCTAssertEqual(ledger.confirmedCategoryIDs(for: ledger.entries[0]), ["personal", "work"])
+        XCTAssertEqual(ledger.entries[0].activity, original.activity)
+        XCTAssertEqual(ledger.entries[0].end, original.end)
+        XCTAssertEqual(ledger.entries[0].sampleID, original.sampleID)
+        try ledger.saveCategory(id: nil, name: "Teaching", writer: "phone")
+        let child = try XCTUnwrap(ledger.categories.last?.id)
+        try ledger.moveCategory(child, to: "work", writer: "phone")
+        let saved = ledger
+        XCTAssertThrowsError(try ledger.confirmCategories(for: "sample", categoryIDs: ["work", child], writer: "phone"))
+        XCTAssertEqual(ledger, saved)
+        try ledger.confirmCategories(for: "sample", categoryIDs: [], writer: "phone")
+        XCTAssertEqual(ledger.confirmedCategoryIDs(for: ledger.entries[0]), [])
+        XCTAssertEqual(ledger.entries[0].end, original.end)
+    }
+
     func testBuiltInDescriptionsSuggestWithoutAssigning() throws {
         for (text, group) in [("Preparing classes", "work"), ("using the restroom", "personal"),
                               ("Showering", "personal"), ("Coffee with Alex", "social"),
