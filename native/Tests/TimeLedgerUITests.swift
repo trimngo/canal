@@ -934,13 +934,13 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testSavedTournamentCanPauseCaptureAndResumeAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-tournament-fixture"]; app.launch()
-        openInbox(app); openRanking(app)
+        openInbox(app, capture: true); openRanking(app)
         XCTAssertTrue(element(app, "ranking.tournament-progress").waitForExistence(timeout: 5))
         recordScreen("SavedTournamentReview", in: app)
         app.buttons["ranking.first"].tap()
         let first = app.buttons["ranking.first"].label, second = app.buttons["ranking.second"].label
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
-        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app, capture: true)
         openRanking(app)
         XCTAssertEqual(app.buttons["ranking.first"].label, first)
         XCTAssertEqual(app.buttons["ranking.second"].label, second)
