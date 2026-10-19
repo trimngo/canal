@@ -1,6 +1,7 @@
 import Foundation
 
-/// Snoozes return at the start of a local date, across daylight-saving changes.
+/// Date-only snooze choices, across daylight-saving changes. Capture resolves
+/// the chosen date to an 8 a.m. local return.
 /// Weekdays mean Monday–Friday, independent of the calendar's first weekday.
 public enum InboxSnooze {
     public static func after(days: Int, from date: Date, calendar: Calendar = .current) -> Date? {
