@@ -13,7 +13,13 @@ struct TimeLedgerWatchApp: App {
     #endif
     var body: some Scene {
         WindowGroup {
-            WatchHomeView().environmentObject(store).tint(.mint)
+            Group {
+                if let request = quickLog {
+                    WatchQuickLogView(id: request.id) { quickLog = nil }
+                } else {
+                    WatchHomeView()
+                }
+            }.environmentObject(store).tint(.mint)
                 .task {
                     store.start()
                     #if !targetEnvironment(simulator)
@@ -27,7 +33,6 @@ struct TimeLedgerWatchApp: App {
                     #endif
                 }
                 .onOpenURL(perform: openQuickLog)
-                .sheet(item: $quickLog) { request in WatchQuickLogView(id: request.id) }
                 .onChange(of: scenePhase) { _, phase in if phase == .active { store.refresh() } }
                 .alert("Couldn’t complete that", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
                     Button("OK") { store.error = nil }

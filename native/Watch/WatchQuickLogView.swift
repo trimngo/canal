@@ -6,9 +6,9 @@ struct WatchQuickLogRequest: Identifiable {
 }
 
 struct WatchQuickLogView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var reply = WatchReplyState()
     let id: String
+    let finish: () -> Void
     #if DEBUG && targetEnvironment(simulator)
     @State private var fixtureInputOpen = false
     #endif
@@ -32,7 +32,7 @@ struct WatchQuickLogView: View {
             .task(id: reply.saved) {
                 guard reply.saved else { return }
                 do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
-                dismiss()
+                finish()
             }
             #if DEBUG && targetEnvironment(simulator)
             .sheet(isPresented: $fixtureInputOpen) {
@@ -70,7 +70,7 @@ struct WatchQuickLogView: View {
 
     private func accept(_ text: String?) {
         reply.inputOpen = false
-        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { dismiss(); return }
+        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { finish(); return }
         reply.pendingText = text; reply.responseTime = Date()
         save()
     }
