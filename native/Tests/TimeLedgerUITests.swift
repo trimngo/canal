@@ -743,10 +743,10 @@ final class TimeLedgerUITests: XCTestCase {
         let imported = app.staticTexts["New imported idea"]
         XCTAssertTrue(imported.waitForExistence(timeout: 5)); XCTAssertTrue(imported.isHittable)
         XCTAssertTrue(element(app, "inbox.waiting-title").exists)
-        reveal(app.buttons["inbox.review"], in: app)
-        XCTAssertTrue(app.buttons["inbox.review"].isHittable)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "From Reminders")).firstMatch.exists)
         recordScreen("InboxNewWaiting", in: app)
+        reveal(app.buttons["inbox.review"], in: app)
+        XCTAssertTrue(app.buttons["inbox.review"].isHittable)
         app.buttons["inbox.review"].tap()
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
     }
