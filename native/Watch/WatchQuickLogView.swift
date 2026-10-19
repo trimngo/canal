@@ -39,16 +39,16 @@ struct WatchQuickLogView: View {
     @ViewBuilder private var content: some View {
         #if DEBUG
         if fixtureInputOpen {
-            ScrollView {
-                VStack(spacing: 8) {
-                    Text("Simulated accepted dictation").font(.caption)
-                    Text("Preparing classes")
+            VStack(spacing: 8) {
+                Text("Simulated dictation").font(.caption2)
+                Text("Preparing classes").font(.caption)
+                HStack {
                     Button("Done") { fixtureInputOpen = false; accept("Preparing classes") }
                         .accessibilityIdentifier("watch.fixture.done")
                     Button("Cancel") { fixtureInputOpen = false; accept(nil) }
                         .accessibilityIdentifier("watch.fixture.cancel")
                 }
-            }
+            }.padding(.horizontal, 8)
         } else {
             WatchPromptView(reply: reply, dictate: dictate)
         }
