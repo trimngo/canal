@@ -58,6 +58,7 @@ final class LedgerStore: ObservableObject {
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
                 var fixture = Ledger()
+                fixture.settings.wakeUpMinute = 0; fixture.settings.bedtimeMinute = 1439
                 let now = Date()
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
