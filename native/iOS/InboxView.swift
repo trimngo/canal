@@ -97,7 +97,7 @@ struct InboxView: View {
                             Text("In progress (\(inProgress.count))").textCase(nil).font(.headline)
                                 .accessibilityIdentifier("inbox.progress-title")
                         } footer: {
-                            Text("Every answer stays saved. The same tournament reviews new ideas and finds your next priorities.")
+                            Text("Every answer stays saved. New ideas are screened against your priorities. You can pause anytime.")
                         }
                     }
                     Section {
@@ -108,7 +108,17 @@ struct InboxView: View {
                             Text("Backlog (\(backlog.count))").accessibilityIdentifier("inbox.backlog")
                         }
                     } footer: {
-                        Text("Ideas outside your current priorities. Their saved comparisons help find replacements when a priority is completed. You can re-rank any idea.")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Optional review, oldest reviewed first. New ideas always come first.")
+                            if let oldest = store.inbox.oldestBacklogReview {
+                                Text("Oldest backlog review: \(oldest.formatted(.relative(presentation: .numeric)))")
+                                    .accessibilityIdentifier("inbox.backlog-oldest-review")
+                            }
+                            if store.inbox.backlogWithoutReviewDateCount > 0 {
+                                Text("\(store.inbox.backlogWithoutReviewDateCount) without a recorded review date.")
+                                    .accessibilityIdentifier("inbox.backlog-undated")
+                            }
+                        }
                     }
                     Section {
                         DisclosureGroup(isExpanded: $showSnoozed) {
@@ -193,14 +203,10 @@ struct InboxView: View {
         do { try store.prepareRanking(); focused = false; searchFocused = false; ranking = true } catch { store.report(error) }
     }
     private var rankingStatus: String {
-        if store.inbox.isVerified {
-            return ranked.isEmpty ? "Capture first. Rank whenever you like." : "Up to date · \(ranked.count) priorities"
-        }
-        let pending = "\(waiting.count) unseen · \(inProgress.count) in progress."
-        if store.inbox.needsReview {
-            return "Provisional · Review to confirm your next priorities using saved answers. " + pending
-        }
-        return "Provisional · " + pending
+        let count = waiting.count + inProgress.count
+        if count > 0 { return "\(count) ideas waiting for review · Newest first. Your priorities stay available." }
+        return backlog.isEmpty ? "Capture first. Review whenever you like." :
+            "New ideas reviewed. Backlog review is optional; this list isn't a verified ranking of every idea."
     }
     private func captureRow(_ capture: Capture) -> some View {
         HStack(alignment: .top, spacing: 14) {
@@ -393,16 +399,19 @@ private struct RankingView: View {
                     choice(first, pair: pair, id: "ranking.first")
                     Text("or").foregroundStyle(.secondary)
                     choice(second, pair: pair, id: "ranking.second")
-                    Text("Finding your next priorities · \(store.inbox.confirmedCount) of \(min(10, store.ledger.activeCaptures.count)) positions confirmed")
-                        .font(.subheadline).accessibilityIdentifier("ranking.tournament-progress")
-                    Text("Every answer is saved. Newest available comparisons come first. You can pause anytime.")
+                    Text(store.inbox.reviewingBacklog && store.inbox.unrankedCount == 0 ?
+                         "Optional backlog review · Oldest reviewed first" :
+                         "\(store.inbox.unrankedCount) new ideas left to review")
+                        .font(.subheadline).accessibilityIdentifier("ranking.review-progress")
+                    Text("One comparison can send an idea to the backlog. A winner takes a few more to find its place. Every answer is saved; stop anytime.")
                         .font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Label("Review complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
-                    Text(store.inbox.isVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")
+                    Text(store.inbox.unrankedCount > 0 ? "Review your newest ideas whenever you're ready." :
+                         "New ideas reviewed. You can stop here; your priorities are ready to use.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    if !store.inbox.isVerified {
-                        Button("Review ideas") {
+                    if store.inbox.unrankedCount > 0 || !store.inbox.backlog.isEmpty {
+                        Button(store.inbox.unrankedCount > 0 ? "Review new ideas" : "Review oldest backlog ideas") {
                             do { try store.prepareRanking() } catch { store.report(error) }
                         }.buttonStyle(.borderedProminent).accessibilityIdentifier("ranking.more")
                     }

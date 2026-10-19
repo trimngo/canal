@@ -28,14 +28,14 @@ final class InboxRankingTests: XCTestCase {
         } while !ledger.unrankedCaptures.isEmpty || ledger.needsTopTenReplenishment
         return comparisons
     }
-    func testInitialTournamentUsesChoicesAndSurvivesEveryRelaunch() throws {
+    func testInitialInsertionUsesChoicesAndSurvivesEveryRelaunch() throws {
         var ledger = try fixture(["g", "a", "f", "b", "e", "c", "d"])
         let comparisons = try finish(&ledger)
         XCTAssertEqual(ledger.rankedCaptureIDs, ["a", "b", "c", "d", "e", "f", "g"])
         XCTAssertLessThanOrEqual(comparisons, 21)
         XCTAssertEqual(ledger.captures.count, 7)
     }
-    func testNewIdeaUsesTournamentWithoutReorderingExistingIdeas() throws {
+    func testNewIdeaUsesInsertionWithoutReorderingExistingIdeas() throws {
         var ledger = try fixture(["a", "c", "e", "g", "i", "k", "m", "o"])
         try finish(&ledger)
         let ordered = ledger.rankedCaptureIDs
@@ -89,8 +89,8 @@ final class InboxRankingTests: XCTestCase {
     func testInitialComparisonsStartWithNewestCreatedIdeas() throws {
         var ledger = try fixture(["old", "middle", "new"])
         ledger.prepareRanking(writer: "phone")
-        XCTAssertTrue(ledger.rankedCaptureIDs.isEmpty)
-        XCTAssertEqual(ledger.rankingPair?.first, "new"); XCTAssertEqual(ledger.rankingPair?.second, "middle")
+        XCTAssertEqual(ledger.rankedCaptureIDs, ["new"])
+        XCTAssertEqual(ledger.rankingPair?.first, "middle"); XCTAssertEqual(ledger.rankingPair?.second, "new")
         let pair = ledger.rankingPair
         let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
         XCTAssertEqual(restored.rankingPair, pair)
@@ -128,8 +128,8 @@ final class InboxRankingTests: XCTestCase {
             ReminderSnapshot(identifiers: ["new"], title: "New reminder", createdAt: baseline.addingTimeInterval(20))
         ], writer: "phone", now: baseline.addingTimeInterval(1000))
         ledger.prepareRanking(writer: "phone")
-        XCTAssertTrue(ledger.rankedCaptureIDs.isEmpty)
-        XCTAssertEqual(ledger.rankingPair?.first, "reminder-new"); XCTAssertEqual(ledger.rankingPair?.second, "native")
+        XCTAssertEqual(ledger.rankedCaptureIDs, ["reminder-new"])
+        XCTAssertEqual(ledger.rankingPair?.first, "native"); XCTAssertEqual(ledger.rankingPair?.second, "reminder-new")
         XCTAssertEqual(ledger.captures.first { $0.id == "reminder-old" }?.createdAt, baseline)
     }
 
@@ -152,7 +152,7 @@ final class InboxRankingTests: XCTestCase {
         return count
     }
 
-    func testTournamentPlacesLowIdeaInBacklogWithoutChangingExistingPriorities() throws {
+    func testScreeningPlacesLowIdeaInBacklogWithoutChangingExistingPriorities() throws {
         var ledger = try legacyRanked()
         ledger.normalizeInboxRanking(writer: "phone")
         let top = ledger.rankedCaptureIDs
@@ -161,14 +161,14 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertFalse(ledger.topTenIsVerified)
         ledger.prepareRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "020")
-        XCTAssertLessThanOrEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 10)
+        XCTAssertEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 1)
         XCTAssertEqual(ledger.rankedCaptureIDs, top)
         XCTAssertEqual(ledger.backlogCaptures.map(\.id), ["020"])
         XCTAssertTrue(ledger.unrankedCaptures.isEmpty)
         XCTAssertTrue(ledger.topTenIsVerified)
     }
 
-    func testTournamentFindsAllTenPossibleNewPriorityPositions() throws {
+    func testScreeningFindsAllTenPossibleNewPriorityPositions() throws {
         for position in 0..<10 {
             var ledger = try legacyRanked()
             let before = ledger.rankedCaptureIDs
@@ -176,7 +176,7 @@ final class InboxRankingTests: XCTestCase {
             ledger.prepareRanking(writer: "phone")
             func score(_ id: String) -> Int { id == "candidate" ? position * 2 - 1 : Int(id)! * 2 }
             let count = try answerBatch(&ledger) { score($0.first) < score($0.second) ? $0.first : $0.second }
-            XCTAssertLessThanOrEqual(count, 10)
+            XCTAssertLessThanOrEqual(count, 5)
             var expected = before; expected.insert("candidate", at: position); expected.removeLast()
             XCTAssertEqual(ledger.rankedCaptureIDs, expected)
             XCTAssertEqual(ledger.backlogCaptures.map(\.id), ["009"])
@@ -206,14 +206,14 @@ final class InboxRankingTests: XCTestCase {
 
 
 
-    func testContinuePrioritizesNewIdeasOverAnUnfinishedBacklogTournament() throws {
+    func testContinuePrioritizesNewIdeasOverAnUnfinishedBacklogReview() throws {
         var ledger = try legacyRanked()
         for id in ["011", "012", "013"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
         try finish(&ledger)
         ledger.setCaptureDone(id: "000", done: true, writer: "phone")
         ledger.replenishTopTen(writer: "phone")
         let backlogPair = try XCTUnwrap(ledger.rankingPair)
-        XCTAssertNotNil(ledger.inboxRanking?.priorityTournament)
+        XCTAssertNil(ledger.inboxRanking?.priorityTournament)
         try ledger.addCapture(text: "New urgent candidate", id: "newest", writer: "watch")
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair, backlogPair)
@@ -221,10 +221,11 @@ final class InboxRankingTests: XCTestCase {
         ledger.replenishTopTen(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "newest")
         XCTAssertEqual(ledger.captures.count, 14)
-        XCTAssertNotNil(ledger.inboxRanking?.priorityTournament) // Tournament answers remain reusable.
+        XCTAssertNil(ledger.inboxRanking?.priorityTournament) // No tournament runs in the new flow.
         try answerBatch(&ledger) { min($0.first, $0.second) }
         XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
-        XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "newest" })
+        XCTAssertTrue(ledger.rankedCaptureIDs.contains("newest"))
+        XCTAssertFalse(ledger.topTenIsVerified)
     }
 
 
@@ -267,7 +268,7 @@ final class InboxRankingTests: XCTestCase {
     }
 
 
-    func testUnsortedBacklogReplenishmentFindsTrueBestAndCanPauseAtEveryAnswer() throws {
+    func testOptionalBacklogPassScreensEachCandidateAndCanPauseAtEveryAnswer() throws {
         var ledger = try legacyRanked()
         for id in ["011", "015", "020"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
         try finish(&ledger)
@@ -276,17 +277,17 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertTrue(ledger.needsTopTenReplenishment); XCTAssertNil(ledger.rankingPair)
         XCTAssertFalse(ledger.topTenIsVerified)
         ledger.replenishTopTen(writer: "phone")
-        XCTAssertLessThanOrEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 5)
+        XCTAssertLessThanOrEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 15)
         XCTAssertEqual(ledger.rankedCaptureIDs.last, "011")
         XCTAssertEqual(Set(ledger.backlogCaptures.map(\.id)), ["015", "020"])
         XCTAssertTrue(ledger.topTenIsVerified)
         ledger.setCaptureDeleted("011", deleted: true, writer: "phone")
         ledger.replenishTopTen(writer: "phone")
-        XCTAssertEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 0) // Previous tournament already established 015 > 020.
+        XCTAssertGreaterThan(try answerBatch(&ledger) { min($0.first, $0.second) }, 0) // Fresh backlog judgments revisit old rejections.
         XCTAssertEqual(ledger.rankedCaptureIDs.last, "015")
     }
 
-    func testLegacyFullOrderMigratesTopTenAndReusesTailForVacancyWithoutComparisons() throws {
+    func testLegacyFullOrderMigratesWithoutLossAndBacklogReviewIsExplicit() throws {
         var ledger = try legacyRanked(15)
         let oldCaptures = ledger.captures
         let legacyBytes = try JSONEncoder().encode(ledger)
@@ -299,7 +300,8 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertTrue(ledger.needsTopTenReplenishment)
         XCTAssertEqual(ledger.rankedCaptureIDs.count, 9) // Refilling is optional.
         ledger.replenishTopTen(writer: "phone")
-        XCTAssertNil(ledger.rankingPair)
+        XCTAssertNotNil(ledger.rankingPair)
+        try answerBatch(&ledger) { min($0.first, $0.second) }
         XCTAssertEqual(ledger.rankedCaptureIDs.last, "010")
         XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
         XCTAssertTrue(ledger.topTenIsVerified)
@@ -311,12 +313,15 @@ final class InboxRankingTests: XCTestCase {
         let remaining = ledger.rankedCaptureIDs.filter { $0 != "005" }
         ledger.rerankCapture("005", writer: "phone")
         XCTAssertEqual(ledger.rankedCaptureIDs, remaining)
-        // A continuous session now verifies replacements too, not just the
-        // selected idea's provisional insertion. It may appear on either side.
+        // Re-ranking only repositions this idea. Reviewing the backlog for a
+        // better replacement is a separate, optional step.
+        try answerBatch(&ledger) { $0.first == "005" ? $0.second : $0.second == "005" ? $0.first : min($0.first, $0.second) }
+        XCTAssertEqual(ledger.rankedCaptureIDs, remaining + ["005"])
+        XCTAssertFalse(ledger.topTenIsVerified)
+        ledger.prepareRanking(writer: "phone")
         try answerBatch(&ledger) { $0.first == "005" ? $0.second : $0.second == "005" ? $0.first : min($0.first, $0.second) }
         XCTAssertEqual(ledger.rankedCaptureIDs, remaining + ["010"])
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "005" })
-        XCTAssertTrue(ledger.topTenIsVerified)
     }
 
 
@@ -346,7 +351,7 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(ledger.captures.count, 4)
     }
 
-    func testCompletionDeletionAndRestorationDuringTournamentKeepAllCandidatesRecoverable() throws {
+    func testCompletionDeletionAndRestorationDuringReviewKeepAllCandidatesRecoverable() throws {
         var ledger = try legacyRanked()
         for id in ["011", "012", "013"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
         try finish(&ledger)

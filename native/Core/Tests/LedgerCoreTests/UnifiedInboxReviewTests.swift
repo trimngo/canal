@@ -34,7 +34,7 @@ final class UnifiedInboxReviewTests: XCTestCase {
         return answers
     }
 
-    func testNewestArrivalAppearsFirstEvenWhenGrowingAnOldTreePastCapacity() throws {
+    func testNewestArrivalUsesScreeningInsteadOfGrowingAnOldTree() throws {
         var ledger = try ranked(32)
         ledger.prepareRanking(writer: "phone")
         ledger.setCaptureDone(id: "000", done: true, writer: "phone")
@@ -43,11 +43,11 @@ final class UnifiedInboxReviewTests: XCTestCase {
         try ledger.addCapture(text: "Newest", id: "new", writer: "phone")
         ledger.prepareRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "new")
-        XCTAssertNil(ledger.inboxRanking?.topTen?.candidate)
-        XCTAssertNil(ledger.inboxRanking?.topTen?.tournament)
+        XCTAssertNotNil(ledger.inboxRanking?.topTen?.candidate)
+        XCTAssertNil(ledger.inboxRanking?.priorityTournament)
         try finish(&ledger)
-        XCTAssertEqual(ledger.rankedCaptureIDs, (1...10).map { String(format: "%03d", $0) })
-        XCTAssertTrue(ledger.topTenIsVerified)
+        XCTAssertEqual(ledger.rankedCaptureIDs, (1...9).map { String(format: "%03d", $0) } + ["new"])
+        XCTAssertFalse(ledger.topTenIsVerified)
     }
 
     func testReviewPrioritizesNewestEvenInAnOlderTreeWithAnUnresolvedLargeBranch() throws {
@@ -61,7 +61,8 @@ final class UnifiedInboxReviewTests: XCTestCase {
         ranking.priorityTournament = PriorityTournament(ids: oldIDs + ["newest"])
         ledger.inboxRanking = ranking
         ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair?.first, "newest")
+        XCTAssertEqual(ledger.rankedCaptureIDs, ["newest"])
+        XCTAssertEqual(ledger.rankingPair?.second, "newest")
         try finish(&ledger)
         XCTAssertEqual(ledger.rankedCaptureIDs, Array(oldIDs.prefix(10)))
     }
@@ -99,15 +100,15 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertEqual(watch.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
     }
 
-    func testLegacyPartialCandidateBecomesTournamentAndRetainsItsAnsweredBounds() throws {
+    func testLegacyPartialCandidateBecomesScreeningAndRetainsItsAnsweredBounds() throws {
         var ledger = try ranked(10)
         try ledger.addCapture(text: "Partial", id: "004a", writer: "phone")
         let original = ledger.captures
         let base = ledger.inboxRanking!.ordered
         ledger.inboxRanking?.topTen = TopTenRanking(candidate: TopTenInsertion(item: "004a", base: base, low: 3, high: 6, screening: false), pending: ["004a"])
         ledger.normalizeInboxRanking(writer: "phone")
-        XCTAssertEqual(ledger.inboxRanking?.tournamentVersion, 1)
-        XCTAssertNil(ledger.inboxRanking?.topTen?.candidate)
+        XCTAssertNotNil(ledger.inboxRanking?.screeningReview)
+        XCTAssertNotNil(ledger.inboxRanking?.topTen?.candidate)
         let saved = ledger.inboxRanking?.topTen?.preferences ?? []
         XCTAssertTrue(saved.contains(InboxPreference(winner: "002", loser: "004a")))
         XCTAssertTrue(saved.contains(InboxPreference(winner: "004a", loser: "006")))
@@ -117,7 +118,7 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertTrue(ledger.topTenIsVerified)
     }
 
-    func testLegacyDeferredAndPendingIdeasRemainAvailableInUnifiedTournament() throws {
+    func testLegacyDeferredAndPendingIdeasRemainAvailableInScreening() throws {
         var ledger = try ranked(10)
         try ledger.addCapture(text: "Deferred", id: "deferred", writer: "phone")
         try ledger.addCapture(text: "Pending", id: "pending", writer: "phone")
@@ -133,12 +134,12 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "pending" })
     }
 
-    func testRerankUsesTournamentForBacklogAndPreservesOtherPriorities() throws {
+    func testRerankUsesScreeningForBacklogAndPreservesOtherPriorities() throws {
         var ledger = try ranked()
         ledger.prepareRanking(writer: "phone")
         let old = ledger.rankedCaptureIDs
         ledger.rerankCapture("015", writer: "phone")
-        XCTAssertNil(ledger.inboxRanking?.topTen?.candidate)
+        XCTAssertNotNil(ledger.inboxRanking?.topTen?.candidate)
         try finish(&ledger) { pair in
             if pair.first == "015" || pair.second == "015" { return "015" }
             return min(pair.first, pair.second)
@@ -197,7 +198,8 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertTrue(returned.isSnoozed(at: eight.addingTimeInterval(-1)))
         XCTAssertFalse(returned.isSnoozed(at: eight))
         ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair?.first, "nine")
+        XCTAssertEqual(ledger.rankedCaptureIDs, ["nine"])
+        XCTAssertEqual(ledger.rankingPair?.second, "nine")
     }
 
     func testEightAMReturnUsesLocalCalendarAcrossDaylightSavingChanges() throws {

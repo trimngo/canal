@@ -157,6 +157,23 @@ final class LedgerStore: ObservableObject {
                 fixture.setCaptureDone(id: "priority-1", done: true, writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-screening-inbox-fixture") {
+                var fixture = Ledger(), ranked = InboxRanking()
+                let now = Date()
+                for index in 1...12 {
+                    let id = "screening-\(index)"
+                    try fixture.addCapture(text: "Priority \(index)", id: id, writer: "fixture", now: now.addingTimeInterval(Double(index - 60)))
+                    ranked.ordered.append(id)
+                }
+                ranked.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranked
+                fixture.prepareRanking(writer: "fixture")
+                if let pair = fixture.rankingPair {
+                    fixture.chooseCapture(pair.second, from: pair, writer: "fixture", now: now.addingTimeInterval(-18 * 86400))
+                }
+                try fixture.addCapture(text: "One quick new idea", id: "quick-new", writer: "fixture")
+                fixture.prepareRanking(writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-export-fixture") {
                 var fixture = Ledger()
                 try fixture.addCapture(text: "Idea to analyze\nKeep every line", id: "open", writer: "fixture")
@@ -189,8 +206,8 @@ final class LedgerStore: ObservableObject {
                     let recovery = directory.appendingPathComponent("ledger-before-top-ten.json")
                     if !FileManager.default.fileExists(atPath: recovery.path) { try original.write(to: recovery, options: [.atomic]) }
                 }
-                if let ranking = loaded.inboxRanking, ranking.priorityTournament == nil {
-                    let recovery = directory.appendingPathComponent("ledger-before-priority-tournament.json")
+                if let ranking = loaded.inboxRanking, ranking.screeningReview == nil {
+                    let recovery = directory.appendingPathComponent("ledger-before-screening-review.json")
                     if !FileManager.default.fileExists(atPath: recovery.path) { try original.write(to: recovery, options: [.atomic]) }
                 }
                 if loaded.schemaVersion == 1 {

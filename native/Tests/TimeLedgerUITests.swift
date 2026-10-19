@@ -911,7 +911,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Quick capture without ranking"].waitForExistence(timeout: 5))
     }
 
-    func testInboxReviewIsNearTopAndTournamentProgressSurvivesRelaunch() {
+    func testInboxReviewIsNearTopAndInsertionProgressSurvivesRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
         openInbox(app)
         let review = app.buttons["inbox.review"]
@@ -924,7 +924,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Which is more important to act on now?"].exists)
         app.buttons["ranking.first"].tap()
         let first = app.buttons["ranking.first"].label, second = app.buttons["ranking.second"].label
-        recordScreen("UnifiedTournamentReview", in: app)
+        recordScreen("ScreeningReview", in: app)
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
         openRanking(app)
@@ -932,11 +932,11 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["ranking.second"].label, second)
     }
 
-    func testSavedTournamentCanPauseCaptureAndResumeAfterRelaunch() {
+    func testBacklogReviewCanPauseCaptureAndResumeAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-tournament-fixture"]; app.launch()
         openInbox(app, capture: true); openRanking(app)
-        XCTAssertTrue(element(app, "ranking.tournament-progress").waitForExistence(timeout: 5))
-        recordScreen("SavedTournamentReview", in: app)
+        XCTAssertTrue(element(app, "ranking.review-progress").waitForExistence(timeout: 5))
+        recordScreen("OptionalBacklogReview", in: app)
         app.buttons["ranking.first"].tap()
         let first = app.buttons["ranking.first"].label, second = app.buttons["ranking.second"].label
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
@@ -946,13 +946,33 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["ranking.second"].label, second)
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
         let field = element(app, "inbox.text"); reveal(field, in: app); field.tap()
-        field.typeText("A new idea during tournament review")
+        field.typeText("A new idea during backlog review")
         app.buttons["inbox.save"].tap()
         XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
         if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
         openRanking(app)
-        XCTAssertEqual(app.buttons["ranking.first"].label, "A new idea during tournament review")
-        recordScreen("NewestCaptureInTournament", in: app)
+        XCTAssertEqual(app.buttons["ranking.first"].label, "A new idea during backlog review")
+        recordScreen("NewestCaptureScreening", in: app)
+    }
+
+    func testOneRejectedNewIdeaEndsReviewAndShowsOptionalBacklogAndStaleness() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-screening-inbox-fixture"]; app.launch()
+        openInbox(app, capture: true); openRanking(app)
+        XCTAssertEqual(app.buttons["ranking.first"].label, "One quick new idea")
+        XCTAssertEqual(app.buttons["ranking.second"].label, "Priority 10")
+        XCTAssertTrue(element(app, "ranking.review-progress").exists)
+        recordScreen("FastNewIdeaScreening", in: app)
+        app.buttons["ranking.second"].tap()
+        XCTAssertTrue(app.staticTexts["Review complete"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["ranking.first"].exists)
+        XCTAssertEqual(app.buttons["ranking.more"].label, "Review oldest backlog ideas")
+        recordScreen("NewIdeasReviewedOptionalBacklog", in: app)
+        app.navigationBars["Rank ideas"].buttons["Done"].tap()
+        let oldest = element(app, "inbox.backlog-oldest-review")
+        reveal(oldest, in: app)
+        XCTAssertTrue(oldest.label.contains("18 days ago"))
+        XCTAssertTrue(element(app, "inbox.backlog-undated").exists)
+        recordScreen("BacklogReviewStaleness", in: app)
     }
 
     func testInboxSearchFindsCompletedAndNotesAndClearRestoresLists() {

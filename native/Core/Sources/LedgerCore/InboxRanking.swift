@@ -17,8 +17,9 @@ public struct InboxRankingSnapshot: Equatable, Sendable {
     public var isActive: Bool
     public var needsReview: Bool
     public var isVerified: Bool
-    public var confirmedCount: Int
-    public var isTournamentReview: Bool
+    public var oldestBacklogReview: Date?
+    public var backlogWithoutReviewDateCount: Int
+    public var reviewingBacklog: Bool
     public var unrankedCount: Int { unseen.count + inProgress.count }
 }
 
@@ -28,8 +29,6 @@ public struct MergeRanking: Codable, Equatable, Sendable {
     var left: [String] = []
     var right: [String] = []
     var merged: [String] = []
-
-
 }
 
 public struct InsertionRanking: Codable, Equatable, Sendable {
@@ -73,6 +72,15 @@ public struct TopTenRanking: Codable, Equatable, Sendable {
     var replenishing = false
 }
 
+/// Stored with the ranking revision, so review dates and a paused backlog pass
+/// travel through the existing phone/Watch/cloud and backup paths together.
+public struct ScreeningReview: Codable, Equatable, Sendable {
+    var lastReviewed: [String: Date] = [:]
+    var backlogRemaining: [String] = []
+    var backlogStarted: [String] = []
+    var reviewingBacklog = false
+}
+
 private final class PreferenceGraph {
     var edges: [String: [String]] = [:]
     private var descendants: [String: Set<String>] = [:]
@@ -93,17 +101,7 @@ private final class PreferenceGraph {
         if below(b).contains(a) { return b }
         return nil
     }
-    /// Find a proven leader in one graph walk, including paths through inactive
-    /// ideas. This avoids asking questions about losers of an already-known
-    /// winner, without computing transitive closure separately for every idea.
-    func soleLeader(in ids: Set<String>) -> String? {
-        var visited = Set<String>(), pending = ids.flatMap { edges[$0] ?? [] }
-        while let next = pending.popLast() {
-            if visited.insert(next).inserted { pending.append(contentsOf: edges[next] ?? []) }
-        }
-        let leaders = ids.subtracting(visited)
-        return leaders.count == 1 ? leaders.first : nil
-    }
+
 }
 
 public struct InboxRanking: Codable, Equatable, Sendable {
@@ -119,6 +117,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
     public var reviewedSnoozes: [String: Revision]?
     // Nil in older backups. Legacy insertion bounds become saved answers once.
     public var tournamentVersion: Int?
+    public var screeningReview: ScreeningReview?
     public var revision = Revision()
     public init() {}
 
@@ -131,9 +130,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             topTen?.backlog.removeAll { $0 == id }
             topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
             rememberChain(ordered)
-            let visible = priorityTournament?.matchup
-            priorityTournament?.invalidateAnswers()
-            if let visible, !visible.contains(id) { priorityTournament?.matchup = visible }
+            screeningReview?.lastReviewed.removeValue(forKey: id)
             topTen?.presented?.removeAll { $0 == id }
             topTen?.pending.removeAll { $0 == id }
             topTen?.deferred?.removeAll { $0 == id }
@@ -154,8 +151,11 @@ public struct InboxRanking: Codable, Equatable, Sendable {
     }
 
     public var pair: RankingPair? {
-        guard let matchup = priorityTournament?.matchup, matchup.count == 2 else { return nil }
-        return RankingPair(first: matchup[0], second: matchup[1], revision: revision)
+        guard let candidate = topTen?.candidate else { return nil }
+        let index = candidate.screening ? candidate.base.count - 1 : (candidate.low + candidate.high) / 2
+        guard candidate.screening || candidate.low < candidate.high,
+              candidate.base.indices.contains(index) else { return nil }
+        return RankingPair(first: candidate.item, second: candidate.base[index], revision: revision)
     }
 
     private mutating func remember(_ winner: String, _ loser: String) {
@@ -186,8 +186,9 @@ public struct InboxRanking: Codable, Equatable, Sendable {
 
     mutating func normalize(ids: [String]) {
         if topTen == nil { topTen = TopTenRanking() }
-        if tournamentVersion == nil {
-            // Retain the complete old ordering, including positions below ten.
+        if screeningReview == nil {
+            // Migrate every previous format without inventing review dates.
+            // Existing shortlist order and all answered comparisons survive.
             rememberChain(ordered)
             for old in [insertion, topTen?.candidate.map {
                 InsertionRanking(item: $0.item, base: $0.base, low: $0.low, high: $0.high)
@@ -202,19 +203,15 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                 rememberChain(old.merged + old.left)
                 rememberChain(old.merged + old.right)
             }
-            let wasActive = merge != nil || insertion != nil || topTen?.candidate != nil ||
-                topTen?.tournament != nil || !(topTen?.pending.isEmpty ?? true) ||
-                !(topTen?.deferred?.isEmpty ?? true) || topTen?.replenishing == true
-            // Keep a previously visible tournament match through migration.
-            if let old = topTen?.tournament, let next = old.remaining.first {
-                if priorityTournament == nil { priorityTournament = PriorityTournament(ids: ids) }
-                priorityTournament?.matchup = [old.champion, next]
-            }
+            let wasActive = isActive || merge != nil || insertion != nil ||
+                priorityTournament?.matchup != nil || topTen?.tournament != nil ||
+                !(topTen?.pending.isEmpty ?? true) || !(topTen?.deferred?.isEmpty ?? true)
             merge = nil; insertion = nil
+            priorityTournament = nil // Decode old trees, but never run a tournament.
             topTen?.candidate = nil; topTen?.tournament = nil
             topTen?.pending = []; topTen?.deferred = nil
-            topTen?.replenishing = wasActive || priorityTournament?.matchup != nil
-            tournamentVersion = 1
+            topTen?.replenishing = wasActive
+            screeningReview = ScreeningReview()
         }
         let valid = Set(ids)
         var seen = Set<String>()
@@ -223,75 +220,151 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         for id in previous where !ordered.contains(id) {
             if !(topTen?.backlog.contains(id) ?? false) { topTen?.backlog.append(id) }
         }
-        topTen?.backlog.removeAll { ordered.contains($0) }
-        // New captures cannot replace a comparison currently on screen.
-        // Refresh membership after an answer or an explicit Review tap.
-        if var tree = priorityTournament, pair == nil || !valid.isSuperset(of: tree.matchup ?? []) {
-            tree.synchronize(ids: ids); priorityTournament = tree
+        var backlogSeen = Set<String>()
+        let backlog = (topTen?.backlog ?? []).filter { !ordered.contains($0) && backlogSeen.insert($0).inserted }
+        topTen?.backlog = backlog
+        if let candidate = topTen?.candidate,
+           !valid.contains(candidate.item) || candidate.base != ordered || ordered.contains(candidate.item) ||
+           candidate.low < 0 || candidate.high > candidate.base.count || candidate.low > candidate.high {
+            // Known answers rebuild the insertion bounds if a priority was
+            // completed/deleted on either device while a question was visible.
+            topTen?.candidate = nil
         }
     }
 
     func backlogIDs(ids: [String]) -> [String] {
         let active = Set(ids), ranked = Set(ordered)
-        return (topTen?.backlog ?? []).filter { active.contains($0) && !ranked.contains($0) }
+        return (topTen?.backlog ?? []).filter { active.contains($0) && !ranked.contains($0) }.sorted {
+            let a = screeningReview?.lastReviewed[$0], b = screeningReview?.lastReviewed[$1]
+            if a != b { return a == nil || (b != nil && a! < b!) }
+            return $0 < $1
+        }
     }
     func newIDs(ids: [String]) -> [String] {
         let evaluated = Set(ordered + (topTen?.backlog ?? []))
         return ids.filter { !evaluated.contains($0) }
     }
     func needsReview(ids: [String]) -> Bool {
-        if !newIDs(ids: ids).isEmpty { return true }
+        !newIDs(ids: ids).isEmpty || (ordered.count < 10 && !backlogIDs(ids: ids).isEmpty)
+    }
+    // Compatibility for older callers. Global verification is never a
+    // requirement for finishing a screening review.
+    func isVerified(ids: [String]) -> Bool {
+        guard newIDs(ids: ids).isEmpty, !isActive else { return false }
         let backlog = backlogIDs(ids: ids)
-        guard !backlog.isEmpty else { return false }
-        guard ordered.count == 10, let threshold = ordered.last else { return true }
-        let excluded = PreferenceGraph(topTen?.preferences ?? []).below(threshold)
-        return backlog.contains { !excluded.contains($0) }
+        if backlog.isEmpty { return true }
+        guard ordered.count == 10, let threshold = ordered.last else { return false }
+        let below = PreferenceGraph(topTen?.preferences ?? []).below(threshold)
+        return backlog.allSatisfy(below.contains)
     }
     var isActive: Bool { topTen?.replenishing == true || pair != nil }
 
     mutating func startSession(ids: [String]) {
         normalize(ids: ids)
-        priorityTournament?.matchup = nil
+        let newIdeas = newIDs(ids: ids)
+        if !newIdeas.isEmpty {
+            // An explicit Review always checks new arrivals ahead of a paused
+            // backlog insertion. Its answered bounds remain in preferences.
+            if let candidate = topTen?.candidate, candidate.item != newIdeas.first {
+                topTen?.candidate = nil
+            }
+            screeningReview?.reviewingBacklog = false
+        } else if !isActive {
+            screeningReview?.reviewingBacklog = true
+            let backlog = backlogIDs(ids: ids)
+            screeningReview?.backlogRemaining = backlog
+            screeningReview?.backlogStarted = []
+        }
         topTen?.replenishing = true
         advance(ids: ids, includeNewIdeas: true)
     }
     mutating func replenish(ids: [String]) { startSession(ids: ids) }
 
-    /// All ideas use the same saved winner tree. Passive refreshes preserve the
-    /// visible question; answers and explicit Review refresh newest-first order.
+    /// Screen one idea against #10, then use binary insertion only if it wins.
+    /// A new-idea session ends without automatically starting a backlog pass.
+    /// Backlog passes are optional, oldest-review first, and visit each item once.
     mutating func advance(ids: [String], includeNewIdeas: Bool = false) {
         normalize(ids: ids)
         if !includeNewIdeas, pair != nil { return }
         guard includeNewIdeas || isActive else { return }
-        var tree = priorityTournament ?? PriorityTournament(ids: ids)
-        if includeNewIdeas, tree.leaves.compactMap({ $0 }) != ids {
-            // Older saves appended arrivals at the end of the tree. Reorder
-            // at Review/answer boundaries, keeping every saved preference.
-            tree = PriorityTournament(ids: ids)
-        } else { tree.synchronize(ids: ids) }
-        let graph = PreferenceGraph(topTen?.preferences ?? [])
-        tree.advance(reviewOrder: ids, knownLeader: { graph.soleLeader(in: $0) }) { graph.winner($0, $1) }
-        priorityTournament = tree
-        // Keep the existing shortlist visible while a newly confirmed prefix
-        // replaces it. Never claim a globally verified top ten until complete.
-        let old = ordered
-        ordered = Array((tree.confirmed + old.filter { !tree.confirmed.contains($0) }).prefix(10))
-        for id in old where !ordered.contains(id) {
-            if !(topTen?.backlog.contains(id) ?? false) { topTen?.backlog.append(id) }
+        if includeNewIdeas, let candidate = topTen?.candidate,
+           candidate.screening || candidate.low < candidate.high,
+           let newest = newIDs(ids: ids).first, candidate.item != newest {
+            // Switch only between questions, never while a choice is visible.
+            // Saved bounds are recovered from this candidate's answer edges.
+            topTen?.candidate = nil
         }
-        topTen?.backlog.removeAll { ordered.contains($0) }
-        if tree.isComplete {
-            ordered = tree.confirmed
-            let inactive = (topTen?.backlog ?? []).filter { !ids.contains($0) }
-            topTen?.backlog = inactive + ids.filter { !ordered.contains($0) }
+        while true {
+            if topTen?.candidate == nil {
+                let item: String
+                if let newest = newIDs(ids: ids).first { item = newest }
+                else if screeningReview?.reviewingBacklog == true,
+                        let oldest = screeningReview?.backlogRemaining.first(where: {
+                            ids.contains($0) && !ordered.contains($0)
+                        }) {
+                    item = oldest
+                    if !(screeningReview?.backlogStarted.contains(item) ?? false) {
+                        // A fresh backlog review must not silently reuse its
+                        // old rejection. Preserve every other idea's order.
+                        topTen?.preferences.removeAll { $0.winner == item || $0.loser == item }
+                        rememberChain(ordered)
+                        screeningReview?.backlogStarted.append(item)
+                    }
+                } else {
+                    topTen?.replenishing = false
+                    return
+                }
+                topTen?.candidate = TopTenInsertion(item: item, base: ordered, high: ordered.count, screening: ordered.count == 10)
+            }
+            guard let candidate = topTen?.candidate else { return }
+            if !candidate.screening, candidate.low == candidate.high {
+                finishCandidate(candidate)
+                continue
+            }
+            guard let question = pair else { topTen?.candidate = nil; continue }
+            // Reuse answers from a paused insertion or previous app version.
+            // Backlog candidates explicitly clear their old evidence above.
+            if let winner = PreferenceGraph(topTen?.preferences ?? []).winner(question.first, question.second) {
+                resolveCandidate(winner)
+            } else { return }
         }
-        topTen?.replenishing = !tree.isComplete
     }
 
-    mutating func apply(_ preferred: String) {
+    private mutating func finishCandidate(_ candidate: TopTenInsertion) {
+        topTen?.candidate = nil
+        topTen?.backlog.removeAll { $0 == candidate.item }
+        ordered.insert(candidate.item, at: min(candidate.low, ordered.count))
+        if ordered.count > 10 {
+            let displaced = ordered.removeLast()
+            topTen?.backlog.append(displaced)
+        }
+        screeningReview?.backlogRemaining.removeAll { $0 == candidate.item }
+        rememberChain(ordered)
+    }
+    private mutating func resolveCandidate(_ preferred: String) {
+        guard var candidate = topTen?.candidate, let question = pair else { return }
+        if candidate.screening {
+            if preferred != candidate.item {
+                if !(topTen?.backlog.contains(candidate.item) ?? false) { topTen?.backlog.append(candidate.item) }
+                screeningReview?.backlogRemaining.removeAll { $0 == candidate.item }
+                topTen?.candidate = nil
+                return
+            }
+            candidate.screening = false
+            candidate.high = candidate.base.count - 1
+        } else {
+            let midpoint = (candidate.low + candidate.high) / 2
+            if preferred == question.first { candidate.high = midpoint }
+            else { candidate.low = midpoint + 1 }
+        }
+        topTen?.candidate = candidate
+    }
+    mutating func apply(_ preferred: String, now: Date = Date()) {
         guard let pair, preferred == pair.first || preferred == pair.second else { return }
         remember(preferred, preferred == pair.first ? pair.second : pair.first)
-        priorityTournament?.matchup = nil
+        screeningReview?.lastReviewed[pair.first] = now
+        screeningReview?.lastReviewed[pair.second] = now
+        resolveCandidate(preferred)
     }
 
     mutating func rerank(_ id: String, ids: [String]) {
@@ -301,8 +374,10 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
         rememberChain(ordered)
         topTen?.presented?.removeAll { $0 == id }
-        priorityTournament?.invalidateAnswers()
-        startSession(ids: [id] + ids.filter { $0 != id })
+        topTen?.candidate = TopTenInsertion(item: id, base: ordered, high: ordered.count, screening: ordered.count == 10)
+        screeningReview?.reviewingBacklog = false
+        topTen?.replenishing = true
+        advance(ids: [id] + ids.filter { $0 != id }, includeNewIdeas: true)
     }
 
 }
@@ -342,17 +417,19 @@ extension Ledger {
         let byID = Dictionary(activeCaptures.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let seen = ranking.seenIDs()
         let pending = ranking.newIDs(ids: ids).compactMap { byID[$0] }
-        let backlog = Set(ranking.backlogIDs(ids: ids))
+        let backlogIDs = ranking.backlogIDs(ids: ids)
+        let backlog = backlogIDs.compactMap { byID[$0] }
         let review = ranking.needsReview(ids: ids)
         return InboxRankingSnapshot(
             ranked: ranking.ordered.compactMap { byID[$0] },
             unseen: pending.filter { !seen.contains($0.id) },
             inProgress: pending.filter { seen.contains($0.id) },
-            backlog: ids.filter { backlog.contains($0) }.compactMap { byID[$0] },
+            backlog: backlog,
             pair: ranking.pair, isActive: ranking.isActive, needsReview: review,
-            isVerified: pending.isEmpty && !review && !ranking.isActive,
-            confirmedCount: ranking.priorityTournament?.confirmed.count ?? 0,
-            isTournamentReview: ranking.topTen?.candidate == nil && ranking.priorityTournament?.matchup != nil)
+            isVerified: ranking.isVerified(ids: ids),
+            oldestBacklogReview: backlog.compactMap { ranking.screeningReview?.lastReviewed[$0.id] }.min(),
+            backlogWithoutReviewDateCount: backlog.filter { ranking.screeningReview?.lastReviewed[$0.id] == nil }.count,
+            reviewingBacklog: ranking.screeningReview?.reviewingBacklog == true)
     }
     public var rankedCaptureIDs: [String] { rankingProjection.ordered }
     public var rankedCaptures: [Capture] { captures(in: rankedCaptureIDs) }
@@ -365,14 +442,11 @@ extension Ledger {
         let seen = rankingProjection.seenIDs()
         return unrankedCaptures.filter { seen.contains($0.id) }
     }
-    public var backlogCaptures: [Capture] {
-        let backlog = Set(rankingProjection.backlogIDs(ids: rankingIDs))
-        return activeCaptures.filter { backlog.contains($0.id) }.sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt }
-    }
+    public var backlogCaptures: [Capture] { captures(in: rankingProjection.backlogIDs(ids: rankingIDs)) }
     public var rankingPair: RankingPair? { rankingProjection.pair }
     public var rankingIsActive: Bool { rankingProjection.isActive }
     public var needsTopTenReplenishment: Bool { rankingProjection.needsReview(ids: rankingIDs) }
-    public var topTenIsVerified: Bool { unrankedCaptures.isEmpty && !needsTopTenReplenishment && !rankingIsActive }
+    public var topTenIsVerified: Bool { rankingProjection.isVerified(ids: rankingIDs) }
 
     private func captures(in ids: [String]) -> [Capture] {
         let byID = Dictionary(activeCaptures.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -408,13 +482,13 @@ extension Ledger {
         ranking.replenish(ids: rankingIDs)
         saveRanking(ranking, writer: writer)
     }
-    public mutating func chooseCapture(_ preferred: String, from expected: RankingPair, writer: String) {
+    public mutating func chooseCapture(_ preferred: String, from expected: RankingPair, writer: String, now: Date = Date()) {
         normalizeInboxRanking(writer: writer)
         guard var ranking = inboxRanking, ranking.pair == expected,
               preferred == expected.first || preferred == expected.second else { return }
         ranking.recordPresentation()
-        // Save the answer, then let the tournament choose the next unresolved match.
-        ranking.apply(preferred); ranking.advance(ids: rankingIDs, includeNewIdeas: true)
+        // Save the answer before advancing this candidate or taking the next arrival.
+        ranking.apply(preferred, now: now); ranking.advance(ids: rankingIDs, includeNewIdeas: true)
         ranking.recordPresentation()
         // Every answer advances the revision even if the next pair has the same IDs.
         ranking.revision = nextRevision(writer: writer); inboxRanking = ranking
