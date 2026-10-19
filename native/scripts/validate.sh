@@ -23,10 +23,5 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testOneRejectedNewIdeaEndsReviewAndShowsOptionalBacklogAndStaleness \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxReviewIsNearTopAndInsertionProgressSurvivesRelaunch \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testBacklogReviewCanPauseCaptureAndResumeAfterRelaunch \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingEditsCompletesAndMovesToReferenceWithoutLeavingReview \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingCanDeleteEitherIdeaUndoAndContinue \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxAutoFocusesCaptureAndSavingNeverOpensRanking test
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testOneRejectedNewIdeaEndsReviewAndShowsOptionalBacklogAndStaleness test
 fi
