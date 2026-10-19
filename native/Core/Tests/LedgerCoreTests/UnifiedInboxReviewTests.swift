@@ -134,6 +134,19 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertEqual(ledger.rankedCaptureIDs, old)
     }
 
+    func testRerankingOnePriorityKeepsAllOtherPrioritiesRelativeOrderWithoutReasking() throws {
+        var ledger = try ranked(10)
+        ledger.prepareRanking(writer: "phone")
+        let others = ledger.rankedCaptureIDs.filter { $0 != "005" }
+        ledger.rerankCapture("005", writer: "phone")
+        try finish(&ledger) { pair in
+            XCTAssertTrue(pair.first == "005" || pair.second == "005", "Re-asked the ordering of unchanged priorities")
+            return pair.first == "005" ? pair.second : pair.first
+        }
+        XCTAssertEqual(ledger.rankedCaptureIDs, others + ["005"])
+        XCTAssertTrue(ledger.topTenIsVerified)
+    }
+
     func testUnseenAndSeenRemainSeparateWithoutMarkingBackgroundQuestionsAsSeen() throws {
         var ledger = try ranked()
         try ledger.addCapture(text: "Seen", id: "seen", writer: "phone")
