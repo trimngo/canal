@@ -25,6 +25,8 @@ struct AllocationHistoryView: View {
 
     var body: some View {
         content(now: now)
+            .onAppear { now = Date() }
+            .onReceive(store.$ledger.dropFirst()) { _ in now = Date() }
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
             .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
             .navigationTitle(range == .today ? "Today" : "Your time").navigationBarTitleDisplayMode(.inline)
