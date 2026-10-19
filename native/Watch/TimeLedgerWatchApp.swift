@@ -15,7 +15,10 @@ struct TimeLedgerWatchApp: App {
         WindowGroup {
             WatchHomeView().environmentObject(store).tint(.mint)
                 .task {
-                    store.start(); LedgerShortcuts.updateAppShortcutParameters()
+                    store.start()
+                    #if !targetEnvironment(simulator)
+                    LedgerShortcuts.updateAppShortcutParameters()
+                    #endif
                     NotificationScheduler.shared.configureActions()
                     #if DEBUG
                     if !testedLaunchRoute, ProcessInfo.processInfo.arguments.contains("--ui-watch-quick-log") {

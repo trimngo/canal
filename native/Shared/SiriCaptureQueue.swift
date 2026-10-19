@@ -9,10 +9,16 @@ enum SiriCaptureQueue {
     private static let service = "com.trimngo.TimeLedger.siri-captures"
 
     private static func query() throws -> [String: Any] {
+        #if targetEnvironment(simulator)
+        // Unsigned simulator apps cannot use the device's shared access group.
+        // Keep simulator items in the app's own keychain namespace.
+        return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+        #else
         guard let group = Bundle.main.object(forInfoDictionaryKey: "LedgerCaptureAccessGroup") as? String,
               !group.isEmpty, !group.contains("$(") else { throw QueueError.unavailable }
         return [kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service, kSecAttrAccessGroup as String: group]
+        #endif
     }
 
     static func enqueue(_ entry: QuickCaptureEntry) throws {

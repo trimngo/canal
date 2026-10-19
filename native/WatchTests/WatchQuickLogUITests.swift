@@ -2,6 +2,14 @@ import XCTest
 
 final class WatchQuickLogUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
+    override func tearDownWithError() throws {
+        if testRun?.hasSucceeded == false {
+            let app = XCUIApplication()
+            record("WatchQuickLogFailure", app)
+            // These tests run only synthetic capture data on unsigned simulators.
+            print("WATCH QUICK LOG FAILURE: \(app.debugDescription)")
+        }
+    }
 
     func testComplicationEntryAcceptsOneDoneSavesAndSurvivesRelaunch() {
         let app = XCUIApplication()
