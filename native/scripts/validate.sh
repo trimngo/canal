@@ -22,5 +22,12 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxReviewIsNearTopAndTournamentProgressSurvivesRelaunch \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxSearchFindsCompletedAndNotesAndClearRestoresLists \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSavedTournamentCanPauseCaptureAndResumeAfterRelaunch \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxAutoFocusesCaptureAndSavingNeverOpensRanking \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingEditsCompletesAndMovesToReferenceWithoutLeavingReview \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingCanDeleteEitherIdeaUndoAndContinue \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxKeyboardDismissesOutsideAndPreservesDraftAcrossTabs \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test
 fi
