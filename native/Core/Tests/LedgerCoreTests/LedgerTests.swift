@@ -106,7 +106,7 @@ final class LedgerTests: XCTestCase {
         XCTAssertEqual(ledger.breakdown(on: now, now: now, calendar: utc).first { $0.id == "work" }?.minutes, 50)
     }
 
-    func testMidnightSampleBelongsToNewDayAndCompletedDayEndsAtBedtime() throws {
+    func testMidnightSampleBelongsToNewDayAndCompletedDayEndsAtMidnight() throws {
         var ledger = Ledger(); let previous = date("2026-10-14T21:17:00Z")
         let midnight = date("2026-10-15T00:00:00Z"), now = date("2026-10-15T08:00:00Z")
         try ledger.saveSample(at: previous, activity: "Rest", categoryID: "rest", writer: "phone", now: now)
@@ -116,8 +116,8 @@ final class LedgerTests: XCTestCase {
         XCTAssertEqual(ledger.entries(on: previous, calendar: utc).count, 2)
         XCTAssertEqual(ledger.entries(on: midnight, calendar: utc).count, 1)
         let segments = ledger.inferredSegments(on: previous, now: now, calendar: utc)
-        XCTAssertEqual(segments.last?.end, date("2026-10-14T22:00:00Z"))
-        XCTAssertEqual(segments.reduce(0) { $0 + $1.minutes }, 43)
+        XCTAssertEqual(segments.last?.end, date("2026-10-15T00:00:00Z"))
+        XCTAssertEqual(segments.reduce(0) { $0 + $1.minutes }, 163)
     }
 
     func testTodayStartsAtFirstLogWithoutUsingPreviousDaysSamples() throws {
@@ -194,7 +194,7 @@ final class LedgerTests: XCTestCase {
             ("2026-03-29T12:00:00Z", 1379.0),
             ("2026-10-25T12:00:00Z", 1499.0)
         ] {
-            var ledger = Ledger(); ledger.settings.wakeUpMinute = 0; ledger.settings.bedtimeMinute = 1439; let target = date(day)
+            var ledger = Ledger(); let target = date(day)
             let start = calendar.startOfDay(for: target)
             let cutoff = calendar.date(byAdding: .day, value: 1, to: start)!.addingTimeInterval(-60)
             try ledger.saveSample(at: start, activity: "Rest", categoryID: "rest", writer: "phone", now: cutoff)

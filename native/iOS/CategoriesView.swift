@@ -77,9 +77,8 @@ struct CategoriesView: View {
                     Text("Current targets since \(budget.effectiveAt.formatted(date: .abbreviated, time: .shortened)). Earlier versions are preserved.").font(.caption).foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Unallocated is the part of your waking time without a target, not an activity. Changing one percentage leaves all other targets unchanged. Daily equivalents use your typical waking schedule.")
+                Text("Unallocated is the part of your time without a target, not an activity. Changing one percentage leaves all other targets unchanged.")
             }
-            Section { NavigationLink("Waking schedule") { WakingScheduleView() } }
             if let error { Text(error).foregroundStyle(.red) }
         }
         .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
@@ -137,10 +136,6 @@ struct CategoriesView: View {
                         .accessibilityLabel("\(category.name) target percent").accessibilityIdentifier("categories.target.\(category.id)")
                     Text("%").foregroundStyle(.secondary)
                 }
-            }
-            if isTop, let percent = values?[category.id], (0...100).contains(percent) {
-                Text("≈ \(store.duration(store.ledger.typicalWakingMinutes * percent / 100)) per waking day")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }.padding(.leading, CGFloat(min(depth(category.id), 6)) * 14)
             .contextMenu {

@@ -17,10 +17,9 @@ struct DayCalendarView: View {
     @State private var selected: CalendarActivity?
     private let hourHeight: CGFloat = 72
     private var bounds: DateInterval {
-        store.ledger.wakingBounds(on: day)
+        store.ledger.dayBounds(on: day)
             ?? DateInterval(start: Calendar.current.startOfDay(for: day), duration: 86400)
     }
-    private var cutoff: Date { max(bounds.start, min(bounds.end, now)) }
     private var height: CGFloat { CGFloat(bounds.duration / 3600) * hourHeight }
     private func y(_ date: Date) -> CGFloat { CGFloat(date.timeIntervalSince(bounds.start) / 3600) * hourHeight }
     private var hours: [Date] {
@@ -31,7 +30,7 @@ struct DayCalendarView: View {
         while hour <= bounds.end { result.append(hour); hour = hour.addingTimeInterval(3600) }
         return result
     }
-    private var samples: [CheckIn] { store.ledger.wakingSamples(on: day, now: now) }
+    private var samples: [CheckIn] { store.ledger.daySamples(on: day, now: now) }
     private var blocks: [CalendarActivity] {
         let observations = Dictionary(samples.map { ($0.id, $0) }, uniquingKeysWith: { $0.revision < $1.revision ? $1 : $0 })
         var result: [CalendarActivity] = []
@@ -57,7 +56,7 @@ struct DayCalendarView: View {
         return palette[index]
     }
     private var scrollTarget: String {
-        if Calendar.current.isDateInToday(day) { return "timeline.now" }
+        if store.ledger.reportingCalendar().isDate(day, inSameDayAs: now) { return "timeline.now" }
         return blocks.first.map { "timeline.block.\($0.id)" } ?? "timeline.noon"
     }
     var body: some View {
@@ -91,6 +90,10 @@ struct DayCalendarView: View {
                         ForEach(samples) { sample in
                             Circle().fill(.primary).frame(width: 6, height: 6)
                                 .position(x: 61, y: y(sample.end)).allowsHitTesting(false)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Logged sample: \(sample.activity)")
+                                .accessibilityValue(store.time(sample.end))
+                                .accessibilityIdentifier("timeline.sample.\(sample.id)")
                         }
                         if let noon = hours.first(where: { store.ledger.reportingCalendar().component(.hour, from: $0) == 12 }) {
                             hourLine(noon, emphasize: true).id("timeline.noon").padding(.top, y(noon)).allowsHitTesting(false)

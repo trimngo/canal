@@ -58,13 +58,11 @@ extension Ledger {
         let week = cal.dateInterval(of: .weekOfYear, for: now)!
         let cutoff = DateInterval(start: week.start, end: min(now, week.end))
         var totals = AllocationPeriod()
-        // Include the preceding waking date: a Sunday night activity may extend
-        // into Monday. Clip every inferred segment at the actual week boundary.
-        var day = cal.date(byAdding: .day, value: -1, to: week.start)!
+        var day = week.start
         let last = cal.startOfDay(for: now)
         while day <= last {
             let period = allocation(on: day, now: now, calendar: cal, clippingTo: cutoff)
-            totals.wakingMinutes += period.wakingMinutes
+            totals.trackedMinutes += period.trackedMinutes
             for (id, minutes) in period.directMinutes { totals.directMinutes[id, default: 0] += minutes }
             guard let next = cal.date(byAdding: .day, value: 1, to: day), next > day else { break }
             day = next
@@ -74,6 +72,6 @@ extension Ledger {
             guard let commitment = commitments[category.id] else { return nil }
             return CommitmentProgress(commitment: commitment, name: categoryPath(category.id), minutes: totals.total(for: category.id, ledger: self))
         }
-        return CommitmentWeek(interval: week, loggedMinutes: totals.wakingMinutes, rows: rows)
+        return CommitmentWeek(interval: week, loggedMinutes: totals.trackedMinutes, rows: rows)
     }
 }

@@ -117,11 +117,8 @@ public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashab
 }
 
 public struct Settings: Codable, Equatable, Sendable {
-    public var wakeUpMinute: Int?
-    public var wakingTimeZoneIdentifier: String?
+    public var reportingTimeZoneIdentifier: String?
     public var notificationsAllDay = false
-    public var showRemainingTime = false
-    public var bedtimeMinute = 22 * 60
     public var notificationsEnabled = false
     public var startMinute = 7 * 60
     public var endMinute = 22 * 60
@@ -130,12 +127,13 @@ public struct Settings: Codable, Equatable, Sendable {
     public var revision = Revision()
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case wakeUpMinute, wakingTimeZoneIdentifier, notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision, showRemainingTime, bedtimeMinute
+        // Keep the existing wire key so older Watch versions retain the same time zone.
+        case reportingTimeZoneIdentifier = "wakingTimeZoneIdentifier"
+        case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        wakeUpMinute = try values.decodeIfPresent(Int.self, forKey: .wakeUpMinute)
-        wakingTimeZoneIdentifier = try values.decodeIfPresent(String.self, forKey: .wakingTimeZoneIdentifier)
+        reportingTimeZoneIdentifier = try values.decodeIfPresent(String.self, forKey: .reportingTimeZoneIdentifier)
         notificationsAllDay = try values.decodeIfPresent(Bool.self, forKey: .notificationsAllDay) ?? false
         notificationsEnabled = try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         startMinute = try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? 420
@@ -143,8 +141,6 @@ public struct Settings: Codable, Equatable, Sendable {
         use24HourTime = try values.decodeIfPresent(Bool.self, forKey: .use24HourTime) ?? false
         inferenceMethod = try values.decodeIfPresent(InferenceMethod.self, forKey: .inferenceMethod) ?? .midpoint
         revision = try values.decodeIfPresent(Revision.self, forKey: .revision) ?? Revision()
-        showRemainingTime = try values.decodeIfPresent(Bool.self, forKey: .showRemainingTime) ?? false
-        bedtimeMinute = try values.decodeIfPresent(Int.self, forKey: .bedtimeMinute) ?? 1320
     }
     public func notificationSchedule() throws -> [ReminderTime] {
         if notificationsAllDay { return [0, 15, 30, 45].map { ReminderTime(hour: nil, minute: $0) } }
@@ -178,7 +174,6 @@ public struct InferredSegment: Equatable, Sendable {
 public struct Ledger: Codable, Equatable, Sendable {
     public var weeklyCommitments: [WeeklyCommitment]?
     public var targetBudgets: [TargetBudget]?
-    public var wakingOverrides: [WakingOverride]?
     public var reminderImports: [ReminderImportReceipt]?
     public var logDeletions: [LogDeletion]?
     public var groupDeletions: [GroupDeletion]?
@@ -194,7 +189,6 @@ public struct Ledger: Codable, Equatable, Sendable {
         var values = categories.map(\.revision.counter)
         values.append(contentsOf: (weeklyCommitments ?? []).map(\.revision.counter))
         values.append(contentsOf: (targetBudgets ?? []).map(\.revision.counter))
-        values.append(contentsOf: (wakingOverrides ?? []).map(\.revision.counter))
         values.append(contentsOf: entries.map(\.revision.counter))
         values.append(contentsOf: captures.map(\.revision.counter))
         values.append(contentsOf: (reminderImports ?? []).map(\.revision.counter))
@@ -235,15 +229,15 @@ public struct Ledger: Codable, Equatable, Sendable {
     }
 
     public func inferredSegments(on day: Date, now: Date = Date(), calendar: Calendar = .current, method: InferenceMethod? = nil) -> [InferredSegment] {
-        wakingSegments(on: day, now: now, calendar: calendar, method: method)
+        daySegments(on: day, now: now, calendar: calendar, method: method)
     }
 
     public func breakdown(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> [BreakdownRow] {
         let allocation = allocation(on: day, now: now, calendar: calendar)
         var rows = children(of: nil).map { category in
-            BreakdownRow(id: category.id, name: category.name, minutes: allocation.total(for: category.id, ledger: self), dayMinutes: allocation.wakingMinutes)
+            BreakdownRow(id: category.id, name: category.name, minutes: allocation.total(for: category.id, ledger: self), dayMinutes: allocation.trackedMinutes)
         }
-        rows.append(BreakdownRow(id: "uncategorized", name: "Uncategorized", minutes: allocation.directMinutes["uncategorized", default: 0], dayMinutes: allocation.wakingMinutes))
+        rows.append(BreakdownRow(id: "uncategorized", name: "Uncategorized", minutes: allocation.directMinutes["uncategorized", default: 0], dayMinutes: allocation.trackedMinutes))
         return rows
     }
 
@@ -328,7 +322,7 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public mutating func saveSettings(_ value: Settings, writer: String) throws {
         _ = try value.notificationMinutes()
-        guard (0..<1440).contains(value.bedtimeMinute), (0..<1440).contains(value.wakeUpMinute ?? 420), value.bedtimeMinute != (value.wakeUpMinute ?? 420), value.wakingTimeZoneIdentifier == nil || TimeZone(identifier: value.wakingTimeZoneIdentifier!) != nil else { throw PlannerError.invalidWakingSchedule }
+        guard value.reportingTimeZoneIdentifier == nil || TimeZone(identifier: value.reportingTimeZoneIdentifier!) != nil else { throw PlannerError.invalidTimeZone }
         var revised = value; revised.revision = nextRevision(writer: writer); settings = revised
     }
 
@@ -346,8 +340,6 @@ public struct Ledger: Codable, Equatable, Sendable {
         weeklyCommitments = commitments.isEmpty ? nil : commitments
         let budgets = merged(targetBudgets ?? [], other.targetBudgets ?? [], revision: { $0.revision })
         targetBudgets = budgets.isEmpty ? nil : budgets
-        let schedules = merged(wakingOverrides ?? [], other.wakingOverrides ?? [], revision: { $0.revision })
-        wakingOverrides = schedules.isEmpty ? nil : schedules
         let deletions = merged(groupDeletions ?? [], other.groupDeletions ?? [], revision: { $0.revision })
         groupDeletions = deletions.isEmpty ? nil : deletions
         categories.removeAll { group in deletions.contains { $0.id == group.id } }

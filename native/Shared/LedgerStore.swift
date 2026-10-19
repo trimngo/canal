@@ -56,9 +56,20 @@ final class LedgerStore: ObservableObject {
                 fixture.entries = [CheckIn(end: Ledger.slotEnd(at: Date()), activity: "Legacy sample UI fixture", categoryID: "work", revision: Revision(counter: 1, writer: "fixture"))]
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-legacy-sleep-windows") {
+                var fixture = Ledger(); fixture.settings.reportingTimeZoneIdentifier = "UTC"
+                let now = Date(), calendar = fixture.reportingCalendar(), day = calendar.startOfDay(for: now)
+                let early = min(day.addingTimeInterval(3600), max(day, now.addingTimeInterval(-600)))
+                try fixture.saveSample(id: "early", at: early, activity: "Before former wake time", categoryID: "work", writer: "fixture", now: now)
+                try fixture.saveSample(id: "late", at: day.addingTimeInterval(-1800), activity: "After former bedtime", categoryID: "social", writer: "fixture", now: now)
+                var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(fixture)) as! [String: Any]
+                var settings = json["settings"] as! [String: Any]
+                settings["wakeUpMinute"] = 420; settings["bedtimeMinute"] = 1320; json["settings"] = settings
+                json["wakingOverrides"] = [["id": "legacy", "wakeMinute": 600, "bedMinute": 660, "reset": false, "revision": ["counter": 1, "writer": "fixture"]]]
+                try JSONSerialization.data(withJSONObject: json).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
                 var fixture = Ledger()
-                fixture.settings.wakeUpMinute = 0; fixture.settings.bedtimeMinute = 1439
                 let now = Date()
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
@@ -70,7 +81,6 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-trend-fixture") {
                 var fixture = Ledger()
                 let now = Date(), calendar = Calendar.current
-                fixture.settings.wakeUpMinute = 0; fixture.settings.bedtimeMinute = 1439
                 for offset in 0...6 where offset != 3 {
                     let day = calendar.date(byAdding: .day, value: -offset, to: calendar.startOfDay(for: now))!
                     let first = offset == 0 ? max(day, now.addingTimeInterval(-7200)) : day.addingTimeInterval(9 * 3600)
@@ -95,7 +105,6 @@ final class LedgerStore: ObservableObject {
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-allocation-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-commitments-fixture") {
                 var fixture = Ledger(); fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music")]
-                fixture.settings.wakeUpMinute = 0; fixture.settings.bedtimeMinute = 1439
                 try fixture.moveCategory("teaching", to: "work", writer: "fixture")
                 let now = Date(), cal = Calendar.current
                 let first = cal.startOfDay(for: now).addingTimeInterval(60)
@@ -191,12 +200,6 @@ final class LedgerStore: ObservableObject {
                     loaded.schemaVersion = 2
                     try JSONEncoder().encode(loaded).write(to: file, options: [.atomic])
                 }
-                #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
-                    loaded.settings.wakeUpMinute = 0; loaded.settings.bedtimeMinute = 1439
-                    try JSONEncoder().encode(loaded).write(to: file, options: [.atomic])
-                }
-                #endif
                 ledger = loaded
             }
         } catch {
@@ -214,8 +217,8 @@ final class LedgerStore: ObservableObject {
         guard !started else { return }; started = true
         do {
             var draft = ledger
-            if draft.settings.wakingTimeZoneIdentifier == nil {
-                var settings = draft.settings; settings.wakingTimeZoneIdentifier = TimeZone.current.identifier
+            if draft.settings.reportingTimeZoneIdentifier == nil {
+                var settings = draft.settings; settings.reportingTimeZoneIdentifier = TimeZone.current.identifier
                 try draft.saveSettings(settings, writer: writer)
             }
             draft.ensureDefaultGroups(writer: writer)
@@ -324,9 +327,7 @@ final class LedgerStore: ObservableObject {
     func reorderCategories(_ ids: [String], parent: String?) throws {
         var draft = ledger; try draft.reorderCategories(ids, parent: parent, writer: writer); try commit(draft)
     }
-    func saveWakingOverride(on day: Date, wake: Int, bed: Int, reset: Bool = false) throws {
-        var draft = ledger; try draft.saveWakingOverride(on: day, wake: wake, bed: bed, reset: reset, writer: writer); try commit(draft)
-    }
+
     func categoryNames(for entry: CheckIn) -> String {
         let names = ledger.confirmedCategoryIDs(for: entry).map { ledger.categoryPath($0) }
         return names.isEmpty ? "Uncategorized" : names.joined(separator: " + ")
@@ -527,7 +528,7 @@ final class LedgerStore: ObservableObject {
 
     func categoryName(_ id: String?) -> String { ledger.categories.first { $0.id == id }?.name ?? "Uncategorized" }
     func notificationSummary(now: Date = Date()) -> String {
-        let rows = ledger.breakdown(on: ledger.wakingDay(containing: now), now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }
+        let rows = ledger.breakdown(on: ledger.reportingDay(containing: now), now: now).filter { $0.minutes > 0 }.sorted { $0.minutes > $1.minutes }
         guard !rows.isEmpty else { return "Log an activity to start today’s breakdown." }
         let stamp = DateFormatter(); stamp.locale = Locale(identifier: "en_US_POSIX")
         stamp.timeZone = ledger.reportingCalendar().timeZone

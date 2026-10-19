@@ -77,6 +77,13 @@ struct SettingsView: View {
                     do { try store.saveSettings(current); settings.use24HourTime = value } catch { store.report(error) }
                 }))
 
+                Text("Reporting time zone: \(store.ledger.reportingCalendar().timeZone.identifier)").font(.footnote).foregroundStyle(.secondary)
+                if store.ledger.reportingCalendar().timeZone.identifier != TimeZone.current.identifier {
+                    Button("Use this phone’s time zone") {
+                        var current = store.ledger.settings; current.reportingTimeZoneIdentifier = TimeZone.current.identifier
+                        do { try store.saveSettings(current) } catch { store.report(error) }
+                    }
+                }
             }
             Section {
                 Picker("Method", selection: Binding(get: { store.ledger.settings.inferenceMethod }, set: { value in
@@ -86,10 +93,9 @@ struct SettingsView: View {
                     ForEach(InferenceMethod.allCases) { Text($0.name).tag($0) }
                 }
             } header: { Text("Estimate time") } footer: {
-                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates start at your first log and extend the last activity to bedtime. Today stops at now or bedtime. Days without logs are excluded. Percentages use time since the first log. Changing methods keeps your original samples.")
+                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates start at each day’s first log and extend to now today, or midnight for completed days. Every log counts, regardless of its time. Days without logs are excluded. Percentages use time since the first log. Changing methods keeps your original samples.")
             }
             Section {
-                NavigationLink("Waking schedule") { WakingScheduleView() }
                 Button("Categories & targets") { managingGroups = true }
             } header: { Text("Time allocation") } footer: {
                 Text("Offline suggestions use activity words and confirmed choices. A suggestion never assigns a group until you confirm it. Create and rename groups anytime.")
