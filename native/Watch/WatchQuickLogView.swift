@@ -9,12 +9,12 @@ struct WatchQuickLogView: View {
     @StateObject private var reply = WatchReplyState()
     let id: String
     let finish: () -> Void
-    #if DEBUG && targetEnvironment(simulator)
+    #if DEBUG
     @State private var fixtureInputOpen = false
     #endif
 
     var body: some View {
-        WatchPromptView(reply: reply, dictate: dictate)
+        content
             .task {
                 reply.sampleID = id
                 // A cold complication launch can arrive before the WatchKit
@@ -34,9 +34,13 @@ struct WatchQuickLogView: View {
                 do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
                 finish()
             }
-            #if DEBUG && targetEnvironment(simulator)
-            .sheet(isPresented: $fixtureInputOpen) {
-                VStack(spacing: 12) {
+    }
+
+    @ViewBuilder private var content: some View {
+        #if DEBUG
+        if fixtureInputOpen {
+            ScrollView {
+                VStack(spacing: 8) {
                     Text("Simulated accepted dictation").font(.caption)
                     Text("Preparing classes")
                     Button("Done") { fixtureInputOpen = false; accept("Preparing classes") }
@@ -45,15 +49,20 @@ struct WatchQuickLogView: View {
                         .accessibilityIdentifier("watch.fixture.cancel")
                 }
             }
-            #endif
+        } else {
+            WatchPromptView(reply: reply, dictate: dictate)
+        }
+        #else
+        WatchPromptView(reply: reply, dictate: dictate)
+        #endif
     }
 
     private func dictate() {
         guard !reply.inputOpen, !reply.saved else { return }
         if reply.pendingText != nil { save(); return }
         reply.error = nil
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--ui-watch-dictation") {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-watch-quick-log") {
             reply.inputOpen = true; fixtureInputOpen = true; return
         }
         #endif
