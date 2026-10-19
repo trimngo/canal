@@ -420,7 +420,7 @@ extension Ledger {
     public var snoozedCaptures: [Capture] { snoozedCaptures(at: Date()) }
     public func snoozedCaptures(at now: Date) -> [Capture] {
         captures.filter { $0.deletedAt == nil && !$0.isDone && $0.isReference != true && $0.isSnoozed(at: now) }.sorted {
-            $0.snoozedUntil == $1.snoozedUntil ? $0.id < $1.id : $0.snoozedUntil! < $1.snoozedUntil!
+            $0.snoozeReturnDate() == $1.snoozeReturnDate() ? $0.id < $1.id : $0.snoozeReturnDate()! < $1.snoozeReturnDate()!
         }
     }
     public var referenceCaptures: [Capture] {
@@ -432,7 +432,7 @@ extension Ledger {
         activeCaptures.sorted {
             // Returned ideas get first review; creation dates never change.
             if ($0.snoozedUntil != nil) != ($1.snoozedUntil != nil) { return $0.snoozedUntil != nil }
-            if let a = $0.snoozedUntil, let b = $1.snoozedUntil, a != b { return a < b }
+            if let a = $0.snoozeReturnDate(), let b = $1.snoozeReturnDate(), a != b { return a < b }
             return $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt
         }.map(\.id)
     }
@@ -532,7 +532,8 @@ extension Ledger {
         var ranking = rankingProjection
         ranking.rerank(id, ids: rankingIDs); saveRanking(ranking, writer: writer)
     }
-    public mutating func snoozeCapture(_ id: String, until: Date, writer: String, now: Date = Date()) {
+    public mutating func snoozeCapture(_ id: String, until: Date, writer: String, now: Date = Date(), calendar: Calendar = .current) {
+        let until = calendar.startOfDay(for: until)
         guard until > now, let index = captures.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isDone && $0.isReference != true }) else { return }
         let revision = nextRevision(writer: writer)
         captures[index].snoozedUntil = until

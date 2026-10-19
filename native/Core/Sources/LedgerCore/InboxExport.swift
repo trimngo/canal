@@ -34,7 +34,7 @@ extension Ledger {
             else if inProgress.contains(idea.id) { list = "In progress"; rank = "Placement incomplete" }
             else { list = "New Ideas"; rank = "Not evaluated" }
             let notes = idea.notes.map { "\n   Notes: " + $0.replacingOccurrences(of: "\n", with: "\n   ") } ?? ""
-            let snooze = idea.snoozedUntil.map { "\n   " + ($0 > now ? "Snoozed until: " : "Returned from snooze: ") + formatter.string(from: $0) } ?? ""
+            let snooze = idea.snoozeReturnDate().map { "\n   " + ($0 > now ? "Snoozed until: " : "Returned from snooze: ") + formatter.string(from: $0) } ?? ""
             return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(notes)\(snooze)"
         }
         let noun = ideas.count == 1 ? "idea" : "ideas"

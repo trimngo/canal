@@ -14,7 +14,6 @@ struct TargetsView: View {
                     Button("Categories") { managingCategories = true }.accessibilityIdentifier("dashboard.groups")
                     Menu {
                         NavigationLink("Calendar", value: LedgerScreen.calendar)
-                        NavigationLink("Charts & history", value: LedgerScreen.history)
                         NavigationLink("Waking schedule") { WakingScheduleView() }
                     } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("More views")
                 }
@@ -97,7 +96,6 @@ struct TargetsView: View {
             }
             Section {
                 NavigationLink("Calendar", value: LedgerScreen.calendar).accessibilityIdentifier("dashboard.calendar")
-                NavigationLink("Charts & history", value: LedgerScreen.history).accessibilityIdentifier("dashboard.history")
             }
         }.listStyle(.insetGrouped).listSectionSpacing(12)
     }
