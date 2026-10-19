@@ -32,7 +32,7 @@ final class InboxSnoozeTests: XCTestCase {
 
     func testDueDateIsComputedWithoutTimerAndDoesNotChangeRawTask() throws {
         var ledger = try ranked()
-        let now = Date(), due = Calendar.current.startOfDay(for: now.addingTimeInterval(86400))
+        let now = Date(), due = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: now.addingTimeInterval(86400))!
         ledger.snoozeCapture("a", until: due, writer: "phone", now: now)
         let saved = ledger
         XCTAssertEqual(ledger.snoozedCaptures(at: due.addingTimeInterval(-1)).map(\.id), ["a"])
@@ -41,39 +41,34 @@ final class InboxSnoozeTests: XCTestCase {
         XCTAssertEqual(ledger, saved)
     }
 
-    func testOverdueIdeaReturnsAheadOfNewIdeasWithFreshComparisons() throws {
+    func testOverdueIdeaUsesReturnDateInsteadOfSpecialPriorityWithFreshComparisons() throws {
         var ledger = try ranked()
         // A past simulated snooze lets the normal Date-based projection see it due.
         let now = Date()
         ledger.snoozeCapture("a", until: now.addingTimeInterval(-1), writer: "phone", now: now.addingTimeInterval(-86400))
         try ledger.addCapture(text: "Brand new", id: "new", writer: "watch", now: now)
-        XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["a", "new"])
+        XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["new", "a"])
         XCTAssertTrue(ledger.partiallyRankedCaptures.isEmpty)
         XCTAssertEqual(ledger.rankedCaptureIDs, ["b", "c"])
         ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair?.first, "a")
+        XCTAssertEqual(ledger.rankingPair?.first, "new")
         XCTAssertNotNil(ledger.rankingPair) // Old a > b > c answers must not auto-place it.
     }
 
-    func testBringBackNowPreservesCurrentPairThenReviewsReturnedIdeaFirst() throws {
+    func testBringBackNowPreservesVisiblePairAndUsesActualReturnInstant() throws {
         var ledger = try ranked()
         ledger.snoozeCapture("a", until: Date().addingTimeInterval(86400), writer: "phone")
         try ledger.addCapture(text: "new", id: "new", writer: "phone")
-        try ledger.addCapture(text: "current", id: "current", writer: "phone", now: Date().addingTimeInterval(1))
         ledger.prepareRanking(writer: "phone")
         let old = try XCTUnwrap(ledger.rankingPair)
-        XCTAssertEqual(old.first, "current")
-        ledger.bringBackCapture("a", writer: "phone")
+        let now = Date()
+        ledger.bringBackCapture("a", writer: "phone", now: now)
         XCTAssertEqual(ledger.rankingPair?.first, old.first)
         XCTAssertEqual(ledger.rankingPair?.second, old.second)
+        XCTAssertEqual(ledger.captures.first { $0.id == "a" }?.rankingArrivalDate(), now)
         XCTAssertTrue(ledger.snoozedCaptures.isEmpty)
-        var count = 0
-        while let pair = ledger.rankingPair, pair.first == "current" {
-            ledger.chooseCapture(pair.first, from: pair, writer: "phone")
-            count += 1; XCTAssertLessThan(count, 10)
-        }
+        ledger.prepareRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "a")
-        XCTAssertTrue(ledger.unseenCaptures.contains { $0.id == "new" })
     }
 
     func testSnoozingCurrentCandidateSafelyAdvancesAndRejectsOldAnswer() throws {

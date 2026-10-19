@@ -35,8 +35,8 @@ final class InboxSnoozeScheduleTests: XCTestCase {
         XCTAssertEqual(calendar.component(.hour, from: january), 0)
         XCTAssertEqual(calendar.component(.minute, from: january), 0)
     }
-    func testLegacyAfternoonSnoozeReturnsAtMidnightWithoutChangingRawTimestamp() throws {
-        let afternoon = date(19), midnight = calendar.startOfDay(for: afternoon)
+    func testLegacyAfternoonSnoozeReturnsAtEightWithoutChangingRawTimestamp() throws {
+        let afternoon = date(19), midnight = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: afternoon)!
         var capture = Capture(id: "legacy", text: "Return today", revision: Revision())
         capture.snoozedUntil = afternoon
         let original = capture

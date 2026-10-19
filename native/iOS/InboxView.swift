@@ -8,6 +8,8 @@ struct InboxView: View {
     @State private var clock = Date()
     @State private var text = ""
     @FocusState private var focused: Bool
+    @FocusState private var searchFocused: Bool
+    @State private var searchText = ""
     @State private var showDone = false
     @State private var ranking = false
     @State private var showBacklog = false
@@ -20,11 +22,8 @@ struct InboxView: View {
     private var waiting: [Capture] { store.inbox.unseen }
     private var inProgress: [Capture] { store.inbox.inProgress }
     private var backlog: [Capture] { store.inbox.backlog }
-    private var rankButtonTitle: String {
-        if store.inbox.isActive { return "Continue ranking" }
-        let count = waiting.count
-        return "Rank \(count) new \(count == 1 ? "idea" : "ideas")"
-    }
+    private var searching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var searchResults: [Capture] { store.ledger.searchInbox(searchText) }
     private var completed: [Capture] {
         store.ledger.captures.filter { $0.deletedAt == nil && $0.isDone }.sorted { $0.createdAt > $1.createdAt }
     }
@@ -39,10 +38,32 @@ struct InboxView: View {
                     }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
                         .accessibilityIdentifier("inbox.save")
                 }
+                Section {
+                    Button("Review ideas", systemImage: "arrow.left.arrow.right") { review() }
+                        .accessibilityIdentifier("inbox.review")
+                        .disabled(store.ledger.activeCaptures.isEmpty || !store.storageAvailable)
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                        TextField("Search ideas and notes", text: $searchText)
+                            .focused($searchFocused)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .accessibilityIdentifier("inbox.search")
+                        if !searchText.isEmpty {
+                            Button("Clear search", systemImage: "xmark.circle.fill") { searchText = "" }
+                                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                                .accessibilityIdentifier("inbox.search-clear")
+                        }
+                    }
+                }
                 if store.canUndoCaptureDeletion {
                     Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
                 }
-                if showDone {
+                if searching {
+                    Section("Search results (\(searchResults.count))") {
+                        if searchResults.isEmpty { Text("No matching ideas.").foregroundStyle(.secondary) }
+                        ForEach(searchResults) { captureRow($0) }
+                    }.accessibilityIdentifier("inbox.search-results")
+                } else if showDone {
                     Section("Completed (\(completed.count))") {
                         if completed.isEmpty { Text("No completed captures.").foregroundStyle(.secondary) }
                         ForEach(completed) { captureRow($0) }
@@ -51,15 +72,7 @@ struct InboxView: View {
                     Section {
                         if ranked.isEmpty { Text("Your highest priorities will appear here when you choose to rank ideas.").foregroundStyle(.secondary) }
                         ForEach(ranked) { captureRow($0) }
-                        if store.inbox.needsReview {
-                            Button(store.inbox.isActive || store.inbox.unrankedCount > 0 ? "Continue ranking" : "Review backlog to refill priorities") {
-                                do {
-                                    if store.inbox.isActive { try store.prepareRanking() }
-                                    else { try store.replenishTopTen() }
-                                    focused = false; ranking = true
-                                } catch { store.report(error) }
-                            }.accessibilityIdentifier("inbox.replenish")
-                        }
+
                     } header: {
                         Text("Top 10 Priorities (\(ranked.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.ranked-title")
                     } footer: {
@@ -69,27 +82,22 @@ struct InboxView: View {
                         if waiting.isEmpty {
                             Text("No new ideas to review.").foregroundStyle(.secondary).id("inbox.waiting")
                         } else {
-                            Button(rankButtonTitle) {
-                                do { try store.prepareRanking(); focused = false; ranking = true } catch { store.report(error) }
-                            }.accessibilityIdentifier("inbox.rank").id("inbox.waiting")
+                            Color.clear.frame(height: 0).id("inbox.waiting")
                             ForEach(waiting) { captureRow($0) }
                         }
                     } header: {
                         Text("New Ideas (\(waiting.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.waiting-title")
                     } footer: {
-                        Text("Ideas you haven't seen in a comparison yet. Newest first; returning snoozed ideas get priority.")
+                        Text("Ideas you haven't seen in a comparison yet. Review starts with the newest arrivals.")
                     }
                     if !inProgress.isEmpty {
                         Section {
-                            Button("Continue ranking") {
-                                do { try store.prepareRanking(); focused = false; ranking = true } catch { store.report(error) }
-                            }.accessibilityIdentifier("inbox.continue")
                             ForEach(inProgress) { captureRow($0) }
                         } header: {
                             Text("In progress (\(inProgress.count))").textCase(nil).font(.headline)
                                 .accessibilityIdentifier("inbox.progress-title")
                         } footer: {
-                            Text("Unfinished ideas keep their saved answers. Continue reviews returning snoozes first, then the newest ideas.")
+                            Text("Every answer stays saved. The same tournament reviews new ideas and finds your next priorities.")
                         }
                     }
                     Section {
@@ -110,7 +118,7 @@ struct InboxView: View {
                             Text("Snoozed (\(snoozed.count))").accessibilityIdentifier("inbox.snoozed")
                         }
                     } footer: {
-                        Text("Soonest return first. Due ideas return to the front of New Ideas for a fresh review.")
+                        Text("Soonest return first. Ideas return at 8 a.m. on the chosen date and join New Ideas in arrival order.")
                     }
                     Section {
                         if store.ledger.referenceCaptures.isEmpty {
@@ -132,7 +140,7 @@ struct InboxView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
-                .onDisappear { focused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
+                .onDisappear { focused = false; searchFocused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
                 .onChange(of: ranking) { _, presented in
                     if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
                 }
@@ -181,13 +189,16 @@ struct InboxView: View {
                 }
         }
     }
+    private func review() {
+        do { try store.prepareRanking(); focused = false; searchFocused = false; ranking = true } catch { store.report(error) }
+    }
     private var rankingStatus: String {
         if store.inbox.isVerified {
             return ranked.isEmpty ? "Capture first. Rank whenever you like." : "Up to date · \(ranked.count) priorities"
         }
         let pending = "\(waiting.count) unseen · \(inProgress.count) in progress."
         if store.inbox.needsReview {
-            return "Provisional · Continue ranking to confirm your next priorities using saved answers. " + pending
+            return "Provisional · Review to confirm your next priorities using saved answers. " + pending
         }
         return "Provisional · " + pending
     }
@@ -253,9 +264,10 @@ struct InboxView: View {
     private func metadata(_ capture: Capture) -> String {
         let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
+        if capture.isDone { return "Completed · \(origin)\(date)" }
         if capture.isReference == true { return "Reference · \(origin)\(date)" }
         if let due = capture.snoozeReturnDate(), !capture.isDone {
-            if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .omitted))" }
+            if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .omitted)) at \(store.time(due))" }
             if waiting.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
         }
         if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { return "#\(rank + 1) · \(origin)\(date)" }
@@ -332,7 +344,7 @@ private struct CaptureSnoozeView: View {
                     DatePicker("Return", selection: $date, in: (InboxSnooze.after(days: 1, from: Date()) ?? Date())..., displayedComponents: [.date])
                     Button("Snooze until this date") { propose(date) }.accessibilityIdentifier("snooze.custom")
                 }
-                Text("Returns at the start of the selected day for a fresh review. Your notes and original capture date stay unchanged.")
+                Text("Returns at 8 a.m. on the selected day for a fresh review. Your notes and original capture date stay unchanged.")
                     .font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle("Snooze idea").navigationBarTitleDisplayMode(.inline)
                 .scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
@@ -381,29 +393,18 @@ private struct RankingView: View {
                     choice(first, pair: pair, id: "ranking.first")
                     Text("or").foregroundStyle(.secondary)
                     choice(second, pair: pair, id: "ranking.second")
-                    if store.inbox.isTournamentReview {
-                        Text("Finding your next priorities · \(store.inbox.confirmedCount) of \(min(10, store.ledger.activeCaptures.count)) positions confirmed")
-                            .font(.subheadline).accessibilityIdentifier("ranking.tournament-progress")
-                        Text("Earlier comparisons are reused. Every choice is saved; you can pause and keep using your current list.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        Text("Finish placing this idea, then review the newest waiting idea. Every choice is saved; you can pause anytime.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                    Text("Finding your next priorities · \(store.inbox.confirmedCount) of \(min(10, store.ledger.activeCaptures.count)) positions confirmed")
+                        .font(.subheadline).accessibilityIdentifier("ranking.tournament-progress")
+                    Text("Every answer is saved. Newest available comparisons come first. You can pause anytime.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Label("Review complete", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.tint)
                     Text(store.inbox.isVerified ? "Your priorities are up to date." : "You can review more ideas later. Capture is always available.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    if store.inbox.unrankedCount > 0 {
-                        let count = store.inbox.unrankedCount
-                        Button("Rank \(count) more \(count == 1 ? "idea" : "ideas")") {
+                    if !store.inbox.isVerified {
+                        Button("Review ideas") {
                             do { try store.prepareRanking() } catch { store.report(error) }
                         }.buttonStyle(.borderedProminent).accessibilityIdentifier("ranking.more")
-                    }
-                    if store.inbox.needsReview {
-                        Button("Review backlog to refill priorities") {
-                            do { try store.replenishTopTen() } catch { store.report(error) }
-                        }.accessibilityIdentifier("ranking.replenish")
                     }
                 }
                 if store.canUndoCaptureDeletion {

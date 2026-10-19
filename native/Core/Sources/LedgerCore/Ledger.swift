@@ -86,6 +86,8 @@ public struct Capture: Codable, Identifiable, Equatable, Sendable {
     public var deletedAt: Date?
     public var notes: String?
     public var snoozedUntil: Date?
+    // Explicit Bring back now bypasses the scheduled 8 a.m. return.
+    public var returnedAt: Date?
     public var isReference: Bool?
     // Changes only when starting a fresh review cycle, not when editing notes.
     public var reviewRevision: Revision?
@@ -98,7 +100,11 @@ public struct Capture: Codable, Identifiable, Equatable, Sendable {
         self.id = id; self.text = text; self.createdAt = createdAt; self.isDone = isDone; self.revision = revision
     }
     public func snoozeReturnDate(calendar: Calendar = .current) -> Date? {
-        snoozedUntil.map { calendar.startOfDay(for: $0) }
+        if let returnedAt { return returnedAt }
+        return snoozedUntil.flatMap { calendar.date(bySettingHour: 8, minute: 0, second: 0, of: $0) }
+    }
+    public func rankingArrivalDate(calendar: Calendar = .current) -> Date {
+        snoozeReturnDate(calendar: calendar) ?? createdAt
     }
     public func isSnoozed(at now: Date, calendar: Calendar = .current) -> Bool {
         snoozeReturnDate(calendar: calendar).map { $0 > now } ?? false

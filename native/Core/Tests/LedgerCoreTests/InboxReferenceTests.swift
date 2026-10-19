@@ -46,7 +46,7 @@ final class InboxReferenceTests: XCTestCase {
         XCTAssertTrue(ledger.referenceCaptures.isEmpty)
         XCTAssertEqual(ledger.unseenCaptures.map(\.id), ["task-1"])
         ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair?.first, "task-1")
+        XCTAssertTrue([ledger.rankingPair?.first, ledger.rankingPair?.second].contains("task-1"))
         XCTAssertNotNil(ledger.rankingPair) // Previous comparisons cannot silently place it.
     }
 
@@ -74,7 +74,7 @@ final class InboxReferenceTests: XCTestCase {
         XCTAssertEqual(ledger.rankingPair, pair)
         XCTAssertEqual(ledger.inboxRanking, ranking)
         ledger.chooseCapture(pair.first, from: pair, writer: "phone")
-        XCTAssertEqual(ledger.inboxRanking?.topTen?.candidate?.item, "new")
+        XCTAssertTrue(ledger.inboxRanking?.topTen?.preferences.contains(InboxPreference(winner: pair.first, loser: pair.second)) == true)
     }
 
     func testReferenceCancelsSnoozeAndCannotBeSnoozedOrRankedUntilMovedBack() throws {
@@ -136,6 +136,8 @@ final class InboxReferenceTests: XCTestCase {
         ledger.setCaptureDone(id: "done", done: true, writer: "phone")
         ledger.setCaptureDeleted("deleted", deleted: true, writer: "phone")
         ledger.rerankCapture("partial", writer: "phone")
+        ledger.inboxRanking?.topTen?.presented = ["partial"]
+        ledger.inboxRanking?.priorityTournament?.matchup = nil
         ledger.markRankingPresented(writer: "phone")
         let export = ledger.inboxExport
         func block(_ title: String) throws -> String {
