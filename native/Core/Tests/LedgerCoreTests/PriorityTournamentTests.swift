@@ -145,6 +145,7 @@ final class PriorityTournamentTests: XCTestCase {
         var ledger = existingInbox(14)
         ledger.setCaptureDone(id: "0000", done: true, writer: "phone")
         ledger.inboxRanking?.topTen?.preferences.append(InboxPreference(winner: "0010", loser: "0011"))
+        ledger.inboxRanking?.tournamentVersion = nil
         ledger.inboxRanking?.topTen?.tournament = BacklogTournament(champion: "0010", remaining: ["0012", "0013"])
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertNil(ledger.inboxRanking?.topTen?.tournament)

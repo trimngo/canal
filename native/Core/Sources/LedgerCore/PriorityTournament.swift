@@ -63,20 +63,10 @@ public struct PriorityTournament: Codable, Equatable, Sendable {
         }
         let added = ids.filter { !existing.contains($0) }
         guard !added.isEmpty else { return }
-        let extracted = confirmed
-        confirmed = []
-        for id in extracted {
-            if let index = leaves.firstIndex(of: id) { updateLeaf(at: index, winner: id) }
-        }
-        for id in added {
-            if let empty = leaves.firstIndex(of: nil) {
-                leaves[empty] = id; updateLeaf(at: empty, winner: id)
-            } else {
-                leaves += Array(repeating: nil, count: leaves.count)
-                leaves[leaves.firstIndex(of: nil)!] = id
-                rebuild()
-            }
-        }
+        // New members enter in arrival order, so an unresolved new capture
+        // never waits behind a large older branch. Answers live in preferences
+        // and are reused after rebuilding; removals retain cached branch wins.
+        self = PriorityTournament(ids: ids)
     }
 
     mutating func invalidateAnswers() {
@@ -85,7 +75,7 @@ public struct PriorityTournament: Codable, Equatable, Sendable {
 
     /// Resolve cached branches first. An unanswered match pauses the query.
     /// Each extracted winner removes one leaf only in this working tree.
-    mutating func advance(limit: Int = 10,
+    mutating func advance(limit: Int = 10, reviewOrder: [String] = [],
                           knownLeader: (Set<String>) -> String? = { _ in nil },
                           knownWinner: (String, String) -> String?) {
         matchup = nil
@@ -95,28 +85,44 @@ public struct PriorityTournament: Codable, Equatable, Sendable {
             // A known global winner needs no comparisons between its losers.
             // In particular, importing a ranked top ten never sorts its tail.
             let proven = knownLeader(remaining)
-            guard let winner = proven ?? resolve(1, knownWinner: knownWinner) else { return }
+            var ready: [[String]] = []
+            let resolved = proven ?? resolve(1, ready: &ready, knownWinner: knownWinner)
+            guard let winner = resolved else {
+                let order = Dictionary(reviewOrder.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: { a, _ in a })
+                let selected = ready.min {
+                    ($0.compactMap { order[$0] }.min() ?? Int.max) < ($1.compactMap { order[$0] }.min() ?? Int.max)
+                }
+                matchup = selected.map { pair in
+                    (order[pair[0]] ?? Int.max) <= (order[pair[1]] ?? Int.max) ? pair : pair.reversed()
+                }
+                return
+            }
             confirmed.append(winner)
             remaining.remove(winner)
             if let index = leaves.firstIndex(of: winner) { updateLeaf(at: index, winner: nil) }
         }
     }
 
-    private mutating func resolve(_ node: Int, knownWinner: (String, String) -> String?) -> String? {
+    private mutating func resolve(_ node: Int, ready: inout [[String]],
+                                  knownWinner: (String, String) -> String?) -> String? {
         guard counts[node] > 0 else { return nil }
         if let cached = winners[node] { return cached }
         let left = node * 2, right = left + 1
         if counts[left] == 0 {
-            guard let winner = resolve(right, knownWinner: knownWinner) else { return nil }
+            guard let winner = resolve(right, ready: &ready, knownWinner: knownWinner) else { return nil }
             winners[node] = winner; return winner
         }
         if counts[right] == 0 {
-            guard let winner = resolve(left, knownWinner: knownWinner) else { return nil }
+            guard let winner = resolve(left, ready: &ready, knownWinner: knownWinner) else { return nil }
             winners[node] = winner; return winner
         }
-        guard let a = resolve(left, knownWinner: knownWinner),
-              let b = resolve(right, knownWinner: knownWinner) else { return nil }
-        guard let winner = knownWinner(a, b) else { matchup = [a, b]; return nil }
+        // Gather ready matches in both branches before choosing a question.
+        // This lets the newest available contenders go first, independent of
+        // their old position in a persisted tree.
+        let a = resolve(left, ready: &ready, knownWinner: knownWinner)
+        let b = resolve(right, ready: &ready, knownWinner: knownWinner)
+        guard let a, let b else { return nil }
+        guard let winner = knownWinner(a, b) else { ready.append([a, b]); return nil }
         winners[node] = winner
         return winner
     }
