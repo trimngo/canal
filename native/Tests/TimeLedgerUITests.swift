@@ -394,6 +394,17 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("DashboardAfterCategorization", in: app)
     }
 
+    func testDashboardGroupingReviewStartsWithVisiblePeriod() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-review-range-fixture"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Older ungrouped observation"].exists)
+        app.buttons["All days"].tap()
+        let older = app.staticTexts["Older ungrouped observation"]; reveal(older, in: app)
+        XCTAssertTrue(older.exists)
+        recordScreen("ReviewVisibleDatesOrAllDays", in: app)
+    }
+
     func testCategoryLineTrendsAndUnitsAreOnMainDashboard() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-trend-fixture"]; app.launch()
         let period = element(app, "report.range"); XCTAssertTrue(period.waitForExistence(timeout: 10))
