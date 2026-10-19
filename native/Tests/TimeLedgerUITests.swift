@@ -856,8 +856,11 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(first.exists && first.label == original)
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         let completed = first.label
-        app.buttons["ranking.first.actions"].tap(); app.buttons["Mark done"].tap()
-        XCTAssertFalse(first.exists && first.label == completed)
+        app.buttons["ranking.first.actions"].tap()
+        let markDone = app.buttons["ranking.first.done"]
+        XCTAssertTrue(markDone.waitForExistence(timeout: 5)); markDone.tap()
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !first.exists || first.label != completed }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
         recordScreen("RankingActions", in: app)
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
         let header = element(app, "inbox.reference-title"); reveal(header, in: app)

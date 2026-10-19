@@ -454,6 +454,6 @@ private struct RankingView: View {
                     .buttonStyle(.borderless).accessibilityLabel("Delete idea: \(capture.text)")
                     .accessibilityIdentifier("\(id).delete")
             }
-        }
+        }.id(capture.id)
     }
 }

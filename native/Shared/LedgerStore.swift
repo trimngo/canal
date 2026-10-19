@@ -149,12 +149,11 @@ final class LedgerStore: ObservableObject {
                     try fixture.addCapture(text: "Priority \(index)", id: id, writer: "fixture", now: Date().addingTimeInterval(Double(index - 60)))
                     if index <= 10 { ranking.ordered.append(id) }
                 }
+                let tail = (11...26).map { "priority-\($0)" }
+                let legacy: [String: Any] = ["backlog": tail, "preferences": tail.map { ["winner": "priority-10", "loser": $0] }, "pending": [], "replenishing": false]
+                ranking.topTen = try JSONDecoder().decode(TopTenRanking.self, from: JSONSerialization.data(withJSONObject: legacy))
                 ranking.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranking
                 fixture.prepareRanking(writer: "fixture")
-                while let pair = fixture.rankingPair {
-                    // All incoming ideas are initially below the known ten.
-                    fixture.chooseCapture(pair.second, from: pair, writer: "fixture")
-                }
                 fixture.setCaptureDone(id: "priority-1", done: true, writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
