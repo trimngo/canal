@@ -21,8 +21,8 @@ struct WatchQuickLogView: View {
                 // hosting controller is active. Wait for it, without another tap.
                 for _ in 0..<20 {
                     guard !Task.isCancelled else { return }
-                    if WKExtension.shared().applicationState == .active,
-                       WKExtension.shared().visibleInterfaceController != nil {
+                    if WKApplication.shared().applicationState == .active,
+                       WKApplication.shared().visibleInterfaceController != nil {
                         dictate(); return
                     }
                     do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
@@ -57,7 +57,7 @@ struct WatchQuickLogView: View {
             reply.inputOpen = true; fixtureInputOpen = true; return
         }
         #endif
-        guard let controller = WKExtension.shared().visibleInterfaceController else {
+        guard let controller = WKApplication.shared().visibleInterfaceController else {
             reply.error = "Input is not ready yet. Tap Dictate log to try again."; return
         }
         reply.inputOpen = true
