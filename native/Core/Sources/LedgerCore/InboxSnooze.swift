@@ -1,11 +1,11 @@
 import Foundation
 
-/// Calendar days preserve the local return time across daylight-saving changes.
+/// Snoozes return at the start of a local date, across daylight-saving changes.
 /// Weekdays mean Monday–Friday, independent of the calendar's first weekday.
 public enum InboxSnooze {
     public static func after(days: Int, from date: Date, calendar: Calendar = .current) -> Date? {
         guard days > 0 else { return nil }
-        return calendar.date(byAdding: .day, value: days, to: date)
+        return calendar.date(byAdding: .day, value: days, to: calendar.startOfDay(for: date))
     }
 
     public static func isWeekend(_ date: Date, calendar: Calendar = .current) -> Bool {
@@ -13,6 +13,7 @@ public enum InboxSnooze {
     }
 
     public static func weekdayOnOrAfter(_ date: Date, calendar: Calendar = .current) -> Date {
+        let date = calendar.startOfDay(for: date)
         switch calendar.component(.weekday, from: date) {
         case 7: return calendar.date(byAdding: .day, value: 2, to: date) ?? date
         case 1: return calendar.date(byAdding: .day, value: 1, to: date) ?? date

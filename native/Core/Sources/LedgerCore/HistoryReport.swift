@@ -13,6 +13,10 @@ public struct DailyTotal: Identifiable, Equatable, Sendable {
     public var categoryID: String
     public var name: String
     public var minutes: Double
+    public var dayMinutes: Double
+    public var segmentStart: Date
+    public var percent: Double { dayMinutes > 0 ? minutes / dayMinutes * 100 : 0 }
+    public var seriesID: String { "\(categoryID)-\(segmentStart.timeIntervalSince1970)" }
     public var id: String { "\(day.timeIntervalSince1970)-\(categoryID)" }
 }
 
@@ -52,20 +56,21 @@ extension Ledger {
         let days = Set(samples.map { wakingDay(containing: $0.end, calendar: cal) }).sorted()
         var totals: [String: Double] = [:], daily: [DailyTotal] = []
         var tracked = 0.0
+        var periods: [(day: Date, period: AllocationPeriod)] = []
         for day in days {
             let period = allocation(on: day, now: now, calendar: cal)
+            guard period.wakingMinutes > 0 else { continue }
+            periods.append((day, period))
             tracked += period.wakingMinutes
             for category in children(of: nil) {
                 let minutes = period.total(for: category.id, ledger: self)
                 if minutes > 0 {
                     totals[category.id, default: 0] += minutes
-                    daily.append(DailyTotal(day: day, categoryID: category.id, name: category.name, minutes: minutes))
                 }
             }
             let uncategorized = period.directMinutes["uncategorized", default: 0]
             if uncategorized > 0 {
                 totals["uncategorized", default: 0] += uncategorized
-                daily.append(DailyTotal(day: day, categoryID: "uncategorized", name: "Uncategorized", minutes: uncategorized))
             }
         }
         let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
@@ -76,6 +81,18 @@ extension Ledger {
         rows.sort { lhs, rhs in
             if lhs.minutes == rhs.minutes { return lhs.name < rhs.name }
             return lhs.minutes > rhs.minutes
+        }
+        // Zero means a represented day with no time in this category. A date
+        // with no usable logs is a gap, not an invented zero-activity day.
+        var previous: Date?, segment = lower
+        for (day, period) in periods {
+            if previous == nil || cal.date(byAdding: .day, value: 1, to: previous!) != day { segment = day }
+            for row in rows {
+                let minutes = row.id == "uncategorized" ? period.directMinutes[row.id, default: 0] : period.total(for: row.id, ledger: self)
+                daily.append(DailyTotal(day: day, categoryID: row.id, name: row.name, minutes: minutes,
+                                        dayMinutes: period.wakingMinutes, segmentStart: segment))
+            }
+            previous = day
         }
         return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked, remainingMinutes: 0)
     }

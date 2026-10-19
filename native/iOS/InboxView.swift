@@ -171,8 +171,8 @@ struct InboxView: View {
                 }
                 .onChange(of: store.ledger.captures) { _, _ in clock = Date() }
                 .onChange(of: scenePhase) { _, phase in if phase == .active { clock = Date() } }
-                .task(id: snoozed.first?.snoozedUntil) {
-                    guard let due = snoozed.first?.snoozedUntil else { return }
+                .task(id: snoozed.first?.snoozeReturnDate()) {
+                    guard let due = snoozed.first?.snoozeReturnDate() else { return }
                     do {
                         try await Task.sleep(for: .seconds(max(0, due.timeIntervalSinceNow)))
                         try store.resumeRanking()
@@ -254,8 +254,8 @@ struct InboxView: View {
         let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
         if capture.isReference == true { return "Reference · \(origin)\(date)" }
-        if let due = capture.snoozedUntil, !capture.isDone {
-            if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .shortened))" }
+        if let due = capture.snoozeReturnDate(), !capture.isDone {
+            if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .omitted))" }
             if waiting.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
         }
         if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { return "#\(rank + 1) · \(origin)\(date)" }
@@ -329,10 +329,10 @@ private struct CaptureSnoozeView: View {
                     }.disabled(Int(days).map { $0 <= 0 } ?? true).accessibilityIdentifier("snooze.days-save")
                 }
                 Section("Choose a return date") {
-                    DatePicker("Return", selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Return", selection: $date, in: (InboxSnooze.after(days: 1, from: Date()) ?? Date())..., displayedComponents: [.date])
                     Button("Snooze until this date") { propose(date) }.accessibilityIdentifier("snooze.custom")
                 }
-                Text("Returns to New Ideas for a fresh review. Your notes and original capture date stay unchanged.")
+                Text("Returns at the start of the selected day for a fresh review. Your notes and original capture date stay unchanged.")
                     .font(.footnote).foregroundStyle(.secondary)
             }.navigationTitle("Snooze idea").navigationBarTitleDisplayMode(.inline)
                 .scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
@@ -345,10 +345,10 @@ private struct CaptureSnoozeView: View {
                     Button("Keep chosen date") { save(due) }.accessibilityIdentifier("snooze.keep-weekend")
                     Button("Cancel", role: .cancel) { weekendDate = nil }
                 } message: { due in
-                    Text(due.formatted(date: .abbreviated, time: .shortened))
+                    Text(due.formatted(date: .abbreviated, time: .omitted))
                 }
                 .onAppear {
-                    if let existing = capture.snoozedUntil, existing > Date() { date = existing }
+                    if let existing = capture.snoozeReturnDate(), existing > Date() { date = existing }
                 }
         }
     }

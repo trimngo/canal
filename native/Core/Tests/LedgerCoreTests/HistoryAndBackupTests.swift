@@ -43,6 +43,41 @@ final class HistoryAndBackupTests: XCTestCase {
         XCTAssertFalse(report.rows.contains { $0.id == "remaining" })
         XCTAssertEqual(report.rows.first?.percent, 100)
     }
+    func testCategoryTrendUsesPerDayDenominatorsAndZerosOnlyOnRepresentedDays() throws {
+        let ledger = try fixture(), now = date("2026-10-15T11:00:00Z")
+        let report = ledger.history(range: .allTime, now: now, calendar: calendar)
+        let days = Dictionary(grouping: report.dailyTotals, by: \.day)
+        XCTAssertEqual(days.count, 3)
+        for (_, points) in days {
+            XCTAssertEqual(Set(points.map(\.categoryID)), Set(report.rows.map(\.id)))
+            XCTAssertEqual(points.reduce(0) { $0 + $1.percent }, 100, accuracy: 0.0001)
+            XCTAssertEqual(points.reduce(0) { $0 + $1.minutes }, points[0].dayMinutes, accuracy: 0.0001)
+        }
+        let today = try XCTUnwrap(days[date("2026-10-15T00:00:00Z")])
+        XCTAssertEqual(try XCTUnwrap(today.first { $0.categoryID == "leisure" }).minutes, 0)
+        XCTAssertEqual(try XCTUnwrap(today.first { $0.categoryID == "work" }).percent, 25, accuracy: 0.001)
+        XCTAssertFalse(report.dailyTotals.contains { $0.day == date("2026-10-13T00:00:00Z") })
+        XCTAssertNotEqual(report.dailyTotals.first { $0.day == date("2026-10-01T00:00:00Z") }?.segmentStart,
+                          report.dailyTotals.first { $0.day == date("2026-10-14T00:00:00Z") }?.segmentStart)
+        XCTAssertEqual(report.dailyTotals.first { $0.day == date("2026-10-14T00:00:00Z") }?.segmentStart,
+                       report.dailyTotals.first { $0.day == date("2026-10-15T00:00:00Z") }?.segmentStart)
+    }
+
+    func testCategorizingRefreshesSummaryAndTrendWithoutMovingTheLog() throws {
+        var ledger = Ledger()
+        let now = date("2026-10-15T11:00:00Z")
+        try ledger.saveSample(id: "unlabeled", at: now.addingTimeInterval(-3600), activity: "Original", categoryID: nil, writer: "phone", now: now)
+        XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).rows.first?.id, "uncategorized")
+        let original = ledger.entries[0]
+        try ledger.confirmCategories(for: "unlabeled", categoryIDs: ["work", "social"], writer: "phone")
+        let report = ledger.history(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(Set(report.rows.map(\.id)), ["work", "social"])
+        XCTAssertTrue(report.rows.allSatisfy { abs($0.percent - 50) < 0.001 })
+        XCTAssertTrue(report.dailyTotals.allSatisfy { abs($0.percent - 50) < 0.001 })
+        XCTAssertEqual(ledger.entries[0].end, original.end)
+        XCTAssertEqual(ledger.entries[0].activity, original.activity)
+    }
+
     func testBackupRoundTripRetainsYearsOfRawLogsAndRankingProgress() throws {
         var ledger = try fixture()
         let now = date("2026-10-15T11:00:00Z")

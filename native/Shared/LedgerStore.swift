@@ -6,11 +6,11 @@ import LedgerCore
 final class LedgerStore: ObservableObject {
     static let shared = LedgerStore()
     @Published private(set) var ledger = Ledger() { didSet { inboxCache = nil } }
-    private var inboxCache: (snapshot: InboxRankingSnapshot, nextReturn: Date?)?
+    private var inboxCache: (snapshot: InboxRankingSnapshot, nextReturn: Date?, timeZone: String)?
     var inbox: InboxRankingSnapshot {
-        if let cached = inboxCache, cached.nextReturn.map({ $0 > Date() }) ?? true { return cached.snapshot }
+        if let cached = inboxCache, cached.timeZone == Calendar.current.timeZone.identifier, cached.nextReturn.map({ $0 > Date() }) ?? true { return cached.snapshot }
         let snapshot = ledger.inboxSnapshot
-        inboxCache = (snapshot, ledger.snoozedCaptures.first?.snoozedUntil)
+        inboxCache = (snapshot, ledger.snoozedCaptures.first?.snoozeReturnDate(), Calendar.current.timeZone.identifier)
         return snapshot
     }
     @Published var sampleRequestID = UUID()
@@ -61,6 +61,26 @@ final class LedgerStore: ObservableObject {
                 let now = Date()
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-trend-fixture") {
+                var fixture = Ledger()
+                let now = Date(), calendar = Calendar.current
+                fixture.settings.wakeUpMinute = 0; fixture.settings.bedtimeMinute = 1439
+                for offset in 0...6 where offset != 3 {
+                    let day = calendar.date(byAdding: .day, value: -offset, to: calendar.startOfDay(for: now))!
+                    let first = offset == 0 ? max(day, now.addingTimeInterval(-7200)) : day.addingTimeInterval(9 * 3600)
+                    let second = offset == 0 ? max(first, now.addingTimeInterval(-3600)) : day.addingTimeInterval(Double(11 + offset) * 3600)
+                    try fixture.saveSample(at: first, activity: "Work observation", categoryID: "work", writer: "fixture", now: now)
+                    try fixture.saveSample(at: second, activity: "Social observation", categoryID: "social", writer: "fixture", now: now)
+                }
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-snooze-today") {
+                var fixture = Ledger()
+                try fixture.addCapture(text: "Due at beginning of today", id: "due-today", writer: "fixture")
+                fixture.captures[0].snoozedUntil = Calendar.current.startOfDay(for: Date()).addingTimeInterval(20 * 3600)
+                fixture.captures[0].reviewRevision = fixture.nextRevision(writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-group-history") {

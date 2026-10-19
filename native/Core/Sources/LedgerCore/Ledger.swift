@@ -97,7 +97,12 @@ public struct Capture: Codable, Identifiable, Equatable, Sendable {
     public init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), isDone: Bool = false, revision: Revision) {
         self.id = id; self.text = text; self.createdAt = createdAt; self.isDone = isDone; self.revision = revision
     }
-    public func isSnoozed(at now: Date) -> Bool { snoozedUntil.map { $0 > now } ?? false }
+    public func snoozeReturnDate(calendar: Calendar = .current) -> Date? {
+        snoozedUntil.map { calendar.startOfDay(for: $0) }
+    }
+    public func isSnoozed(at now: Date, calendar: Calendar = .current) -> Bool {
+        snoozeReturnDate(calendar: calendar).map { $0 > now } ?? false
+    }
 }
 
 public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {

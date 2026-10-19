@@ -354,7 +354,7 @@ final class InboxRankingTests: XCTestCase {
     func testReturnedSnoozeStillComesBeforeNewlyCreatedIdeasOnContinue() throws {
         var ledger = try legacyRanked()
         try ledger.addCapture(text: "Return later", id: "returning", writer: "phone", now: Date(timeIntervalSince1970: 1))
-        ledger.snoozeCapture("returning", until: Date().addingTimeInterval(3600), writer: "phone")
+        ledger.snoozeCapture("returning", until: Date().addingTimeInterval(86400), writer: "phone")
         try ledger.addCapture(text: "Paused newer idea", id: "paused", writer: "phone")
         ledger.prepareRanking(writer: "phone")
         let visible = ledger.rankingPair

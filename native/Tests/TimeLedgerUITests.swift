@@ -89,7 +89,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Show pie chart"].exists)
         XCTAssertTrue(app.tabBars.buttons["Commitments"].exists)
         XCTAssertFalse(element(app, "allocation.periods").exists)
-        XCTAssertFalse(element(app, "report.range").exists)
+        XCTAssertTrue(element(app, "report.range").exists)
         XCTAssertFalse(field.exists)
         XCTAssertFalse(element(app, "today.logs").exists)
         XCTAssertEqual(app.tabBars.count, 1)
@@ -376,6 +376,50 @@ final class TimeLedgerUITests: XCTestCase {
         period.tap(); app.buttons["Custom"].tap()
         XCTAssertTrue(element(app, "report.from").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "report.through").exists)
+    }
+
+    func testDashboardRefreshesImmediatelyAfterMultipleLabelsAndKeepsPieInSync() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
+        XCTAssertFalse(app.buttons["dashboard.history"].exists)
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        app.buttons["Choose group"].tap()
+        app.buttons["category-select.work"].tap(); app.buttons["category-select.social"].tap()
+        app.buttons["group-selection.done"].tap(); app.buttons["group.done"].tap()
+        let social = dashboardGroup("social", in: app)
+        XCTAssertTrue(social.waitForExistence(timeout: 2))
+        XCTAssertFalse(app.buttons["dashboard.group.uncategorized"].exists)
+        app.buttons["Show pie chart"].tap()
+        XCTAssertTrue(app.buttons["report.pie.group.social"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.buttons["report.pie.group.uncategorized"].exists)
+        recordScreen("DashboardAfterCategorization", in: app)
+    }
+
+    func testCategoryLineTrendsAndUnitsAreOnMainDashboard() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-trend-fixture"]; app.launch()
+        let period = element(app, "report.range"); XCTAssertTrue(period.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["dashboard.history"].exists)
+        period.tap(); app.buttons["Past 7 days"].tap()
+        app.buttons["Show daily trend"].tap()
+        let chart = element(app, "report.trend.chart"); XCTAssertTrue(chart.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Hours in each category by day"].exists)
+        recordScreen("CategoryTrendHours", in: app)
+        app.segmentedControls["report.trend.units"].buttons["Percentages"].tap()
+        XCTAssertTrue(app.staticTexts["Share of each day’s tracked time"].exists)
+        recordScreen("CategoryTrendPercentages", in: app)
+        period.tap(); app.buttons["All time"].tap()
+        XCTAssertTrue(chart.exists)
+        app.segmentedControls["report.trend.units"].buttons["Hours"].tap()
+        XCTAssertTrue(app.staticTexts["Hours in each category by day"].exists)
+    }
+
+    func testLegacySnoozeForTodayReturnsBeforeItsOldClockTime() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-snooze-today"]; app.launch()
+        openInbox(app)
+        let idea = app.staticTexts["Due at beginning of today"]
+        reveal(idea, in: app); XCTAssertTrue(idea.exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch.exists)
+        XCTAssertTrue(element(app, "inbox.waiting-title").label.contains("1"))
+        recordScreen("SnoozeReturnsAtStartOfDay", in: app)
     }
 
     func testPieSlicesAndLegendSelectLabelsInsideChart() {
@@ -980,6 +1024,7 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func openHistory(_ app: XCUIApplication) {
-        let history = app.buttons["dashboard.history"]; reveal(history, in: app); history.tap()
+        app.tabBars.buttons["Today"].tap()
+        reveal(element(app, "report.range"), in: app)
     }
 }

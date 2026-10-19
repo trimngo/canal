@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import LedgerCore
 
 private struct SelectedGroup: Identifiable {
@@ -9,12 +10,13 @@ private struct SelectedGroup: Identifiable {
 }
 
 struct DayView: View {
-    var body: some View { AllocationHistoryView(isHome: true) }
+    var body: some View { AllocationHistoryView() }
 }
 
 struct AllocationHistoryView: View {
     @EnvironmentObject var store: LedgerStore
-    var isHome = false
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var now = Date()
     @State private var selectedGroup: SelectedGroup?
     @State private var managingGroups = false
     @State private var range: HistoryRange = .today
@@ -27,19 +29,17 @@ struct AllocationHistoryView: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { _ in content(now: Date()) }
+        content(now: now)
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
             .navigationTitle(range == .today ? "Today" : "Your time").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if !isHome {
-                        NavigationLink(value: LedgerScreen.calendar) { Label("Calendar", systemImage: "calendar") }
-                            .accessibilityIdentifier("dashboard.calendar")
-                    }
                     Button("Categories") { managingGroups = true }.accessibilityIdentifier("dashboard.groups")
                 }
             }
-            .sheet(isPresented: $managingGroups) { GroupManagerView() }
-            .sheet(item: $selectedGroup) { group in
+            .sheet(isPresented: $managingGroups, onDismiss: { now = Date() }) { GroupManagerView() }
+            .sheet(item: $selectedGroup, onDismiss: { now = Date() }) { group in
                 GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end)
             }
 
@@ -49,16 +49,14 @@ struct AllocationHistoryView: View {
         let report = store.ledger.history(range: range, start: start, end: end, now: now)
         return List {
             Section {
-                if !isHome {
-                    Picker("Period", selection: $range) {
-                        ForEach(HistoryRange.allCases) { Text($0.name).tag($0) }
-                    }.pickerStyle(.menu).accessibilityIdentifier("report.range")
-                }
+                Picker("Period", selection: $range) {
+                    ForEach(HistoryRange.allCases) { Text($0.name).tag($0) }
+                }.pickerStyle(.menu).accessibilityIdentifier("report.range")
                 if range == .custom {
                     DatePicker("From", selection: $start, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.from")
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
-                HistoryPanel(report: report, expandsBreakdown: isHome) { row in
+                HistoryPanel(report: report, expandsBreakdown: true) { row in
                     guard row.id != "remaining" else { return }
                     selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
                 }.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -67,10 +65,7 @@ struct AllocationHistoryView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
-                    if !isHome {
-                        if report.remainingMinutes > 0 { Text("Percentages include time remaining until bedtime.") }
-                        else { Text("Percentages start at each day’s first log and end at now or bedtime. Days without logs are excluded.") }
-                    }
+                    Text("Percentages start at each day’s first log and end at now or bedtime. Days without logs are excluded.")
                     Text("Swipe the chart for breakdown, pie, and trend.")
                 }
             }
@@ -86,11 +81,8 @@ struct AllocationHistoryView: View {
                     }
                 }
             }
-            if isHome {
-                Section {
-                    NavigationLink("Calendar", value: LedgerScreen.calendar).accessibilityIdentifier("dashboard.calendar")
-                    NavigationLink("Charts & history", value: LedgerScreen.history).accessibilityIdentifier("dashboard.history")
-                }
+            Section {
+                NavigationLink("Calendar", value: LedgerScreen.calendar).accessibilityIdentifier("dashboard.calendar")
             }
         }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.immediately)
     }
