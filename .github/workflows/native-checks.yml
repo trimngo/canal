@@ -12,6 +12,34 @@ concurrency:
   group: native-checks-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  watch-ui:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Test direct Watch logging
+        run: bash native/scripts/test-watch-ui.sh
+      - name: Export Watch interface review
+        if: always()
+        run: |
+          if [ -d native/build/WatchUITests.xcresult ]; then
+            mkdir -p native/build/watch-ui-review
+            xcrun xcresulttool get test-results summary --path native/build/WatchUITests.xcresult > native/build/watch-ui-review/summary.json
+            xcrun xcresulttool export attachments --path native/build/WatchUITests.xcresult --output-path native/build/watch-ui-attachments
+            python3 native/scripts/export-ui-review.py native/build/watch-ui-attachments native/build/watch-ui-review
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-watch-ui-review
+          path: native/build/watch-ui-review
+          retention-days: 7
   build:
     runs-on: macos-15
     timeout-minutes: 30

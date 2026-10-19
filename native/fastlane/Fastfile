@@ -29,15 +29,18 @@ platform :ios do
         create_keychain(name: keychain_name, password: keychain_password, default_keychain: false, unlock: true, timeout: 3600, lock_when_sleeps: true)
         import_certificate(certificate_path: certificate_path, certificate_password: ENV.fetch("APPLE_DISTRIBUTION_P12_PASSWORD"), keychain_name: keychain_name, keychain_password: keychain_password)
         profiles = {}
-        %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp com.trimngo.TimeLedger.watchkitapp.capture].each do |identifier|
+        %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp com.trimngo.TimeLedger.watchkitapp.capture com.trimngo.TimeLedger.watchkitapp.widgets].each do |identifier|
           # Enable only Siri on the existing App IDs. Existing iCloud and other
           # capabilities remain intact. Credentials stay in this CI process.
           bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier)
           if !bundle_id && identifier == "com.trimngo.TimeLedger.watchkitapp.capture"
             bundle_id = Spaceship::ConnectAPI::BundleId.create(name: "Ledger Watch Siri Capture", platform: "IOS", identifier: identifier)
           end
+          if !bundle_id && identifier == "com.trimngo.TimeLedger.watchkitapp.widgets"
+            bundle_id = Spaceship::ConnectAPI::BundleId.create(name: "Dash Watch Complications", platform: "IOS", identifier: identifier)
+          end
           UI.user_error!("Missing registered App ID: #{identifier}") unless bundle_id
-          unless identifier.end_with?(".capture") || bundle_id.get_capabilities.any? { |capability| capability.is_type?("SIRIKIT") }
+          unless identifier.end_with?(".capture", ".widgets") || bundle_id.get_capabilities.any? { |capability| capability.is_type?("SIRIKIT") }
             # Fastlane 2.228's helper adds a web-session-only `capability`
             # relationship that Apple's JWT API rejects. Use its authenticated
             # client with the documented public API request instead.
@@ -56,13 +59,14 @@ platform :ios do
           project: File.join(native_directory, "TimeLedger.xcodeproj"), scheme: "TimeLedger", clean: true,
           output_directory: File.join(directory, "output"), export_method: "app-store",
           export_options: { signingStyle: "manual", provisioningProfiles: profiles },
-          xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp LEDGER_WATCH_INTENTS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp.capture"
+          xcargs: "LEDGER_TEAM_ID=#{ENV.fetch('APPLE_TEAM_ID')} CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} LEDGER_CLOUD_ENABLED=#{ENV.fetch('LEDGER_CLOUD_ENABLED', 'NO')} LEDGER_CLOUD_CONTAINER=#{ENV.fetch('LEDGER_CLOUD_CONTAINER', 'iCloud.com.trimngo.TimeLedger')} LEDGER_IOS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger LEDGER_WATCH_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp LEDGER_WATCH_INTENTS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp.capture LEDGER_WATCH_WIDGETS_PROFILE_NAME=TimeLedger-com.trimngo.TimeLedger.watchkitapp.widgets"
         )
         actual_build = get_ipa_info_plist_value(ipa: lane_context[SharedValues::IPA_OUTPUT_PATH], key: "CFBundleVersion")
         expected_build = ENV.fetch("BUILD_NUMBER", "1")
         UI.user_error!("Packaged build number #{actual_build} does not match requested build number #{expected_build}") unless actual_build.to_s == expected_build
         UI.message("Verified packaged build number: #{actual_build}")
         sh("python3", File.join(native_directory, "scripts", "validate-siri-support.py"), "--ipa", lane_context[SharedValues::IPA_OUTPUT_PATH])
+        sh("python3", File.join(native_directory, "scripts", "validate-watch-complication.py"), "--ipa", lane_context[SharedValues::IPA_OUTPUT_PATH])
         upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
       ensure
         delete_keychain(name: keychain_name)
