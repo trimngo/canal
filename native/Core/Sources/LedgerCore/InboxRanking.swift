@@ -130,6 +130,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             ordered.removeAll { $0 == id }
             topTen?.backlog.removeAll { $0 == id }
             topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
+            rememberChain(ordered)
             let visible = priorityTournament?.matchup
             priorityTournament?.invalidateAnswers()
             if let visible, !visible.contains(id) { priorityTournament?.matchup = visible }
@@ -294,6 +295,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         ordered.removeAll { $0 == id }
         topTen?.backlog.removeAll { $0 == id }
         topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
+        rememberChain(ordered)
         topTen?.presented?.removeAll { $0 == id }
         priorityTournament?.invalidateAnswers()
         startSession(ids: [id] + ids.filter { $0 != id })
