@@ -5,7 +5,7 @@ import LedgerCore
 private enum CloudItem: Codable {
     case inboxRanking(InboxRanking)
     case weeklyCommitment(WeeklyCommitment)
-    case targetBudget(TargetBudget), wakingOverride(WakingOverride)
+    case targetBudget(TargetBudget)
     case reminderImport(ReminderImportReceipt)
     case logDeletion(LogDeletion), category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
@@ -13,7 +13,6 @@ private enum CloudItem: Codable {
         case .inboxRanking: return "inbox-ranking"
         case .weeklyCommitment(let item): return "weekly-commitment-\(item.id)"
         case .targetBudget(let item): return "target-budget-\(item.id)"
-        case .wakingOverride(let item): return "waking-override-\(item.id)"
         case .reminderImport(let item): return "reminder-import-\(item.id)"
         case .logDeletion(let item): return "log-deletion-\(item.id)"
         case .category(let item): return "category-\(item.id)"
@@ -28,7 +27,6 @@ private enum CloudItem: Codable {
         case .inboxRanking(let item): return item.revision
         case .weeklyCommitment(let item): return item.revision
         case .targetBudget(let item): return item.revision
-        case .wakingOverride(let item): return item.revision
         case .reminderImport(let item): return item.revision
         case .logDeletion(let item): return item.revision
         case .category(let item): return item.revision
@@ -44,7 +42,6 @@ private enum CloudItem: Codable {
         case .inboxRanking(let item): remote.inboxRanking = item
         case .weeklyCommitment(let item): remote.weeklyCommitments = [item]
         case .targetBudget(let item): remote.targetBudgets = [item]
-        case .wakingOverride(let item): remote.wakingOverrides = [item]
         case .reminderImport(let item): remote.reminderImports = [item]
         case .logDeletion(let item): remote.logDeletions = [item]
         case .category(let item): remote.categories = [item]
@@ -65,7 +62,6 @@ private enum CloudItem: Codable {
         items.append(contentsOf: ledger.captures.map(CloudItem.capture))
         items.append(contentsOf: (ledger.reminderImports ?? []).map(CloudItem.reminderImport))
         items.append(contentsOf: (ledger.targetBudgets ?? []).map(CloudItem.targetBudget))
-        items.append(contentsOf: (ledger.wakingOverrides ?? []).map(CloudItem.wakingOverride))
         items.append(.settings(ledger.settings))
         return items
     }
@@ -114,6 +110,9 @@ final class CloudSync {
         while true {
             for (_, result) in page.matchResults {
                 let record = try result.get()
+                // Removed schedule records may remain in an existing private database.
+                // Skip them before decoding so they cannot stop logs from syncing.
+                guard !record.recordID.recordName.hasPrefix("waking-override-") else { continue }
                 guard let data = record["payload"] as? Data else { continue }
                 let item = try JSONDecoder().decode(CloudItem.self, from: data)
                 records[item.id] = record; item.apply(to: &remote)

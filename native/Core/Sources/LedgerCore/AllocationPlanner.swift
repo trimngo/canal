@@ -1,13 +1,13 @@
 import Foundation
 
 public enum PlannerError: LocalizedError {
-    case invalidHierarchy, conflictingCategories, invalidBudget, invalidWakingSchedule
+    case invalidHierarchy, conflictingCategories, invalidBudget, invalidTimeZone
     public var errorDescription: String? {
         switch self {
         case .invalidHierarchy: return "A category cannot be inside itself or one of its descendants."
         case .conflictingCategories: return "Choose either a parent or its subcategory, not both. Change the log selections before making this move."
         case .invalidBudget: return "Enter percentages from 0 to 100, with a total no higher than 100%. Other targets are unchanged."
-        case .invalidWakingSchedule: return "Choose different wake-up and bedtime values within the day."
+        case .invalidTimeZone: return "Choose a valid reporting time zone."
         }
     }
 }
@@ -22,23 +22,13 @@ public struct TargetBudget: Codable, Identifiable, Equatable, Sendable {
     public var unallocated: Double { 100 - allocated }
 }
 
-/// Local calendar date of waking, in the configured reporting time zone.
-/// A reset is a tombstone so stale devices cannot restore a removed override.
-public struct WakingOverride: Codable, Identifiable, Equatable, Sendable {
-    public var id: String
-    public var wakeMinute: Int
-    public var bedMinute: Int
-    public var reset: Bool
-    public var revision: Revision
-}
-
 public struct AllocationPeriod: Equatable, Sendable {
-    public var wakingMinutes = 0.0
+    public var trackedMinutes = 0.0
     public var directMinutes: [String: Double] = [:]
     public var representedDays = 0
     public var requestedDays = 1
     public var sufficient: Bool { representedDays > 0 }
-    public func percent(_ minutes: Double) -> Double { wakingMinutes > 0 ? minutes / wakingMinutes * 100 : 0 }
+    public func percent(_ minutes: Double) -> Double { trackedMinutes > 0 ? minutes / trackedMinutes * 100 : 0 }
     public func total(for id: String, ledger: Ledger) -> Double {
         let ids = Set([id] + ledger.descendants(of: id).map(\.id))
         return directMinutes.filter { ids.contains($0.key) }.values.reduce(0, +)
@@ -179,54 +169,24 @@ extension Ledger {
     }
     public func reportingCalendar(_ calendar: Calendar = .current) -> Calendar {
         var result = calendar
-        if let id = settings.wakingTimeZoneIdentifier, let zone = TimeZone(identifier: id) { result.timeZone = zone }
+        if let id = settings.reportingTimeZoneIdentifier, let zone = TimeZone(identifier: id) { result.timeZone = zone }
         return result
     }
-    public func wakingDateKey(_ day: Date, calendar: Calendar = .current) -> String {
-        let cal = reportingCalendar(calendar), parts = cal.dateComponents([.year, .month, .day], from: day)
-        return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
+    public func reportingDay(containing date: Date, calendar: Calendar = .current) -> Date {
+        reportingCalendar(calendar).startOfDay(for: date)
     }
-    public func wakingSchedule(on day: Date, calendar: Calendar = .current) -> (wake: Int, bed: Int) {
-        if let override = wakingOverrides?.first(where: { $0.id == wakingDateKey(day, calendar: calendar) }), !override.reset {
-            return (override.wakeMinute, override.bedMinute)
-        }
-        return (settings.wakeUpMinute ?? 420, settings.bedtimeMinute)
+    /// Calendar boundaries include the entire local date (23/24/25 hours at DST).
+    public func dayBounds(on day: Date, calendar: Calendar = .current) -> DateInterval? {
+        reportingCalendar(calendar).dateInterval(of: .day, for: day)
     }
-    public var typicalWakingMinutes: Double {
-        Double((settings.bedtimeMinute - (settings.wakeUpMinute ?? 420) + 1440) % 1440)
-    }
-    public mutating func saveWakingOverride(on day: Date, wake: Int, bed: Int, reset: Bool = false, calendar: Calendar = .current, writer: String) throws {
-        guard (0..<1440).contains(wake), (0..<1440).contains(bed), wake != bed else { throw PlannerError.invalidWakingSchedule }
-        let item = WakingOverride(id: wakingDateKey(day, calendar: calendar), wakeMinute: wake, bedMinute: bed, reset: reset, revision: nextRevision(writer: writer))
-        wakingOverrides = (wakingOverrides ?? []).filter { $0.id != item.id } + [item]
-    }
-    public func wakingBounds(on day: Date, calendar: Calendar = .current) -> DateInterval? {
-        let cal = reportingCalendar(calendar), start = cal.startOfDay(for: day)
-        guard let next = cal.date(byAdding: .day, value: 1, to: start) else { return nil }
-        let schedule = wakingSchedule(on: day, calendar: cal), following = wakingSchedule(on: next, calendar: cal)
-        guard (0..<1440).contains(schedule.wake), (0..<1440).contains(schedule.bed), schedule.wake != schedule.bed else { return nil }
-        func wall(_ minute: Int, _ date: Date) -> Date? {
-            cal.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: date, matchingPolicy: .nextTime, repeatedTimePolicy: .first, direction: .forward)
-        }
-        guard let wake = wall(schedule.wake, start), let bed = wall(schedule.bed, schedule.bed < schedule.wake ? next : start), let nextWake = wall(following.wake, next) else { return nil }
-        let end = min(bed, nextWake) // Adjacent day adjustments never double-count.
-        guard end > wake else { return nil }
-        return DateInterval(start: wake, end: end)
-    }
-    /// Overnight waking periods are labeled by the calendar date they began.
-    public func wakingDay(containing now: Date, calendar: Calendar = .current) -> Date {
-        let cal = reportingCalendar(calendar), day = cal.startOfDay(for: now)
-        if let previous = cal.date(byAdding: .day, value: -1, to: day), let bounds = wakingBounds(on: previous, calendar: cal), now >= bounds.start, now < bounds.end { return previous }
-        return day
-    }
-    public func wakingSamples(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> [CheckIn] {
-        guard let bounds = wakingBounds(on: day, calendar: calendar) else { return [] }
+    public func daySamples(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> [CheckIn] {
+        guard let bounds = dayBounds(on: day, calendar: calendar) else { return [] }
         return activeEntries.filter { $0.end >= bounds.start && $0.end < bounds.end && $0.end <= now }.sorted { $0.end == $1.end ? $0.id < $1.id : $0.end < $1.end }
     }
-    func wakingSegments(on day: Date, now: Date, calendar: Calendar, method: InferenceMethod?) -> [InferredSegment] {
-        guard let bounds = wakingBounds(on: day, calendar: calendar), now > bounds.start else { return [] }
+    func daySegments(on day: Date, now: Date, calendar: Calendar, method: InferenceMethod?) -> [InferredSegment] {
+        guard let bounds = dayBounds(on: day, calendar: calendar), now > bounds.start else { return [] }
         let cutoff = min(bounds.end, now)
-        let distinct = Dictionary(wakingSamples(on: day, now: now, calendar: calendar).map { ($0.end, $0) }, uniquingKeysWith: {
+        let distinct = Dictionary(daySamples(on: day, now: now, calendar: calendar).map { ($0.end, $0) }, uniquingKeysWith: {
             if $0.revision == $1.revision { return $0.id < $1.id ? $1 : $0 }
             return $0.revision < $1.revision ? $1 : $0
         }).values.sorted { $0.end < $1.end }
@@ -243,7 +203,7 @@ extension Ledger {
     public func allocation(on day: Date, now: Date = Date(), calendar: Calendar = .current, clippingTo interval: DateInterval? = nil) -> AllocationPeriod {
         let segments = inferredSegments(on: day, now: now, calendar: calendar)
         guard !segments.isEmpty else { return AllocationPeriod() }
-        let samples = Dictionary(wakingSamples(on: day, now: now, calendar: calendar).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let samples = Dictionary(daySamples(on: day, now: now, calendar: calendar).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var period = AllocationPeriod()
         for segment in segments {
             guard let sample = samples[segment.sampleID] else { continue }
@@ -254,18 +214,18 @@ extension Ledger {
             let choices = allocationCategoryIDs(for: sample)
             let ids = choices.isEmpty ? ["uncategorized"] : choices
             for id in ids { period.directMinutes[id, default: 0] += minutes / Double(ids.count) }
-            period.wakingMinutes += minutes
+            period.trackedMinutes += minutes
         }
-        period.representedDays = period.wakingMinutes > 0 ? 1 : 0
+        period.representedDays = period.trackedMinutes > 0 ? 1 : 0
         return period
     }
     public func rollingAllocation(now: Date = Date(), calendar: Calendar = .current) -> AllocationPeriod {
-        let cal = reportingCalendar(calendar), today = wakingDay(containing: now, calendar: cal)
+        let cal = reportingCalendar(calendar), today = reportingDay(containing: now, calendar: cal)
         var result = AllocationPeriod(); result.requestedDays = 7
         for offset in -6...0 {
             guard let day = cal.date(byAdding: .day, value: offset, to: today) else { continue }
             let period = allocation(on: day, now: now, calendar: cal)
-            result.wakingMinutes += period.wakingMinutes; result.representedDays += period.representedDays
+            result.trackedMinutes += period.trackedMinutes; result.representedDays += period.representedDays
             for (id, minutes) in period.directMinutes { result.directMinutes[id, default: 0] += minutes }
         }
         return result

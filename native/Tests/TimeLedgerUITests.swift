@@ -200,6 +200,25 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Noon"].exists)
     }
 
+    func testEarlyAndLateLogsAppearAfterRemovingLegacySleepWindows() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-legacy-sleep-windows"]; app.launch()
+        XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 10))
+        let period = element(app, "report.range"); period.tap(); app.buttons["Past 7 days"].tap()
+        let social = dashboardGroup("social", in: app)
+        XCTAssertTrue(social.waitForExistence(timeout: 5)); social.tap()
+        XCTAssertTrue(app.staticTexts["After former bedtime"].waitForExistence(timeout: 5))
+        app.buttons["group.done"].tap()
+        recordScreen("AllClockTimesInDashboard", in: app)
+        let calendar = app.buttons["dashboard.calendar"]; reveal(calendar, in: app); calendar.tap()
+        XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "timeline.sample.early").exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "timeline.block", "Before former wake time")).firstMatch.exists)
+        recordScreen("EarlyLogOnFullDayCalendar", in: app)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertFalse(app.buttons["Waking schedule"].exists)
+    }
+
     func testExistingConfirmedLogSurvivesUpgradeAndCanBeEdited() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-legacy-ledger"]; app.launch()
         XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 10))
@@ -609,7 +628,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.switches["settings.notifications-all-day"].value as? String, "1")
     }
 
-    func testWakingScheduleAndTargetsAreAccessibleAndPersist() {
+    func testTargetsAreAccessibleAndPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
         XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 10))
         XCTAssertTrue(dashboardGroup("work", in: app).exists)

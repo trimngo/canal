@@ -9,7 +9,7 @@ final class WeeklyCommitmentTests: XCTestCase {
         var ledger = Ledger()
         ledger.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "company", name: "Company"), LedgerCategory(id: "music", name: "Music")]
         ledger.settings.inferenceMethod = .carryForward
-        ledger.settings.wakingTimeZoneIdentifier = "UTC"
+        ledger.settings.reportingTimeZoneIdentifier = "UTC"
         try ledger.moveCategory("company", to: "work", writer: "test")
         return ledger
     }
@@ -76,25 +76,25 @@ final class WeeklyCommitmentTests: XCTestCase {
         let report = ledger.commitmentWeek(now: wednesday, calendar: sundayFirst)
         XCTAssertEqual(report.interval.start, date("2026-10-12T00:00:00Z"))
         XCTAssertEqual(report.interval.end, date("2026-10-19T00:00:00Z"))
-        XCTAssertEqual(report.rows.first?.minutes, 16 * 60) // Monday to bedtime, Wednesday to now; no invented Tuesday.
+        XCTAssertEqual(report.rows.first?.minutes, 18 * 60) // Monday to midnight, Wednesday to now; no invented Tuesday.
         let nextWeek = ledger.commitmentWeek(now: date("2026-10-19T09:00:00Z"), calendar: utc)
         XCTAssertEqual(nextWeek.loggedMinutes, 0)
         XCTAssertEqual(nextWeek.rows.first?.remainingMinutes, 60)
         XCTAssertEqual(ledger.entries.count, 3)
     }
 
-    func testOvernightWeekBoundaryUsesClippedMidpointsAndCarryForward() throws {
-        var ledger = try fixture(); ledger.settings.wakeUpMinute = 20 * 60; ledger.settings.bedtimeMinute = 8 * 60
+    func testMidnightWeekBoundaryStartsAtFirstMondayLogForBothMethods() throws {
+        var ledger = try fixture()
         let monday = date("2026-10-12T06:00:00Z")
         try add(&ledger, "2026-10-11T23:00:00Z", ["work"], now: monday)
         try add(&ledger, "2026-10-12T01:00:00Z", ["music"], now: monday)
         for id in ["work", "music"] { try ledger.saveWeeklyCommitment(categoryID: id, minimumMinutes: 600, writer: "test") }
-        for (method, expectedWork) in [(InferenceMethod.midpoint, 0.0), (.carryForward, 60.0)] {
+        for method in InferenceMethod.allCases {
             ledger.settings.inferenceMethod = method
             let report = ledger.commitmentWeek(now: monday, calendar: utc)
-            XCTAssertEqual(report.loggedMinutes, 360)
-            XCTAssertEqual(report.rows.first { $0.id == "work" }?.minutes, expectedWork)
-            XCTAssertEqual(report.rows.first { $0.id == "music" }?.minutes, 360 - expectedWork)
+            XCTAssertEqual(report.loggedMinutes, 300)
+            XCTAssertEqual(report.rows.first { $0.id == "work" }?.minutes, 0)
+            XCTAssertEqual(report.rows.first { $0.id == "music" }?.minutes, 300)
         }
         let midnight = ledger.commitmentWeek(now: date("2026-10-12T00:00:00Z"), calendar: utc)
         XCTAssertEqual(midnight.loggedMinutes, 0)
@@ -105,8 +105,7 @@ final class WeeklyCommitmentTests: XCTestCase {
             ("2026-10-25T02:00:00Z", "2026-10-24T22:00:00Z", 169.0, 240.0),
             ("2026-03-29T02:00:00Z", "2026-03-28T23:00:00Z", 167.0, 180.0)
         ] {
-            var ledger = try fixture(); ledger.settings.wakingTimeZoneIdentifier = "Europe/Berlin"
-            ledger.settings.wakeUpMinute = 0; ledger.settings.bedtimeMinute = 1439
+            var ledger = try fixture(); ledger.settings.reportingTimeZoneIdentifier = "Europe/Berlin"
             let current = date(stamp)
             try add(&ledger, first, ["work"], now: current)
             try ledger.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 600, writer: "test")

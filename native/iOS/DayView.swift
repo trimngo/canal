@@ -58,7 +58,6 @@ struct AllocationHistoryView: View {
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
                 HistoryPanel(report: report, expandsBreakdown: true) { row in
-                    guard row.id != "remaining" else { return }
                     selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
                 }.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             } header: {
@@ -66,7 +65,7 @@ struct AllocationHistoryView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
-                    Text("Percentages start at each day’s first log and end at now or bedtime. Days without logs are excluded.")
+                    Text("Percentages start at each day’s first log and end at now today, or midnight for completed days. Days without logs are excluded.")
                     Text("Swipe the chart for breakdown, pie, and trend.")
                 }
             }
@@ -96,10 +95,10 @@ struct CalendarHistoryView: View {
         TimelineView(.periodic(from: Date(), by: 60)) { _ in
             let now = Date()
             VStack(spacing: 12) {
-                DatePicker("Waking date", selection: $day, in: ...now, displayedComponents: [.date]).environment(\.timeZone, store.ledger.reportingCalendar().timeZone).padding(.horizontal)
+                DatePicker("Date", selection: $day, in: ...now, displayedComponents: [.date]).environment(\.timeZone, store.ledger.reportingCalendar().timeZone).padding(.horizontal)
                 DayCalendarView(day: day, now: now)
             }
         }.navigationTitle("Calendar").navigationBarTitleDisplayMode(.inline)
-            .onAppear { day = store.ledger.wakingDay(containing: Date()) }
+            .onAppear { day = store.ledger.reportingDay(containing: Date()) }
     }
 }

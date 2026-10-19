@@ -27,41 +27,39 @@ public struct HistoryReport: Sendable {
     public var start: Date
     public var end: Date
     public var trackedMinutes: Double
-    public var remainingMinutes: Double
-    public var totalMinutes: Double { trackedMinutes + remainingMinutes }
 }
 
 extension Ledger {
     public func history(range: HistoryRange, start: Date = Date(), end: Date = Date(), now: Date = Date(), calendar: Calendar = .current) -> HistoryReport {
         let cal = reportingCalendar(calendar)
-        let today = wakingDay(containing: now, calendar: cal)
+        let today = reportingDay(containing: now, calendar: cal)
         let lower: Date
         let last: Date
         switch range {
         case .today: lower = today; last = today
         case .week: lower = cal.date(byAdding: .day, value: -6, to: today) ?? today; last = today
         case .allTime:
-            lower = activeEntries.filter { $0.end <= now }.map { wakingDay(containing: $0.end, calendar: cal) }.min() ?? today
+            lower = activeEntries.filter { $0.end <= now }.map { reportingDay(containing: $0.end, calendar: cal) }.min() ?? today
             last = today
         case .custom:
             lower = min(today, cal.startOfDay(for: min(start, end)))
             last = min(today, cal.startOfDay(for: max(start, end)))
         }
-        let upper = min(now, wakingBounds(on: last, calendar: cal)?.end ?? now)
-        // The log list retains even observations outside the configured schedule.
+        let upper = min(now, dayBounds(on: last, calendar: cal)?.end ?? now)
+        // Keep every observation on the selected calendar dates, through now.
         let samples = activeEntries.filter {
-            let day = wakingDay(containing: $0.end, calendar: cal)
+            let day = reportingDay(containing: $0.end, calendar: cal)
             return day >= lower && day <= last && $0.end <= now
         }
-        let days = Set(samples.map { wakingDay(containing: $0.end, calendar: cal) }).sorted()
+        let days = Set(samples.map { reportingDay(containing: $0.end, calendar: cal) }).sorted()
         var totals: [String: Double] = [:], daily: [DailyTotal] = []
         var tracked = 0.0
         var periods: [(day: Date, period: AllocationPeriod)] = []
         for day in days {
             let period = allocation(on: day, now: now, calendar: cal)
-            guard period.wakingMinutes > 0 else { continue }
+            guard period.trackedMinutes > 0 else { continue }
             periods.append((day, period))
-            tracked += period.wakingMinutes
+            tracked += period.trackedMinutes
             for category in children(of: nil) {
                 let minutes = period.total(for: category.id, ledger: self)
                 if minutes > 0 {
@@ -90,10 +88,10 @@ extension Ledger {
             for row in rows {
                 let minutes = row.id == "uncategorized" ? period.directMinutes[row.id, default: 0] : period.total(for: row.id, ledger: self)
                 daily.append(DailyTotal(day: day, categoryID: row.id, name: row.name, minutes: minutes,
-                                        dayMinutes: period.wakingMinutes, segmentStart: segment))
+                                        dayMinutes: period.trackedMinutes, segmentStart: segment))
             }
             previous = day
         }
-        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked, remainingMinutes: 0)
+        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked)
     }
 }

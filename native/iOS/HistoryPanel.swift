@@ -12,7 +12,6 @@ struct HistoryPanel: View {
     @State private var selectedGroupID: String?
     private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
     private func color(_ id: String) -> Color {
-        if id == "remaining" { return .gray }
         if id == "uncategorized" { return .orange }
         let colors: [Color] = [.teal, .blue, .purple, .pink, .indigo, .mint, .brown]
         return colors[id.utf8.reduce(0) { ($0 * 31 + Int($1)) % colors.count }]
@@ -64,11 +63,11 @@ struct HistoryPanel: View {
                                 Text(row.name).foregroundStyle(.primary)
                                 Spacer(minLength: 4)
                                 Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))").font(.subheadline).foregroundStyle(.secondary)
-                                if row.id != "remaining" { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                             }
                             ProgressView(value: min(1, row.percent / 100)).tint(color(row.id))
                         }
-                    }.buttonStyle(.plain).disabled(row.id == "remaining").accessibilityIdentifier("dashboard.group.\(row.id)")
+                    }.buttonStyle(.plain).accessibilityIdentifier("dashboard.group.\(row.id)")
                 }
             }.padding(.bottom, 8)
         }.accessibilityIdentifier("report.view.breakdown")
