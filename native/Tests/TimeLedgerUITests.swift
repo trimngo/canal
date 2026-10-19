@@ -970,7 +970,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
         let oldest = element(app, "inbox.backlog-oldest-review")
         reveal(oldest, in: app)
-        XCTAssertTrue(oldest.label.contains("18 days ago"))
+        let expectedAge = Date().addingTimeInterval(-18 * 86400).formatted(.relative(presentation: .numeric))
+        XCTAssertTrue(oldest.label.contains(expectedAge))
         XCTAssertTrue(element(app, "inbox.backlog-undated").exists)
         recordScreen("BacklogReviewStaleness", in: app)
     }
