@@ -132,7 +132,7 @@ struct InboxView: View {
                         Text("Reference items stay out of ranking. Move one back to New Ideas if it needs action.")
                     }
                 }
-                Section { Toggle("Show completed", isOn: $showDone) }
+                if !searching { Section { Toggle("Show completed", isOn: $showDone) } }
                 Section("Hands-free capture") {
                     NavigationLink("Set up Siri via Reminders") { ReminderInboxSetupView() }
                         .accessibilityIdentifier("inbox.reminders")
@@ -148,7 +148,7 @@ struct InboxView: View {
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if !showDone, !waiting.isEmpty {
+                        if !showDone, !searching, !waiting.isEmpty {
                             Button("New \(waiting.count)") {
                                 focused = false
                                 withAnimation { proxy.scrollTo("inbox.waiting", anchor: UnitPoint(x: 0.5, y: 0.15)) }
@@ -254,7 +254,7 @@ struct InboxView: View {
         guard export.count > 0 else { return }
         UIPasteboard.general.string = export.text
         copiedIdeaCount = export.count
-        focused = false
+        focused = false; searchFocused = false
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
     private func bringBack(_ capture: Capture) { do { try store.bringBackCapture(capture) } catch { store.report(error) } }
