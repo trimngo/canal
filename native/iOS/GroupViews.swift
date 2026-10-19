@@ -21,7 +21,7 @@ struct GroupEntriesView: View {
         self.day = day; self.groupID = groupID; self.initialName = initialName
         self.rangeStart = rangeStart; self.rangeEnd = rangeEnd
         self.management = management
-        _allDays = State(initialValue: allTime || groupID == "uncategorized")
+        _allDays = State(initialValue: allTime || (groupID == "uncategorized" && rangeStart == nil))
     }
     private var entries: [CheckIn] {
         let source: [CheckIn]

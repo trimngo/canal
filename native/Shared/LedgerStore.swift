@@ -56,11 +56,14 @@ final class LedgerStore: ObservableObject {
                 fixture.entries = [CheckIn(end: Ledger.slotEnd(at: Date()), activity: "Legacy sample UI fixture", categoryID: "work", revision: Revision(counter: 1, writer: "fixture"))]
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") {
+            if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
                 var fixture = Ledger()
                 let now = Date()
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
+                if ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
+                    try fixture.saveSample(id: "older-pending", at: now.addingTimeInterval(-86400), activity: "Older ungrouped observation", categoryID: nil, writer: "fixture", now: now)
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-trend-fixture") {

@@ -22,11 +22,6 @@ struct AllocationHistoryView: View {
     @State private var range: HistoryRange = .today
     @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
     @State private var end = Date()
-    private var ungrouped: Int {
-        store.ledger.activeEntries.filter {
-            $0.end <= Date() && (store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized"))
-        }.count
-    }
 
     var body: some View {
         content(now: now)
@@ -47,6 +42,10 @@ struct AllocationHistoryView: View {
 
     private func content(now: Date) -> some View {
         let report = store.ledger.history(range: range, start: start, end: end, now: now)
+        let ungrouped = report.samples.filter {
+            $0.end >= report.start && $0.end <= report.end &&
+            (store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized"))
+        }.count
         return List {
             Section {
                 Picker("Period", selection: $range) {
@@ -72,7 +71,7 @@ struct AllocationHistoryView: View {
             if ungrouped > 0 || store.canUndoGrouping {
                 Section {
                     if ungrouped > 0 {
-                        Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized") } label: {
+                        Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized", start: report.start, end: report.end) } label: {
                             Label("\(ungrouped) logs to group", systemImage: "tray")
                         }.accessibilityIdentifier("dashboard.review.uncategorized")
                     }
