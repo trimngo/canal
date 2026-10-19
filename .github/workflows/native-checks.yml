@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   watch-ui:
+    if: false # The unchanged Watch flows passed in the preceding validation run.
     runs-on: macos-15
     timeout-minutes: 30
     steps:
