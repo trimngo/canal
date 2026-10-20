@@ -19,10 +19,13 @@ private final class OutsideInputTap: UITapGestureRecognizer, UIGestureRecognizer
     }
     @objc private func dismissInput() { view?.endEditing(true) }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        var current = touch.view
+        var current: UIResponder? = touch.view
         while let candidate = current {
-            if candidate is UITextField || candidate is UITextView { return false }
-            current = candidate.superview
+            // Alerts manage their own keyboard and actions. Ending editing
+            // during Create moves the alert before its button receives the
+            // completed tap, so the first tap only hides the keyboard.
+            if candidate is UITextField || candidate is UITextView || candidate is UIControl || candidate is UIAlertController { return false }
+            current = candidate.next
         }
         return true
     }
