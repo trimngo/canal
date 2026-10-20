@@ -62,11 +62,11 @@ struct SettingsView: View {
                             proposed.randomizedNotificationInterval = settings.randomizedNotificationInterval
                             _ = try proposed.notificationMinutes()
                             if proposed.notificationsEnabled, !(try await notifications.permission()) { throw NotificationError.denied }
-                            try await notifications.apply(proposed)
+                            try await notifications.apply(proposed, force: true)
                             try store.saveSettings(proposed)
                             settings = store.ledger.settings
                         } catch {
-                            try? await notifications.apply(store.ledger.settings)
+                            try? await notifications.apply(store.ledger.settings, force: true)
                             store.report(error)
                         }
                     }

@@ -12,7 +12,7 @@ struct TimeLedgerApp: App {
             RootView().environmentObject(store).tint(Color(red: 0.13, green: 0.43, blue: 0.38))
                 .task {
                     store.start(); LedgerShortcuts.updateAppShortcutParameters()
-                    do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) }
+                    do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) }
                     await ReminderInbox.shared.refresh()
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--ui-notification-checkin") {
@@ -43,7 +43,7 @@ struct TimeLedgerApp: App {
                         store.refresh()
                         Task {
                             await ReminderInbox.shared.refresh()
-                            do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) }
+                            do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) }
                         }
                     }
                     if phase == .background { ReminderInbox.shared.scheduleBackgroundRefresh() }
@@ -52,7 +52,7 @@ struct TimeLedgerApp: App {
                     Task { do { try await NotificationScheduler.shared.apply(settings) } catch { store.report(error) } }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
-                    Task { do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) } }
+                    Task { do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) } }
                 }
                 .alert("Couldn’t complete that", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
                     Button("OK") { store.error = nil }
