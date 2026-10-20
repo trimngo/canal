@@ -1271,9 +1271,14 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["category-select.work"].tap()
         app.buttons["category-select.create"].tap()
         app.alerts.textFields["Group name"].typeText("Creative Projects")
-        app.alerts.buttons["Create"].tap()
+        let create = app.alerts.buttons["Create"]
+        XCTAssertTrue(create.isEnabled)
+        recordScreen("RankingNewGroupDraft", in: app)
+        create.tap()
         XCTAssertTrue(app.alerts["New group"].waitForNonExistence(timeout: 5))
         XCTAssertEqual(app.buttons["category-select.work"].value as? String, "Selected")
+        let created = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "category-select.", "Creative Projects")).firstMatch
+        XCTAssertTrue(created.exists); XCTAssertEqual(created.value as? String, "Selected")
         XCTAssertTrue(context.isHittable)
         app.buttons["idea-categories.done"].tap()
         XCTAssertEqual(first.label, firstTitle); XCTAssertEqual(second.label, secondTitle)
