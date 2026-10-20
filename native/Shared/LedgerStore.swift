@@ -72,7 +72,7 @@ final class LedgerStore: ObservableObject {
                 var fixture = Ledger()
                 let now = Date()
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
-                let longEntry = "Preparing classes and writing notes about the lesson. " + String(repeating: "Include the examples and follow-up questions for next week. ", count: 8)
+                let longEntry = "Preparing classes and writing notes about the lesson. " + String(repeating: "Include the examples and follow-up questions for next week. ", count: 7)
                 let activity = ProcessInfo.processInfo.arguments.contains("--ui-long-grouping-ledger") ? longEntry : "Quokka activity fixture"
                 try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: activity, categoryID: nil, writer: "fixture", now: now)
                 if ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
