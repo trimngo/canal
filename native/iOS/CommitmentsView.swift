@@ -4,181 +4,155 @@ import LedgerCore
 
 struct CommitmentsView: View {
     @EnvironmentObject private var store: LedgerStore
-    @State private var adding = false
-    @State private var editing: WeeklyCommitment?
-    @State private var managingCategories = false
+    @State private var plan = AllocationPlanDraft([:])
+    @State private var loaded = false
+    @State private var pinned = Set<String>()
+    @State private var expanded = Set<String>()
+    @State private var organizing = false
+    @State private var confirmOrganize = false
+    @State private var creating = false
+    @State private var name = ""
+    @State private var error: String?
+    @FocusState private var focusedTarget: String?
+
+    private var roots: [LedgerCategory] { store.ledger.children(of: nil) }
+    private var areas: [LedgerCategory] {
+        roots.filter { plan.text[$0.id] != nil || pinned.contains($0.id) || !store.ledger.children(of: $0.id).isEmpty }
+    }
+    private var loose: [LedgerCategory] { roots.filter { root in !areas.contains { $0.id == root.id } } }
+    private var stale: Bool { !(plan.values?.keys.allSatisfy { id in roots.contains { $0.id == id } } ?? true) }
+    private var canSave: Bool { plan.isComplete && plan.isDirty && !stale && store.storageAvailable }
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
-            let week = store.ledger.commitmentWeek(now: context.date)
+            let today = store.ledger.allocation(on: context.date, now: context.date)
+            let week = store.ledger.rollingAllocation(now: context.date)
             List {
                 Section {
-                    if week.rows.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Make time for what matters").font(.headline)
-                            Text("Choose a category and a minimum amount of time to spend on it each week.").foregroundStyle(.secondary)
-                            Button("Add a weekly commitment") { adding = true }
-                                .accessibilityIdentifier("commitments.empty.add")
-                        }.padding(.vertical, 8)
-                    } else {
-                        ForEach(week.rows) { row in
-                            Button { editing = row.commitment } label: {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    HStack {
-                                        Text(row.name).font(.headline)
-                                        Spacer(minLength: 8)
-                                        Image(systemName: "pencil").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Text("\(store.duration(row.minutes.rounded(.down))) of \(store.duration(Double(row.commitment.minimumMinutes))) this week")
-                                        .font(.subheadline).monospacedDigit()
-                                    ProgressView(value: min(1, row.minutes / Double(row.commitment.minimumMinutes)))
-                                    if row.isMet {
-                                        Label("Minimum met", systemImage: "checkmark.circle.fill").font(.subheadline)
-                                    } else {
-                                        Text("\(store.duration(row.remainingMinutes.rounded(.up))) remaining").font(.subheadline.bold())
-                                    }
-                                }.foregroundStyle(.primary).padding(.vertical, 8).contentShape(Rectangle())
-                            }.buttonStyle(.plain).accessibilityIdentifier("commitments.edit.\(row.id)")
-                        }
+                    Text("How do you want to divide your time?").font(.headline)
+                    Text("Group detailed categories into a few broad life areas, then give each a share. Choose as many areas as you need.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    HStack {
+                        Text("Total").bold(); Spacer()
+                        Text(plan.total.map { "\(percent($0))% / 100%" } ?? "Check percentages")
+                            .bold().monospacedDigit().accessibilityIdentifier("plan.total")
                     }
-                } header: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("This week").font(.headline)
-                        Text(weekLabel(week.interval)).font(.caption)
-                    }.textCase(nil).accessibilityIdentifier("commitments.week")
+                    if let total = plan.total {
+                        Text(abs(total - 100) < 0.0000001 ? "100% assigned" : total > 100 ? "\(percent(total - 100))% over — reduce a goal" : "\(percent(100 - total))% left to assign")
+                            .foregroundStyle(total > 100 ? Color.red : Color.secondary)
+                            .accessibilityIdentifier("plan.balance")
+                    } else {
+                        Text("Enter percentages between 0 and 100.").foregroundStyle(.red)
+                    }
+                    if stale {
+                        Text("Categories changed while you were editing. Reload the saved plan to continue.").font(.caption).foregroundStyle(.red)
+                        Button("Reload saved plan") { load() }.accessibilityIdentifier("plan.reload")
+                    }
+                    Button("Save plan") { save() }.disabled(!canSave).accessibilityIdentifier("categories.save-targets")
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if week.loggedMinutes == 0 { Text("No logged time this week yet.") }
-                        Text("Monday–Sunday. Progress uses your estimated activity time, including subcategories. Days without logs add no time.")
+                    Text("Changing one goal leaves the others unchanged. Save when the total is exactly 100%. Earlier plans are kept.")
+                }
+                Section {
+                    ForEach(areas) { category in areaRow(category, today: today, week: week) }
+                    Menu {
+                        ForEach(loose) { category in
+                            Button(category.name) { pinned.insert(category.id) }
+                        }
+                        Button("Create life area", systemImage: "plus") { name = ""; creating = true }
+                    } label: { Label("Add life area", systemImage: "plus") }.accessibilityIdentifier("plan.add-area")
+                } header: { Text("Life areas") } footer: {
+                    Text("Actual time: today since your first log, and \(week.representedDays) of the last 7 days. Hours are estimates from your logs. A difference from a goal is not a score.")
+                        .accessibilityIdentifier("plan.coverage")
+                }
+                if !loose.isEmpty {
+                    Section {
+                        DisclosureGroup("Categories to organize (\(loose.count))") {
+                            ForEach(loose) { category in
+                                HStack {
+                                    Text(category.name); Spacer()
+                                    Button("Use as life area") { pinned.insert(category.id) }.font(.caption).buttonStyle(.borderless)
+                                }
+                            }
+                            Button("Group categories into life areas") { openOrganizer() }
+                        }.accessibilityIdentifier("plan.loose-categories")
+                    } footer: {
+                        Text("These categories are still tracked. Use Organize to select several and group them under a life area.")
                     }
                 }
-            }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.immediately)
+                CategoryMoveUndoSection()
+                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
+            }.listStyle(.insetGrouped).listSectionSpacing(12)
+                .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
         }
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { adding = true } label: { Label("Add commitment", systemImage: "plus") }
-                    .accessibilityIdentifier("commitments.add")
-                Menu {
-                    Button("Categories") { managingCategories = true }
-                    NavigationLink("Percentage targets", value: LedgerScreen.targets)
-                        .accessibilityIdentifier("commitments.percentage-targets")
-                } label: { Image(systemName: "ellipsis.circle") }
-                    .accessibilityLabel("More commitment options").accessibilityIdentifier("commitments.more")
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Organize", systemImage: "folder.badge.plus") { openOrganizer() }.accessibilityIdentifier("plan.organize")
             }
         }
-        .sheet(isPresented: $adding) { CommitmentEditorView() }
-        .sheet(item: $editing) { CommitmentEditorView(commitment: $0) }
-        .sheet(isPresented: $managingCategories) { GroupManagerView() }
-    }
-
-    private func weekLabel(_ interval: DateInterval) -> String {
-        var style = Date.FormatStyle(date: .abbreviated, time: .omitted)
-        style.timeZone = store.ledger.reportingCalendar().timeZone
-        return "\(interval.start.formatted(style)) – \(interval.end.addingTimeInterval(-1).formatted(style))"
-    }
-}
-
-private struct CommitmentEditorView: View {
-    @EnvironmentObject private var store: LedgerStore
-    @Environment(\.dismiss) private var dismiss
-    var commitment: WeeklyCommitment?
-    @State private var categoryID = ""
-    @State private var hours: String
-    @State private var minutes: String
-    @State private var error: String?
-    @State private var confirmingRemoval = false
-    @State private var managingCategories = false
-    private enum TimeField: Hashable { case hours, minutes }
-    @FocusState private var focusedTime: TimeField?
-
-    init(commitment: WeeklyCommitment? = nil) {
-        self.commitment = commitment
-        _hours = State(initialValue: String((commitment?.minimumMinutes ?? 60) / 60))
-        _minutes = State(initialValue: String((commitment?.minimumMinutes ?? 60) % 60))
-    }
-    private var availableCategories: [LedgerCategory] {
-        let used = Set(store.ledger.activeWeeklyCommitments.map(\.categoryID))
-        return store.ledger.orderedCategories.filter { !used.contains($0.id) || $0.id == commitment?.categoryID }
-    }
-    private var minimum: Int? {
-        guard let h = Int(hours.isEmpty ? "0" : hours), let m = Int(minutes.isEmpty ? "0" : minutes),
-              (0...168).contains(h), (0...59).contains(m), (1...10080).contains(h * 60 + m) else { return nil }
-        return h * 60 + m
-    }
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Category") {
-                    if let commitment {
-                        Text(store.ledger.categoryPath(commitment.categoryID))
-                    } else if availableCategories.isEmpty {
-                        Text("All your categories already have a commitment, or no categories have been created yet.").foregroundStyle(.secondary)
-                    } else {
-                        Picker("Category", selection: $categoryID) {
-                            ForEach(availableCategories) { category in
-                                Text(store.ledger.categoryPath(category.id)).tag(category.id)
-                            }
-                        }.pickerStyle(.menu).accessibilityIdentifier("commitment.category")
-                    }
-                    if commitment == nil { Button("Manage categories") { managingCategories = true } }
-                }
-                Section {
-                    HStack {
-                        TextField("Hours", text: $hours).keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                            .focused($focusedTime, equals: .hours)
-                            .accessibilityIdentifier("commitment.hours")
-                        Text("h").foregroundStyle(.secondary)
-                        TextField("Minutes", text: $minutes).keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                            .focused($focusedTime, equals: .minutes)
-                            .accessibilityIdentifier("commitment.minutes")
-                        Text("min").foregroundStyle(.secondary)
-                    }
-                    if minimum == nil { Text("Enter a time greater than zero, up to 168 hours. Minutes must be between 0 and 59.").font(.caption).foregroundStyle(.secondary) }
-                } header: { Text("Weekly minimum") } footer: {
-                    Text("Time assigned to this category and its subcategories counts automatically. Changing the minimum keeps your activity logs.")
-                }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
-                if commitment != nil {
-                    Section {
-                        Button("Remove commitment", role: .destructive) { UIApplication.shared.dismissLedgerKeyboard(); confirmingRemoval = true }
-                            .accessibilityIdentifier("commitment.remove")
-                    }
-                }
-            }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
-                .navigationTitle(commitment == nil ? "New commitment" : "Edit commitment").navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") { save() }.disabled(minimum == nil || !availableCategories.contains { $0.id == categoryID })
-                            .accessibilityIdentifier("commitment.save")
-                    }
-                }
-                .onAppear { selectInitialCategory() }
-                .onChange(of: focusedTime) { _, field in
-                    guard field != nil else { return }
-                    DispatchQueue.main.async {
-                        UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
-                    }
-                }
-                .onChange(of: availableCategories.map(\.id)) { _, _ in selectInitialCategory() }
-                .confirmationDialog("Remove this weekly commitment?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
-                    Button("Remove commitment", role: .destructive) {
-                        do { try store.saveWeeklyCommitment(categoryID: categoryID, minimumMinutes: nil); dismiss() }
-                        catch { self.error = error.localizedDescription }
-                    }
-                } message: { Text("Your category and activity logs will be kept.") }
-                .sheet(isPresented: $managingCategories) { GroupManagerView() }
+        .onAppear { if !loaded { load(); loaded = true } }
+        .onChange(of: store.ledger.currentBudget()?.id) { _, _ in if !plan.isDirty { load() } }
+        .onChange(of: roots.map(\.id)) { _, _ in if !plan.isDirty { load() } }
+        .onChange(of: focusedTarget) { _, id in
+            guard id != nil else { return }
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
+            }
+        }
+        .sheet(isPresented: $organizing) { GroupManagerView(selecting: true) }
+        .confirmationDialog("Save your goal changes before organizing?", isPresented: $confirmOrganize, titleVisibility: .visible) {
+            if canSave { Button("Save and organize") { if save() { organizing = true } } }
+            Button("Discard changes and organize", role: .destructive) { load(); organizing = true }
+            Button("Keep editing", role: .cancel) {}
+        }
+        .alert("New life area", isPresented: $creating) {
+            TextField("Name", text: $name).accessibilityIdentifier("plan.area-name")
+            Button("Create") {
+                creating = false
+                do { let id = try store.saveCategory(id: nil, name: name); pinned.insert(id) }
+                catch { self.error = error.localizedDescription }
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
-    private func selectInitialCategory() {
-        if let commitment { categoryID = commitment.categoryID }
-        else if !availableCategories.contains(where: { $0.id == categoryID }) { categoryID = availableCategories.first?.id ?? "" }
+
+    private func areaRow(_ category: LedgerCategory, today: AllocationPeriod, week: AllocationPeriod) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(category.name).font(.headline)
+                Spacer(minLength: 4)
+                TextField("—", text: Binding(get: { plan.text[category.id] ?? "" }, set: { plan.text[category.id] = $0 }))
+                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 68)
+                    .focused($focusedTarget, equals: category.id)
+                    .accessibilityLabel("\(category.name) goal percent").accessibilityIdentifier("categories.target.\(category.id)")
+                Text("%").foregroundStyle(.secondary)
+            }
+            AllocationValues(today: today, week: week, todayMinutes: today.total(for: category.id, ledger: store.ledger), weekMinutes: week.total(for: category.id, ledger: store.ledger), target: plan.values?[category.id])
+            let children = store.ledger.children(of: category.id)
+            if !children.isEmpty {
+                DisclosureGroup(isExpanded: Binding(get: { expanded.contains(category.id) }, set: { if $0 { expanded.insert(category.id) } else { expanded.remove(category.id) } })) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Directly assigned to \(category.name)").font(.caption.bold())
+                        AllocationValues(today: today, week: week, todayMinutes: today.directMinutes[category.id, default: 0], weekMinutes: week.directMinutes[category.id, default: 0], target: nil)
+                        ForEach(children) { child in AllocationCategoryRow(category: child, today: today, week: week) }
+                    }.padding(.vertical, 4)
+                } label: { Text("\(children.count) subcategories").font(.caption) }
+                .accessibilityIdentifier("plan.children.\(category.id)")
+            }
+            Button("Use remaining") { plan.useRemaining(for: category.id) }
+                .font(.caption).buttonStyle(.borderless).accessibilityIdentifier("plan.remaining.\(category.id)")
+        }.padding(.vertical, 4)
     }
-    private func save() {
-        guard let minimum else { return }
+    private func percent(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
+    private func load() { plan = AllocationPlanDraft(store.ledger.currentTargets()); error = nil }
+    @discardableResult private func save() -> Bool {
+        guard canSave, let values = plan.values else { return false }
         UIApplication.shared.dismissLedgerKeyboard()
-        do { try store.saveWeeklyCommitment(categoryID: categoryID, minimumMinutes: minimum); dismiss() }
-        catch { self.error = error.localizedDescription }
+        do { try store.saveAllocationPlan(values); load(); return true }
+        catch { self.error = error.localizedDescription; return false }
+    }
+    private func openOrganizer() {
+        UIApplication.shared.dismissLedgerKeyboard()
+        if plan.isDirty { confirmOrganize = true } else { organizing = true }
     }
 }

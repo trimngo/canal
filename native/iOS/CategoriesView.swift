@@ -1,46 +1,25 @@
 import SwiftUI
-import UIKit
 import LedgerCore
 
-private func percentageText(_ value: Double) -> String {
-    value.formatted(.number.precision(.fractionLength(0...2)))
-}
-
 struct CategoriesView: View {
-    @EnvironmentObject var store: LedgerStore
+    @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
-    @State private var drafts: [String: String] = [:]
-    @State private var original: [String: String] = [:]
-    @State private var originalValues: [String: Double] = [:]
-    @State private var loaded = false
-    @FocusState private var focusedTarget: String?
+    @State var selecting = false
+    @State private var selected = Set<String>()
     @State private var collapsed = Set<String>()
     @State private var editing: LedgerCategory?
     @State private var creating = false
+    @State private var moving = false
     @State private var reviewingUncategorized = false
-    @State private var discard = false
     @State private var error: String?
-    private var top: [LedgerCategory] { store.ledger.children(of: nil) }
-    private var dirty: Bool { drafts != original }
-    private var values: [String: Double]? {
-        var result: [String: Double] = [:]
-        for category in top {
-            let text = (drafts[category.id] ?? "").trimmingCharacters(in: .whitespaces)
-            if text.isEmpty { continue }
-            if drafts[category.id] == original[category.id], let unchanged = originalValues[category.id] { result[category.id] = unchanged; continue }
-            guard text.range(of: "^(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+)$", options: .regularExpression) != nil,
-                  let value = Double(text.replacingOccurrences(of: ",", with: ".")), value.isFinite else { return nil }
-            result[category.id] = value
-        }
-        return result
-    }
-    private var total: Double { values?.values.reduce(0, +) ?? 0 }
-    private var valid: Bool { guard let values else { return false }; return (try? Ledger.validateTargets(values)) != nil }
+
     private var visible: [LedgerCategory] {
         let parents = store.ledger.categoryParents
         return store.ledger.orderedCategories.filter { category in
             var node = category.id
-            while let parent = parents[node] { if collapsed.contains(parent) { return false }; node = parent }
+            while let parent = parents[node] {
+                if collapsed.contains(parent) { return false }; node = parent
+            }
             return true
         }
     }
@@ -53,95 +32,74 @@ struct CategoriesView: View {
     var body: some View {
         List {
             Section {
-                ForEach(visible) { category in categoryRow(category) }
-                Button("Create category", systemImage: "plus") { creating = true }
-                    .accessibilityIdentifier("categories.create")
-                Button("Uncategorized · \(store.ledger.groupEntryCounts()["uncategorized", default: 0]) logs") { reviewingUncategorized = true }
-                    .accessibilityIdentifier("groups.open.uncategorized")
-            } header: { Text("Categories & long-term targets") } footer: {
-                Text("Only top-level categories have targets. Subcategory time rolls up to its parent. A log can also be assigned directly to a parent. Tap a name to edit or move it; use its menu to reorder siblings.")
-            }
-            Section {
-                HStack { Text("Allocated"); Spacer(); Text("\(percentageText(total))%").bold() }
-                HStack {
-                    Text(total > 100 ? "Over-allocated" : "Unallocated target")
-                    Spacer(); Text("\(percentageText(abs(100 - total)))%")
-                }.foregroundStyle(total > 100 ? Color.red : Color.secondary)
-                if !valid { Text("Enter valid percentages totaling at most 100%. Your entries will stay here while you correct them.").foregroundStyle(.red).font(.footnote) }
-                Button("Save targets") {
-                    do {
-                        if let values { try store.saveTargets(values); original = drafts; originalValues = values; error = nil }
-                    } catch { self.error = error.localizedDescription }
-                }.disabled(!valid || !dirty).accessibilityIdentifier("categories.save-targets")
-                if let budget = store.ledger.currentBudget() {
-                    Text("Current targets since \(budget.effectiveAt.formatted(date: .abbreviated, time: .shortened)). Earlier versions are preserved.").font(.caption).foregroundStyle(.secondary)
+                Text(selecting ? "Select categories, then group them under an existing or new parent." : "Use Select to group several categories at once. Tap a name to rename it or view its logs.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                ForEach(visible) { category in row(category) }
+                Button("Create category", systemImage: "plus") { creating = true }.accessibilityIdentifier("categories.create")
+                if !selecting {
+                    Button("Uncategorized · \(store.ledger.groupEntryCounts()["uncategorized", default: 0]) logs") { reviewingUncategorized = true }
+                        .accessibilityIdentifier("groups.open.uncategorized")
                 }
             } footer: {
-                Text("Unallocated is the part of your time without a target, not an activity. Changing one percentage leaves all other targets unchanged.")
+                Text("Each parent includes its subcategories’ time. Logs and idea labels keep their categories when you move them. Set life-area percentages in Commitments.")
             }
+            CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red) }
-        }
-        .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
-        .navigationTitle("Categories").navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { if dirty { discard = true } else { dismiss() } }.accessibilityIdentifier("groups.done") } }
-        .interactiveDismissDisabled(dirty)
-        .confirmationDialog("Discard unsaved target changes?", isPresented: $discard, titleVisibility: .visible) {
-            Button("Discard changes", role: .destructive) { dismiss() }
-            Button("Keep editing", role: .cancel) {}
-        }
-        .sheet(item: $editing) { CategoryEditView(category: $0) }
-        .sheet(isPresented: $creating) { CategoryEditView(category: nil) }
-        .sheet(isPresented: $reviewingUncategorized) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
-                .onChange(of: focusedTarget) { _, id in
-            guard id != nil else { return }
-            DispatchQueue.main.async {
-                UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
-            }
-        }
-        .onAppear { if !loaded { loadTargets(); loaded = true } }
-        .onChange(of: store.ledger.currentBudget()?.id) { _, _ in if !dirty { loadTargets() } }
-        .onChange(of: top.map(\.id)) { _, _ in
-            let ids = Set(top.map(\.id))
-            drafts = drafts.filter { ids.contains($0.key) }; original = original.filter { ids.contains($0.key) }; originalValues = originalValues.filter { ids.contains($0.key) }
-            let current = store.ledger.currentTargets()
-            for id in ids where drafts[id] == nil {
-                let text = current[id].map(percentageText) ?? ""
-                drafts[id] = text; original[id] = text; originalValues[id] = current[id]
-            }
-        }
-    }
-    private func loadTargets() {
-        let current = store.ledger.currentTargets(); originalValues = current
-        drafts = Dictionary(uniqueKeysWithValues: top.map { ($0.id, current[$0.id].map(percentageText) ?? "") }); original = drafts
-    }
-    private func categoryRow(_ category: LedgerCategory) -> some View {
-        let isTop = store.ledger.categoryParents[category.id] == nil
-        let hasChildren = !store.ledger.children(of: category.id).isEmpty
-        let counts = store.ledger.groupEntryCounts()
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                if hasChildren {
-                    Button { if !collapsed.insert(category.id).inserted { collapsed.remove(category.id) } } label: {
-                        Image(systemName: collapsed.contains(category.id) ? "chevron.right" : "chevron.down").font(.caption)
-                    }.buttonStyle(.borderless).accessibilityLabel("Expand or collapse \(category.name)")
+        }.listStyle(.insetGrouped).scrollDismissesKeyboard(.interactively)
+            .navigationTitle("Categories").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("groups.done") }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(selecting ? "Finish selecting" : "Select") { selecting.toggle(); selected = [] }.accessibilityIdentifier("categories.select-mode")
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if selecting {
+                    Button { moving = true } label: {
+                        Text(selected.isEmpty ? "Select categories to group" : "Group \(selected.count) selected…").frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }.buttonStyle(.borderedProminent).disabled(selected.isEmpty)
+                        .padding().background(.bar).accessibilityIdentifier("categories.group-selected")
+                }
+            }
+            .sheet(item: $editing) { CategoryEditView(category: $0) }
+            .sheet(isPresented: $creating) { CategoryEditView(category: nil) }
+            .sheet(isPresented: $moving) { CategoryMoveView(ids: selected.sorted()) { selected = [] } }
+            .sheet(isPresented: $reviewingUncategorized) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
+            .onChange(of: store.ledger.categories.map(\.id)) { _, ids in selected.formIntersection(ids) }
+    }
+    private func row(_ category: LedgerCategory) -> some View {
+        let children = store.ledger.children(of: category.id)
+        return HStack(spacing: 8) {
+            if selecting {
+                Button {
+                    if !selected.insert(category.id).inserted { selected.remove(category.id) }
+                } label: {
+                    HStack {
+                        Image(systemName: selected.contains(category.id) ? "checkmark.circle.fill" : "circle")
+                        Text(category.name).foregroundStyle(.primary)
+                        Spacer()
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.borderless).accessibilityIdentifier("categories.select.\(category.id)")
+                    .accessibilityAddTraits(selected.contains(category.id) ? .isSelected : [])
+            } else {
                 Button { editing = category } label: {
-                    HStack(spacing: 4) { Text(category.name); Text("\(counts[category.id, default: 0])").font(.caption).foregroundStyle(.secondary) }
+                    HStack(spacing: 5) {
+                        Text(category.name)
+                        Text("\(store.ledger.groupEntryCounts()[category.id, default: 0])").font(.caption).foregroundStyle(.secondary)
+                    }
                 }.buttonStyle(.borderless).foregroundStyle(.primary).accessibilityIdentifier("groups.open.\(category.id)")
-                Spacer(minLength: 2)
-                if isTop {
-                    TextField("—", text: Binding(get: { drafts[category.id] ?? "" }, set: { drafts[category.id] = $0 }))
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 64)
-                        .focused($focusedTarget, equals: category.id)
-                        .accessibilityLabel("\(category.name) target percent").accessibilityIdentifier("categories.target.\(category.id)")
-                    Text("%").foregroundStyle(.secondary)
-                }
+                Spacer()
             }
-        }.padding(.leading, CGFloat(min(depth(category.id), 6)) * 14)
+            if !children.isEmpty {
+                Button { if !collapsed.insert(category.id).inserted { collapsed.remove(category.id) } } label: {
+                    Image(systemName: collapsed.contains(category.id) ? "chevron.right" : "chevron.down").font(.caption)
+                }.buttonStyle(.borderless).accessibilityLabel("Expand or collapse \(category.name)")
+            }
+        }.padding(.leading, CGFloat(min(depth(category.id), 6)) * 16)
             .contextMenu {
+                Button("Edit category") { editing = category }
                 Button("Move up") { reorder(category, direction: -1) }
                 Button("Move down") { reorder(category, direction: 1) }
-                Button("Edit category") { editing = category }
             }
     }
     private func reorder(_ category: LedgerCategory, direction: Int) {
@@ -161,6 +119,7 @@ struct CategoryEditView: View {
     @State private var parent = ""
     @State private var deleting = false
     @State private var viewingLogs = false
+    @State private var moving = false
     @State private var error: String?
     private var possibleParents: [LedgerCategory] {
         let excluded = Set(category.map { [$0.id] + store.ledger.descendants(of: $0.id).map(\.id) } ?? [])
@@ -170,16 +129,21 @@ struct CategoryEditView: View {
         NavigationStack {
             Form {
                 TextField("Category name", text: $name).accessibilityIdentifier("categories.name")
-                Picker("Parent", selection: $parent) {
-                    Text("Top level").tag("")
-                    ForEach(possibleParents) { Text(store.ledger.categoryPath($0.id)).tag($0.id) }
-                }.accessibilityIdentifier("categories.parent")
+                if let category {
+                    LabeledContent("Parent", value: store.ledger.categoryParents[category.id].map { store.ledger.categoryPath($0) } ?? "Top level")
+                    Button("Move category…") { moving = true }.accessibilityIdentifier("categories.move-single")
+                } else {
+                    Picker("Parent", selection: $parent) {
+                        Text("Top level").tag("")
+                        ForEach(possibleParents) { Text(store.ledger.categoryPath($0.id)).tag($0.id) }
+                    }.accessibilityIdentifier("categories.parent")
+                }
                 if let category {
                     Section {
                         Button("View all logs (\(store.ledger.groupEntryCounts()[category.id, default: 0]))") { viewingLogs = true }
                         Button("Delete category", role: .destructive) { deleting = true }.accessibilityIdentifier("group.delete")
                     } footer: {
-                        Text("Logs and ideas are kept. Deleted category shares become Uncategorized, and the label is removed from ideas. Children move up one level. Moving a category under a parent removes its top-level target; earlier budget versions are retained.")
+                        Text("Logs and ideas are kept. Deleted category shares become Uncategorized, and the label is removed from ideas. Children move up one level. Moves preview goal changes before applying them. Earlier budget versions are retained.")
                     }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
@@ -188,7 +152,7 @@ struct CategoryEditView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) { Button("Save") {
-                        do { try store.editCategory(id: category?.id, name: name, parent: parent.isEmpty ? nil : parent); dismiss() } catch { self.error = error.localizedDescription }
+                        do { try store.editCategory(id: category?.id, name: name, parent: category.flatMap { store.ledger.categoryParents[$0.id] } ?? (category == nil && !parent.isEmpty ? parent : nil)); dismiss() } catch { self.error = error.localizedDescription }
                     }.accessibilityIdentifier("categories.save").disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                 }
                 .onAppear { name = category?.name ?? ""; parent = category.flatMap { store.ledger.categoryParents[$0.id] } ?? "" }
@@ -197,6 +161,9 @@ struct CategoryEditView: View {
                         do { if let category { try store.deleteCategory(id: category.id) }; dismiss() } catch { self.error = error.localizedDescription }
                     }
                 } message: { Text("Logs and ideas will be kept. This category’s shares become Uncategorized, and its label is removed from ideas. Children are promoted, and its target is removed from the current budget.") }
+                .sheet(isPresented: $moving) {
+                    if let category { CategoryMoveView(ids: [category.id]) }
+                }
                 .sheet(isPresented: $viewingLogs) {
                     if let category { GroupEntriesView(day: Date(), groupID: category.id, initialName: category.name, allTime: true) }
                 }

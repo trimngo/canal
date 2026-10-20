@@ -5,7 +5,7 @@ public enum PlannerError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidHierarchy: return "A category cannot be inside itself or one of its descendants."
-        case .conflictingCategories: return "Choose either a parent or its subcategory, not both. Change the log selections before making this move."
+        case .conflictingCategories: return "Choose either a parent or its subcategory, not both. Update the affected log or idea labels before making this move."
         case .invalidBudget: return "Enter percentages from 0 to 100, with a total no higher than 100%. Other targets are unchanged."
         case .invalidTimeZone: return "Choose a valid reporting time zone."
         }

@@ -141,7 +141,8 @@ struct GroupEntriesView: View {
 }
 
 struct GroupManagerView: View {
-    var body: some View { NavigationStack { CategoriesView() } }
+    var selecting = false
+    var body: some View { NavigationStack { CategoriesView(selecting: selecting) } }
 }
 
 

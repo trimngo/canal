@@ -31,6 +31,8 @@ final class LedgerStore: ObservableObject {
     #endif
     @Published private(set) var storageAvailable = true
     @Published private(set) var canUndoGrouping = false
+    @Published private(set) var categoryMoveUndo: CategoryMoveUndo?
+    var canUndoCategoryMove: Bool { categoryMoveUndo.map { ledger.canUndoCategoryMove($0) } ?? false }
     private var groupingUndo: [(before: CheckIn, after: CheckIn)] = []
     private let file: URL
     private let writer: String
@@ -118,7 +120,7 @@ final class LedgerStore: ObservableObject {
                 try fixture.saveSample(id: "recent", at: Date().addingTimeInterval(-60), activity: "Recent work observation", categoryID: "work", writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-allocation-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-commitments-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--ui-allocation-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-commitments-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-life-area-fixture") {
                 var fixture = Ledger(); fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music")]
                 try fixture.moveCategory("teaching", to: "work", writer: "fixture")
                 let now = Date(), cal = Calendar.current
@@ -129,6 +131,10 @@ final class LedgerStore: ObservableObject {
                     try fixture.saveSample(at: yesterday, activity: "Yesterday work", categoryIDs: ["work"], writer: "fixture", now: now)
                 }
                 try fixture.saveTargets(["work": 30, "music": 15], effectiveAt: now.addingTimeInterval(-60), writer: "fixture")
+                if ProcessInfo.processInfo.arguments.contains("--ui-life-area-fixture") {
+                    fixture.categories += [LedgerCategory(id: "admin", name: "Administration"), LedgerCategory(id: "health", name: "Health"), LedgerCategory(id: "german", name: "German")]
+                    try fixture.saveAllocationPlan(["work": 30, "music": 15, "admin": 10, "health": 45], writer: "fixture")
+                }
                 if ProcessInfo.processInfo.arguments.contains("--ui-commitments-fixture") {
                     try fixture.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 60, writer: "fixture")
                     try fixture.saveWeeklyCommitment(categoryID: "music", minimumMinutes: 600, writer: "fixture")
@@ -349,6 +355,20 @@ final class LedgerStore: ObservableObject {
     }
     func saveTargets(_ values: [String: Double]) throws {
         var draft = ledger; try draft.saveTargets(values, writer: writer); try commit(draft)
+    }
+    func saveAllocationPlan(_ values: [String: Double]) throws {
+        var draft = ledger; try draft.saveAllocationPlan(values, writer: writer); try commit(draft)
+    }
+    func groupCategories(_ ids: [String], under parent: String?, newParentName: String? = nil) throws {
+        var draft = ledger
+        let undo = try draft.groupCategories(ids, under: parent, newParentName: newParentName, writer: writer)
+        try commit(draft)
+        categoryMoveUndo = undo
+    }
+    func undoCategoryMove() throws {
+        guard let undo = categoryMoveUndo else { return }
+        var draft = ledger; try draft.undoCategoryMove(undo, writer: writer); try commit(draft)
+        categoryMoveUndo = nil
     }
     func saveWeeklyCommitment(categoryID: String, minimumMinutes: Int?) throws {
         var draft = ledger; try draft.saveWeeklyCommitment(categoryID: categoryID, minimumMinutes: minimumMinutes, writer: writer); try commit(draft)

@@ -1,102 +1,12 @@
 import SwiftUI
 import LedgerCore
 
+// Keep older navigation routes pointing at the current allocation editor.
 struct TargetsView: View {
-    @EnvironmentObject var store: LedgerStore
-    @State private var managingCategories = false
-    @State private var reviewing = false
-    var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { _ in
-            content(now: Date())
-        }.navigationTitle("Targets").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Categories") { managingCategories = true }.accessibilityIdentifier("dashboard.groups")
-                    Menu {
-                        NavigationLink("Calendar", value: LedgerScreen.calendar)
-                    } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("More views")
-                }
-            }
-            .sheet(isPresented: $managingCategories) { GroupManagerView() }
-            .sheet(isPresented: $reviewing) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
-    }
-    private func dashboardCategories(today: AllocationPeriod, week: AllocationPeriod, targets: [String: Double]) -> [LedgerCategory] {
-        let categories = store.ledger.children(of: nil)
-        func priority(_ category: LedgerCategory) -> Int {
-            if targets[category.id] != nil { return 0 }
-            if today.total(for: category.id, ledger: store.ledger) > 0 || week.total(for: category.id, ledger: store.ledger) > 0 { return 1 }
-            return 2
-        }
-        return categories.enumerated().sorted {
-            let lhs = priority($0.element), rhs = priority($1.element)
-            return lhs == rhs ? $0.offset < $1.offset : lhs < rhs
-        }.map(\.element)
-    }
-    private func content(now: Date) -> some View {
-        let day = store.ledger.reportingDay(containing: now)
-        let today = store.ledger.allocation(on: day, now: now)
-        let week = store.ledger.rollingAllocation(now: now)
-        let targets = store.ledger.currentTargets(at: now)
-        let allocated = targets.values.reduce(0, +)
-        let pending = store.ledger.activeEntries.filter { (store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")) && $0.end <= now }.count
-        return List {
-            Section {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Today").font(.subheadline.bold())
-                        Text(today.sufficient ? "\(store.duration(today.trackedMinutes)) since first log" : "Insufficient data").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("Rolling 7 days").font(.subheadline.bold())
-                        Text("\(week.representedDays) of 7 days · \(store.duration(week.trackedMinutes))").font(.caption).foregroundStyle(.secondary)
-                    }
-                }.accessibilityIdentifier("allocation.periods")
-                if week.representedDays < 7 {
-                    Text("Incomplete window: \(week.representedDays) of 7 days represented. Days without logs are excluded.")
-                        .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("allocation.coverage")
-                }
-                if !today.sufficient {
-                    Text("Log an activity to estimate today. No activities are inferred for a day with no logs.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            } header: { Text("Allocation vs targets").textCase(nil).font(.headline).accessibilityIdentifier("targets.breakdown-title") }
-            Section {
-                ForEach(dashboardCategories(today: today, week: week, targets: targets)) { category in
-                    AllocationCategoryRow(category: category, today: today, week: week, target: targets[category.id])
-                }
-                if today.directMinutes["uncategorized", default: 0] > 0 || week.directMinutes["uncategorized", default: 0] > 0 {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Uncategorized").font(.headline)
-                        AllocationValues(today: today, week: week, todayMinutes: today.directMinutes["uncategorized", default: 0], weekMinutes: week.directMinutes["uncategorized", default: 0], target: nil)
-                    }
-                }
-            } footer: {
-                Text("Percentages use time from the first log to now today, or midnight for completed days. Time before the first log is excluded. Differences are percentage points from your target; more time is not necessarily better. Expand a category for its breakdown.")
-            }
-            Section {
-                HStack { Text("Unallocated target"); Spacer(); Text("\(max(0, 100 - allocated), specifier: "%.1f")%").bold() }
-                Text("Time without a target is separate from Uncategorized activity.").font(.caption).foregroundStyle(.secondary)
-                if store.ledger.currentBudget(at: now) == nil {
-                    Button("Set long-term targets") { managingCategories = true }
-                }
-            }
-            if pending > 0 || store.canUndoGrouping {
-                Section {
-                    if pending > 0 {
-                        Button("\(pending) logs to categorize") { reviewing = true }.accessibilityIdentifier("dashboard.review.uncategorized")
-                    }
-                    if store.canUndoGrouping { Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("dashboard.undo") }
-                }
-            }
-            Section {
-                NavigationLink("Calendar", value: LedgerScreen.calendar).accessibilityIdentifier("dashboard.calendar")
-            }
-        }.listStyle(.insetGrouped).listSectionSpacing(12)
-    }
+    var body: some View { CommitmentsView() }
 }
 
-private struct AllocationCategoryRow: View {
+struct AllocationCategoryRow: View {
     @EnvironmentObject var store: LedgerStore
     let category: LedgerCategory
     let today: AllocationPeriod
@@ -132,7 +42,7 @@ private struct AllocationCategoryRow: View {
     }
 }
 
-private struct AllocationValues: View {
+struct AllocationValues: View {
     @EnvironmentObject var store: LedgerStore
     let today: AllocationPeriod
     let week: AllocationPeriod
