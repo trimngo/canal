@@ -93,7 +93,10 @@ extension Ledger {
     }
 
     public func canUndoCategoryMove(_ undo: CategoryMoveUndo) -> Bool {
-        guard categories == undo.after, currentBudget()?.id == undo.resultingBudgetID else { return false }
+        // A no-op cloud merge sorts the serialized array by ID. Ordering in the
+        // array is not an edit; sortOrder is the persisted display order.
+        guard categories.sorted(by: { $0.id < $1.id }) == undo.after.sorted(by: { $0.id < $1.id }),
+              currentBudget()?.id == undo.resultingBudgetID else { return false }
         if let id = undo.createdParentID {
             guard !entries.contains(where: { ($0.categoryIDs ?? $0.categoryID.map { [$0] } ?? []).contains(id) }),
                   !captures.contains(where: { ($0.categoryIDs ?? []).contains(id) }) else { return false }

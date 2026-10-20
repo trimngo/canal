@@ -153,6 +153,16 @@ final class AllocationPlanTests: XCTestCase {
         try ledger.saveCategory(id: "health", name: "Wellbeing", writer: "test")
         XCTAssertFalse(ledger.canUndoCategoryMove(undo))
     }
+    func testNoOpSyncKeepsUndoAvailableButChangedBudgetDoesNot() throws {
+        var ledger = try fixture()
+        try ledger.saveAllocationPlan(["work": 50, "music": 50], writer: "test")
+        let undo = try ledger.groupCategories(["admin"], under: "work", writer: "test")
+        let remote = ledger
+        ledger.merge(remote)
+        XCTAssertTrue(ledger.canUndoCategoryMove(undo))
+        try ledger.saveAllocationPlan(["work": 40, "music": 60], writer: "test")
+        XCTAssertFalse(ledger.canUndoCategoryMove(undo))
+    }
     func testBackupAndFullSyncRetainPlanHierarchyLegacyCommitmentsAndLabels() throws {
         var phone = try fixture()
         try phone.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 60, writer: "old")
