@@ -755,7 +755,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testInboxKeyboardDismissesOutsideAndPreservesDraftAcrossTabs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
-        openInbox(app)
+        openInbox(app, capture: true)
         let field = element(app, "inbox.text"); field.tap(); field.typeText("Keep my draft")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         app.navigationBars["Inbox"].tap()
@@ -1296,7 +1296,7 @@ final class TimeLedgerUITests: XCTestCase {
             // Setup should use the explicit dismissal control. A separate
             // keyboard test verifies tapping outside the input itself.
             let done = app.buttons["keyboard.done"]
-            if done.waitForExistence(timeout: 5) { done.tap() }
+            if done.waitForExistence(timeout: 5), done.isHittable { done.tap() }
             else { app.navigationBars["Inbox"].tap() }
             let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
             XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
