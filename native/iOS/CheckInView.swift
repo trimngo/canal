@@ -90,7 +90,7 @@ struct CheckInEditor: View {
                 Text("No suggestion yet. You can choose a group or save as Uncategorized.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            CategorySelectionPicker(selection: $categoryIDs).accessibilityIdentifier("\(prefix).category")
+            CategorySelectionPicker(selection: $categoryIDs, activity: activity, timestamp: recordNow ? nil : timestamp).accessibilityIdentifier("\(prefix).category")
             DisclosureGroup("Time") {
                 Toggle("Use current time", isOn: $recordNow)
                     .onChange(of: recordNow) { _, value in if !value, entry == nil { timestamp = Date() } }

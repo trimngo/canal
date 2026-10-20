@@ -150,7 +150,7 @@ private struct GroupAssignmentView: View {
     @State private var error: String?
     var body: some View {
         NavigationStack {
-            CategorySelectionList(selection: $selection)
+            CategorySelectionList(selection: $selection, activity: entry.activity, timestamp: entry.end)
                 .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }

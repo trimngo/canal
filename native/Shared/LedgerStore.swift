@@ -68,25 +68,35 @@ final class LedgerStore: ObservableObject {
                 json["wakingOverrides"] = [["id": "legacy", "wakeMinute": 600, "bedMinute": 660, "reset": false, "revision": ["counter": 1, "writer": "fixture"]]]
                 try JSONSerialization.data(withJSONObject: json).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--ui-grouping-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-long-grouping-ledger") {
                 var fixture = Ledger()
                 let now = Date()
                 try fixture.saveSample(at: now.addingTimeInterval(-3600), activity: "Preparing classes", categoryID: "work", writer: "fixture", now: now)
-                try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: "Quokka activity fixture", categoryID: nil, writer: "fixture", now: now)
+                let longEntry = "Preparing classes and writing notes about the lesson. " + String(repeating: "Include the examples and follow-up questions for next week. ", count: 8)
+                let activity = ProcessInfo.processInfo.arguments.contains("--ui-long-grouping-ledger") ? longEntry : "Quokka activity fixture"
+                try fixture.saveSample(at: now.addingTimeInterval(-1800), activity: activity, categoryID: nil, writer: "fixture", now: now)
                 if ProcessInfo.processInfo.arguments.contains("--ui-review-range-fixture") {
                     try fixture.saveSample(id: "older-pending", at: now.addingTimeInterval(-86400), activity: "Older ungrouped observation", categoryID: nil, writer: "fixture", now: now)
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-trend-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--ui-trend-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-many-trends-fixture") {
+                for key in ["history.trend.categories.v1", "history.trend.percent", "history.trend.layout"] { defaults.removeObject(forKey: key) }
                 var fixture = Ledger()
                 let now = Date(), calendar = Calendar.current
                 for offset in 0...6 where offset != 3 {
                     let day = calendar.date(byAdding: .day, value: -offset, to: calendar.startOfDay(for: now))!
                     let first = offset == 0 ? max(day, now.addingTimeInterval(-7200)) : day.addingTimeInterval(9 * 3600)
                     let second = offset == 0 ? max(first, now.addingTimeInterval(-3600)) : day.addingTimeInterval(Double(11 + offset) * 3600)
-                    try fixture.saveSample(at: first, activity: "Work observation", categoryID: "work", writer: "fixture", now: now)
-                    try fixture.saveSample(at: second, activity: "Social observation", categoryID: "social", writer: "fixture", now: now)
+                    if ProcessInfo.processInfo.arguments.contains("--ui-many-trends-fixture") {
+                        for (index, category) in fixture.categories.enumerated() {
+                            let stamp = offset == 0 ? first.addingTimeInterval(max(0, now.timeIntervalSince(first) - 60) * Double(index) / Double(fixture.categories.count)) : day.addingTimeInterval(Double(9 + index * 2) * 3600)
+                            try fixture.saveSample(at: stamp, activity: "\(category.name) observation", categoryID: category.id, writer: "fixture", now: now)
+                        }
+                    } else {
+                        try fixture.saveSample(at: first, activity: "Work observation", categoryID: "work", writer: "fixture", now: now)
+                        try fixture.saveSample(at: second, activity: "Social observation", categoryID: "social", writer: "fixture", now: now)
+                    }
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }

@@ -142,14 +142,20 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
         app.buttons["Choose group"].tap()
+        let context = element(app, "category-context.activity")
+        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains("Quokka activity fixture"))
+        XCTAssertTrue(element(app, "category-context.timestamp").exists)
         let work = app.buttons["category-select.work"], personal = app.buttons["category-select.personal"]
         work.tap(); personal.tap()
+        XCTAssertTrue(context.isHittable)
         XCTAssertEqual(work.value as? String, "Selected")
         XCTAssertEqual(personal.value as? String, "Selected")
-        let create = app.buttons["category-select.create"]; reveal(create, in: app); create.tap()
+        let create = app.buttons["category-select.create"]; reveal(create, in: app)
+        XCTAssertTrue(context.isHittable); create.tap()
         app.alerts.textFields["Group name"].typeText("Creative Practice")
         app.alerts.buttons["Create"].tap()
         XCTAssertTrue(app.navigationBars["Choose groups"].waitForExistence(timeout: 5))
+        XCTAssertTrue(context.isHittable)
         let created = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "category-select.", "Creative Practice")).firstMatch
         reveal(created, in: app); XCTAssertEqual(created.value as? String, "Selected")
         reveal(work, in: app); XCTAssertEqual(work.value as? String, "Selected")
@@ -424,6 +430,75 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("ReviewVisibleDatesOrAllDays", in: app)
     }
 
+    func testLongEntryStaysVisibleAboveTheCategoryChecklist() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-long-grouping-ledger"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        app.buttons["Choose group"].tap()
+        let context = element(app, "category-context.activity")
+        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.hasPrefix("Preparing classes"))
+        app.buttons["category-context.expand"].tap()
+        XCTAssertEqual(app.buttons["category-context.expand"].label, "Show less")
+        let create = app.buttons["category-select.create"]; reveal(create, in: app)
+        XCTAssertTrue(context.isHittable)
+        XCTAssertTrue(element(app, "category-context.timestamp").isHittable)
+        recordScreen("PinnedLongEntryCategoryPicker", in: app)
+        app.buttons["category-context.expand"].tap()
+        let work = app.buttons["category-select.work"]; reveal(work, in: app); work.tap()
+        let personal = app.buttons["category-select.personal"]; reveal(personal, in: app); personal.tap()
+        XCTAssertTrue(context.isHittable)
+        XCTAssertEqual(work.value as? String, "Selected"); XCTAssertEqual(personal.value as? String, "Selected")
+        app.buttons["group-selection.done"].tap()
+    }
+
+    func testTrendComparisonFiltersHighlightsAndRemembersCategoriesAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-many-trends-fixture"]; app.launch()
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        app.buttons["Show daily trend"].tap()
+        let count = element(app, "report.trend.selected-count")
+        XCTAssertTrue(count.waitForExistence(timeout: 5)); XCTAssertEqual(count.label, "3 categories")
+        app.buttons["report.trend.choose"].tap()
+        for item in app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trend-select.")).allElementsBoundByIndex {
+            if item.value as? String == "Selected" { item.tap() }
+        }
+        app.buttons["trend-select.work"].tap(); app.buttons["trend-select.social"].tap()
+        app.buttons["trend-select.done"].tap()
+        XCTAssertEqual(count.label, "2 categories")
+        app.buttons["report.trend.highlight.work"].tap()
+        XCTAssertTrue(app.buttons["report.trend.highlight.work"].isSelected)
+        recordScreen("SelectedTrendCategoriesHighlighted", in: app)
+        app.terminate(); app.launchArguments = []; app.launch()
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        app.buttons["Show daily trend"].tap()
+        XCTAssertEqual(count.label, "2 categories")
+        XCTAssertTrue(app.buttons["report.trend.highlight.work"].exists)
+        XCTAssertTrue(app.buttons["report.trend.highlight.social"].exists)
+    }
+
+    func testTrendDayInspectionAndSeparateCategoryChartsUseBothUnits() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-many-trends-fixture"]; app.launch()
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        app.buttons["Show daily trend"].tap()
+        let chart = element(app, "report.trend.chart"); reveal(chart, in: app)
+        let first = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
+        let last = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
+        first.press(forDuration: 1, thenDragTo: last)
+        let values = element(app, "report.trend.day-values")
+        XCTAssertTrue(values.waitForExistence(timeout: 5))
+        recordScreen("TrendDayInspection", in: app)
+        let layout = app.segmentedControls["report.trend.layout"]; reveal(layout, in: app)
+        layout.buttons["By category"].tap()
+        let panel = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.trend.category.")).firstMatch
+        XCTAssertTrue(panel.waitForExistence(timeout: 5)); recordScreen("SeparateCategoryTrendsHours", in: app)
+        let units = app.segmentedControls["report.trend.units"]; reveal(units, in: app)
+        units.buttons["Percentages"].tap()
+        XCTAssertTrue(app.staticTexts["Share of each day’s tracked time"].exists)
+        recordScreen("SeparateCategoryTrendsPercentages", in: app)
+        app.terminate(); app.launchArguments = []; app.launch()
+        app.buttons["Show daily trend"].tap()
+        XCTAssertTrue(layout.buttons["By category"].isSelected)
+        XCTAssertTrue(units.buttons["Percentages"].isSelected)
+    }
+
     func testCategoryLineTrendsAndUnitsAreOnMainDashboard() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-trend-fixture"]; app.launch()
         let period = element(app, "report.range"); XCTAssertTrue(period.waitForExistence(timeout: 10))
@@ -672,6 +747,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Log"].tap()
         let field = element(app, "checkin.activity"); field.tap(); field.typeText("Two activities")
         let selector = element(app, "checkin.category"); reveal(selector, in: app); selector.tap()
+        XCTAssertEqual(element(app, "category-context.activity").label, "Two activities")
         app.buttons["category-select.work"].tap()
         app.buttons["category-select.teaching"].tap()
         XCTAssertTrue(app.alerts["Replace conflicting categories?"].waitForExistence(timeout: 5))

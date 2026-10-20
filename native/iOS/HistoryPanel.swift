@@ -7,7 +7,6 @@ struct HistoryPanel: View {
     let report: HistoryReport
     var expandsBreakdown = false
     let select: (BreakdownRow) -> Void
-    @State private var trendPercent = false
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
     private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
@@ -32,7 +31,7 @@ struct HistoryPanel: View {
                     trend.containerRelativeFrame(.horizontal).id(2)
                 }.scrollTargetLayout()
             }.scrollTargetBehavior(.paging).scrollPosition(id: $page).scrollIndicators(.hidden)
-                .frame(height: page == 0 ? breakdownHeight : page == 2 ? 340 : 250)
+                .frame(height: page == 0 ? breakdownHeight : page == 2 ? 480 : 250)
                 .accessibilityIdentifier("report.pages")
             HStack(spacing: 8) {
                 ForEach(0..<3) { index in
@@ -122,54 +121,7 @@ struct HistoryPanel: View {
             }.padding(.bottom, 8)
         }.accessibilityIdentifier("report.view.pie")
     }
-    private var trend: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                Picker("Trend units", selection: $trendPercent) {
-                    Text("Hours").tag(false)
-                    Text("Percentages").tag(true)
-                }.pickerStyle(.segmented).accessibilityIdentifier("report.trend.units")
-                Text(trendPercent ? "Share of each day’s tracked time" : "Hours in each category by day")
-                    .font(.caption).foregroundStyle(.secondary)
-                if report.dailyTotals.isEmpty { empty }
-                else {
-                    Chart(report.dailyTotals) { item in
-                        LineMark(x: .value("Day", item.day),
-                                 y: .value(trendPercent ? "Percent" : "Hours", trendPercent ? item.percent : item.minutes / 60),
-                                 series: .value("Series", item.seriesID))
-                            .foregroundStyle(by: .value("Group", item.name))
-                            .interpolationMethod(.linear)
-                        PointMark(x: .value("Day", item.day),
-                                  y: .value(trendPercent ? "Percent" : "Hours", trendPercent ? item.percent : item.minutes / 60))
-                            .foregroundStyle(by: .value("Group", item.name))
-                            .accessibilityLabel("\(item.day.formatted(date: .abbreviated, time: .omitted)), \(item.name)")
-                            .accessibilityValue("\(item.percent.formatted(.number.precision(.fractionLength(1)))) percent, \(store.duration(item.minutes))")
-                    }.chartForegroundStyleScale(domain: report.rows.map(\.name), range: report.rows.map { color($0.id) })
-                        .chartXScale(domain: report.start...max(report.end, report.start.addingTimeInterval(3600)))
-                        .chartYScale(domain: 0...(trendPercent ? 100 : max(1, report.dailyTotals.map { $0.minutes / 60 }.max() ?? 1)))
-                        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
-                        .chartYAxis {
-                            AxisMarks { value in
-                                AxisGridLine(); AxisTick()
-                                AxisValueLabel {
-                                    if let number = value.as(Double.self) {
-                                        Text(trendPercent ? "\(number.formatted())%" : "\(number.formatted())h")
-                                    }
-                                }
-                            }
-                        }
-                        .environment(\.calendar, store.ledger.reportingCalendar())
-                        .environment(\.timeZone, store.ledger.reportingCalendar().timeZone)
-                        .frame(height: 240).accessibilityIdentifier("report.trend.chart")
-                    if Set(report.dailyTotals.map(\.day)).count == 1 {
-                        Text("Choose Past 7 days or a longer period to compare days.").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Text("Missing days break the lines. Percentages use each day’s tracked time; today is still in progress.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }.padding(.bottom, 8)
-        }.accessibilityIdentifier("report.view.trend")
-    }
+    private var trend: some View { CategoryTrendView(report: report, isVisible: page == 2) }
     private var empty: some View {
         Text("Log an activity to start this view.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 150)
     }

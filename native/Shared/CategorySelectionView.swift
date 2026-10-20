@@ -6,6 +6,8 @@ import LedgerCore
 struct CategorySelectionPicker: View {
     @EnvironmentObject var store: LedgerStore
     @Binding var selection: [String]
+    var activity: String? = nil
+    var timestamp: Date? = nil
     @State private var showing = false
     private var title: String {
         selection.isEmpty ? "Uncategorized" : selection.map { store.ledger.categoryPath($0) }.joined(separator: " + ")
@@ -15,7 +17,7 @@ struct CategorySelectionPicker: View {
             HStack { Text("Categories"); Spacer(); Text(title).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         }.sheet(isPresented: $showing) {
             NavigationStack {
-                CategorySelectionList(selection: $selection)
+                CategorySelectionList(selection: $selection, activity: activity, timestamp: timestamp)
                     .navigationTitle("Choose groups")
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showing = false } } }
             }
@@ -28,6 +30,8 @@ struct CategorySelectionPicker: View {
 struct CategorySelectionList: View {
     @EnvironmentObject private var store: LedgerStore
     @Binding var selection: [String]
+    var activity: String? = nil
+    var timestamp: Date? = nil
     @State private var replacing: String?
     @State private var creating = false
     @State private var groupName = ""
@@ -55,6 +59,11 @@ struct CategorySelectionList: View {
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("category-select.error") }
             Text("Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected.").font(.footnote).foregroundStyle(.secondary)
         }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let activity, !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    CategoryEntryContext(activity: activity, timestamp: timestamp)
+                }
+            }
             .alert("New group", isPresented: $creating) {
                 TextField("Group name", text: $groupName)
                 Button("Create") {
@@ -79,5 +88,43 @@ struct CategorySelectionList: View {
                     Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
                 }
             }
+    }
+}
+
+/// Separate from the scrolling checklist so the selected entry is never lost
+/// when checking categories, resolving a conflict, or returning from creation.
+private struct CategoryEntryContext: View {
+    @EnvironmentObject private var store: LedgerStore
+    let activity: String
+    let timestamp: Date?
+    @State private var expanded = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let timestamp {
+                Text("\(store.dayLabel(timestamp)) · \(store.time(timestamp))")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("category-context.timestamp")
+            }
+            if expanded {
+                ScrollView {
+                    Text(activity).frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled).accessibilityIdentifier("category-context.activity")
+                }
+                #if os(watchOS)
+                .frame(height: 80)
+                #else
+                .frame(height: 160)
+                #endif
+            } else {
+                Text(activity).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("category-context.activity")
+            }
+            if activity.count > 100 || activity.contains("\n") {
+                Button(expanded ? "Show less" : "Read full entry") { expanded.toggle() }
+                    .font(.caption).accessibilityIdentifier("category-context.expand")
+            }
+            Divider()
+        }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading).background(.background)
     }
 }
