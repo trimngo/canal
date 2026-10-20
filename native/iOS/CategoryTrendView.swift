@@ -72,6 +72,7 @@ struct CategoryTrendView: View {
             .onChange(of: calendar.timeZone.identifier) { _, _ in selectedDate = nil }
             .onChange(of: report.rows.map(\.id)) { _, _ in
                 if isVisible, savedIDs == nil, !report.rows.isEmpty { saveSelection(report.trendRows(selectedIDs: nil).map(\.id)) }
+                if !compared.contains(where: { $0.id == highlightedID }) { highlightedID = nil }
             }
             .onChange(of: savedCategories) { _, _ in
                 if !compared.contains(where: { $0.id == highlightedID }) { highlightedID = nil }
