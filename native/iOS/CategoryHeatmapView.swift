@@ -79,7 +79,7 @@ struct CategoryHeatmapView: View {
                     }
                 }
             }
-        }.accessibilityIdentifier("report.view.heatmap")
+        }.accessibilityElement(children: .contain).accessibilityIdentifier("report.view.heatmap")
             .environment(\.calendar, calendar).environment(\.timeZone, calendar.timeZone)
             .onChange(of: report.start) { _, _ in clearSelection() }
             .onChange(of: calendar.startOfDay(for: report.end)) { _, _ in clearSelection() }

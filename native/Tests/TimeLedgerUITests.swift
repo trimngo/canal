@@ -570,6 +570,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-many-trends-fixture"]; app.launch()
         element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
         app.buttons["Show heatmap"].tap()
+        recordScreen("FullScreenHeatmapInitial", in: app)
         let units = app.segmentedControls["report.heatmap.units"]
         XCTAssertTrue(units.waitForExistence(timeout: 5))
         units.buttons["Percentages"].tap()
