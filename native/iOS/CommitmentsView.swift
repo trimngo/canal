@@ -82,7 +82,7 @@ struct CommitmentsView: View {
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Organize", systemImage: "folder.badge.plus") { openOrganizer() }.accessibilityIdentifier("plan.organize")
+                Button("Organize") { openOrganizer() }.accessibilityIdentifier("plan.organize")
             }
         }
         .onAppear { if !loaded { load(); loaded = true } }
