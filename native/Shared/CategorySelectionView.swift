@@ -108,7 +108,7 @@ private struct CategoryEntryContext: View {
             if expanded {
                 ScrollView {
                     Text(activity).frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled).accessibilityIdentifier("category-context.activity")
+                        .accessibilityIdentifier("category-context.activity")
                 }
                 #if os(watchOS)
                 .frame(height: 80)

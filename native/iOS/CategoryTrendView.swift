@@ -62,6 +62,8 @@ struct CategoryTrendView: View {
                 }
             }
             .onChange(of: report.start) { _, _ in selectedDate = nil }
+            .onChange(of: calendar.startOfDay(for: report.end)) { _, _ in selectedDate = nil }
+            .onChange(of: calendar.timeZone.identifier) { _, _ in selectedDate = nil }
             .onChange(of: report.rows.map(\.id)) { _, _ in
                 if isVisible, savedIDs == nil, !report.rows.isEmpty { saveSelection(report.trendRows(selectedIDs: nil).map(\.id)) }
             }
