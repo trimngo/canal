@@ -68,6 +68,9 @@ struct CategorySelectionList: View {
             .alert("New group", isPresented: $creating) {
                 TextField("Group name", text: $groupName)
                 Button("Create") {
+                    // Close before publishing the new category so a rebuilt
+                    // presenting view cannot present this alert again.
+                    creating = false
                     do {
                         let id = try store.saveCategory(id: nil, name: groupName)
                         selection.append(id); error = nil

@@ -1243,7 +1243,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(context.isHittable)
         app.buttons["idea-categories.done"].tap()
         XCTAssertTrue(categorize.label.contains("Work")); XCTAssertTrue(categorize.label.contains("Socializing"))
-        let filter = app.buttons["inbox.category-filter"]; reveal(filter, in: app); filter.tap()
+        let filter = app.buttons["inbox.category-filter"]
+        // The search row is above the current idea and can be unloaded by List.
+        for _ in 0..<8 { if filter.exists, filter.isHittable { break }; app.swipeDown() }
+        reveal(filter, in: app); filter.tap()
         app.buttons["inbox.filter.work"].tap()
         XCTAssertTrue(app.staticTexts["First idea"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Second idea"].exists)
@@ -1269,6 +1272,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["category-select.create"].tap()
         app.alerts.textFields["Group name"].typeText("Creative Projects")
         app.alerts.buttons["Create"].tap()
+        XCTAssertTrue(app.alerts["New group"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["category-select.work"].value as? String, "Selected")
         XCTAssertTrue(context.isHittable)
         app.buttons["idea-categories.done"].tap()
         XCTAssertEqual(first.label, firstTitle); XCTAssertEqual(second.label, secondTitle)
