@@ -16,7 +16,9 @@ struct CaptureCategoryButton: View {
                 .font(.subheadline).lineLimit(2).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
         }.buttonStyle(.borderless).accessibilityIdentifier(identifier)
             .accessibilityLabel(names.isEmpty ? "Categorize idea" : "Categories: \(names)")
-            .sheet(isPresented: $showing) { CaptureCategoryView(capture: current) }
+            .sheet(isPresented: $showing) {
+                CaptureCategoryView(capture: current, initialSelection: store.ledger.categoryIDs(for: current))
+            }
     }
 }
 
@@ -26,8 +28,8 @@ private struct CaptureCategoryView: View {
     let capture: Capture
     @State private var selection: [String]
     @State private var error: String?
-    init(capture: Capture) {
-        self.capture = capture; _selection = State(initialValue: capture.categoryIDs ?? [])
+    init(capture: Capture, initialSelection: [String]) {
+        self.capture = capture; _selection = State(initialValue: initialSelection)
     }
     var body: some View {
         NavigationStack {
@@ -46,7 +48,6 @@ private struct CaptureCategoryView: View {
                 .alert("Couldn’t save categories", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                     Button("OK") { error = nil }
                 } message: { Text(error ?? "") }
-                .onAppear { selection = store.ledger.categoryIDs(for: capture) }
         }
     }
 }
