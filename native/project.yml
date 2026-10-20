@@ -58,7 +58,7 @@ targets:
         NSRemindersFullAccessUsageDescription: Dash transfers unfinished reminders from your chosen capture list into your idea inbox, deleting originals only after saving them. It can create a Dash Inbox list when you ask.
         NSRemindersUsageDescription: Dash transfers ideas from your selected Reminders list, removing originals after saving them.
         UIBackgroundModes: [fetch]
-        BGTaskSchedulerPermittedIdentifiers: [com.trimngo.TimeLedger.reminders-refresh]
+        BGTaskSchedulerPermittedIdentifiers: [com.trimngo.TimeLedger.reminders-refresh, com.trimngo.TimeLedger.checkins-refresh]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)

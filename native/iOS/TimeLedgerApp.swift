@@ -51,6 +51,9 @@ struct TimeLedgerApp: App {
                 .onChange(of: store.ledger.settings) { _, settings in
                     Task { do { try await NotificationScheduler.shared.apply(settings) } catch { store.report(error) } }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                    Task { do { try await NotificationScheduler.shared.apply(store.ledger.settings) } catch { store.report(error) } }
+                }
                 .alert("Couldn’t complete that", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
                     Button("OK") { store.error = nil }
                 } message: { Text(store.error ?? "") }

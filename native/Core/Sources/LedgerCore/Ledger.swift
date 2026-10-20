@@ -11,7 +11,7 @@ public enum LedgerError: LocalizedError {
         case .invalidCategory: return "Choose a category with a name up to 60 characters."
         case .futureSlot: return "A sample can only describe the present or the past."
         case .invalidSlot: return "Choose a valid sample time."
-        case .invalidSchedule: return "Choose a same-day window of up to 15 hours, in 15-minute steps."
+        case .invalidSchedule: return "Choose an available interval and a same-day window of up to 15 hours, in 15-minute steps."
         case .duplicateCategory: return "A category with that name already exists."
         case .reservedCategory: return "Uncategorized is reserved for activities waiting to be grouped. Choose another name."
         }
@@ -126,6 +126,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var reportingTimeZoneIdentifier: String?
     public var notificationsAllDay = false
     public var notificationsEnabled = false
+    public var notificationTiming = NotificationTiming.regular
+    public var regularNotificationInterval = 15
+    public var randomizedNotificationInterval = 15
     public var startMinute = 7 * 60
     public var endMinute = 22 * 60
     public var use24HourTime = false
@@ -136,12 +139,16 @@ public struct Settings: Codable, Equatable, Sendable {
         // Keep the existing wire key so older Watch versions retain the same time zone.
         case reportingTimeZoneIdentifier = "wakingTimeZoneIdentifier"
         case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision
+        case notificationTiming, regularNotificationInterval, randomizedNotificationInterval
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         reportingTimeZoneIdentifier = try values.decodeIfPresent(String.self, forKey: .reportingTimeZoneIdentifier)
         notificationsAllDay = try values.decodeIfPresent(Bool.self, forKey: .notificationsAllDay) ?? false
         notificationsEnabled = try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
+        notificationTiming = try values.decodeIfPresent(NotificationTiming.self, forKey: .notificationTiming) ?? .regular
+        regularNotificationInterval = try values.decodeIfPresent(Int.self, forKey: .regularNotificationInterval) ?? 15
+        randomizedNotificationInterval = try values.decodeIfPresent(Int.self, forKey: .randomizedNotificationInterval) ?? 15
         startMinute = try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? 420
         endMinute = try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? 1320
         use24HourTime = try values.decodeIfPresent(Bool.self, forKey: .use24HourTime) ?? false
@@ -149,15 +156,24 @@ public struct Settings: Codable, Equatable, Sendable {
         revision = try values.decodeIfPresent(Revision.self, forKey: .revision) ?? Revision()
     }
     public func notificationSchedule() throws -> [ReminderTime] {
-        if notificationsAllDay { return [0, 15, 30, 45].map { ReminderTime(hour: nil, minute: $0) } }
+        try validateNotificationSettings()
+        if notificationsAllDay, 60 % regularNotificationInterval == 0 {
+            return stride(from: 0, to: 60, by: regularNotificationInterval).map { ReminderTime(hour: nil, minute: $0) }
+        }
         return try notificationMinutes().map { ReminderTime(hour: $0 / 60, minute: $0 % 60) }
     }
     public func notificationMinutes() throws -> [Int] {
-        if notificationsAllDay { return Array(stride(from: 0, to: 1440, by: 15)) }
+        try validateNotificationSettings()
+        if notificationsAllDay { return Array(stride(from: 0, to: 1440, by: regularNotificationInterval)) }
+        return Array(stride(from: startMinute, through: endMinute, by: regularNotificationInterval))
+    }
+    public func validateNotificationSettings() throws {
+        guard NotificationTiming.intervals.contains(regularNotificationInterval),
+              NotificationTiming.intervals.contains(randomizedNotificationInterval) else { throw LedgerError.invalidSchedule }
+        if notificationsAllDay { return }
         guard startMinute >= 0, endMinute < 1440, endMinute > startMinute,
               startMinute % 15 == 0, endMinute % 15 == 0,
               endMinute - startMinute <= 900 else { throw LedgerError.invalidSchedule }
-        return Array(stride(from: startMinute, through: endMinute, by: 15))
     }
 }
 

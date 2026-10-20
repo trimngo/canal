@@ -29,7 +29,16 @@ struct SettingsView: View {
                 Text("Capture an idea in one sentence: ‘Siri, remind me to…’ Connect a list and set it as your default in iPhone Settings.")
             }
             Section {
-                Toggle("Every 15 minutes", isOn: $settings.notificationsEnabled)
+                Toggle("Check-in notifications", isOn: $settings.notificationsEnabled)
+                    .accessibilityIdentifier("settings.notifications-enabled")
+                Picker("Timing", selection: $settings.notificationTiming) {
+                    ForEach(NotificationTiming.allCases) { Text($0.name).tag($0) }
+                }.accessibilityIdentifier("settings.notification-timing")
+                Picker(settings.notificationTiming == .regular ? "Interval" : "Average interval", selection: intervalBinding) {
+                    ForEach(NotificationTiming.intervals, id: \.self) { Text(intervalLabel($0)).tag($0) }
+                }.accessibilityIdentifier("settings.notification-interval")
+                Text(timingExplanation).font(.footnote).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("settings.notification-explanation")
                 Toggle("All day", isOn: $settings.notificationsAllDay).accessibilityIdentifier("settings.notifications-all-day")
                 if !settings.notificationsAllDay {
                 Picker("Start", selection: $settings.startMinute) {
@@ -48,6 +57,9 @@ struct SettingsView: View {
                             proposed.endMinute = settings.endMinute
                             proposed.notificationsEnabled = settings.notificationsEnabled
                             proposed.notificationsAllDay = settings.notificationsAllDay
+                            proposed.notificationTiming = settings.notificationTiming
+                            proposed.regularNotificationInterval = settings.regularNotificationInterval
+                            proposed.randomizedNotificationInterval = settings.randomizedNotificationInterval
                             _ = try proposed.notificationMinutes()
                             if proposed.notificationsEnabled, !(try await notifications.permission()) { throw NotificationError.denied }
                             try await notifications.apply(proposed)
@@ -60,8 +72,12 @@ struct SettingsView: View {
                     }
                 }.disabled(saving || !store.storageAvailable).accessibilityIdentifier("settings.save-notifications")
                 Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
+                if !notifications.scheduleStatus.isEmpty {
+                    Text(notifications.scheduleStatus).font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.notification-schedule-status")
+                }
             } header: { Text("Check-in notifications") } footer: {
-                Text("All day prompts at :00, :15, :30, and :45, including overnight. Or choose a window of up to 15 hours (default 7 AM–10 PM). Use Sleep Focus to silence Dash and mirror Focus on your Watch. Silenced alerts may remain in Notification Center. You can log manually anytime.")
+                Text("Use all day, or a window of up to 15 hours. Use Sleep Focus to silence Dash and mirror Focus on your Watch. Silenced alerts may remain in Notification Center. You can log manually anytime. Your response records what you are doing at that moment.")
             }
             Section("Test delivery") {
                 Button("Notify me in 15 seconds") {
@@ -150,6 +166,31 @@ struct SettingsView: View {
                 await notifications.refreshStatus()
             }
             .sheet(isPresented: $managingGroups) { GroupManagerView() }
+    }
+    private var intervalBinding: Binding<Int> {
+        Binding(get: {
+            settings.notificationTiming == .regular ? settings.regularNotificationInterval : settings.randomizedNotificationInterval
+        }, set: { value in
+            if settings.notificationTiming == .regular { settings.regularNotificationInterval = value }
+            else { settings.randomizedNotificationInterval = value }
+        })
+    }
+    private func intervalLabel(_ minutes: Int) -> String {
+        if minutes == 60 { return "1 hour" }
+        if minutes == 120 { return "2 hours" }
+        return "\(minutes) minutes"
+    }
+    private var timingExplanation: String {
+        if settings.notificationTiming == .randomized {
+            let average = Double(settings.randomizedNotificationInterval)
+            let lower = (average * 2 / 3).formatted(.number.precision(.fractionLength(0...1)))
+            let upper = (average * 4 / 3).formatted(.number.precision(.fractionLength(0...1)))
+            return "Random gaps of about \(lower)–\(upper) minutes during your chosen hours. The average is approximate. iOS queues up to 60 alerts; open Dash or save a log to keep them coming. Background refresh can also refill them, but iOS controls when it runs."
+        }
+        if settings.usesQueuedNotifications {
+            return "Regular gaps during your chosen hours. This frequent window uses a queue of up to 60 alerts. Open Dash or save a log to refill it; background refresh is best effort."
+        }
+        return "Check-ins repeat on a regular clock schedule, every \(settings.regularNotificationInterval) minutes. Each timing mode remembers its own interval."
     }
     private func minuteLabel(_ minutes: Int) -> String {
         let start = Calendar.current.startOfDay(for: Date())

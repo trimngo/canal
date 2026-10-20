@@ -709,6 +709,65 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.switches["settings.notifications-all-day"].value as? String, "1")
     }
 
+    func testNotificationTimingModesRememberSeparateIntervalsAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        let timing = element(app, "settings.notification-timing")
+        let interval = element(app, "settings.notification-interval")
+        XCTAssertTrue(timing.waitForExistence(timeout: 5))
+        XCTAssertTrue(timing.label.contains("Regular") || timing.value as? String == "Regular")
+        interval.tap(); app.buttons["30 minutes"].tap()
+        timing.tap(); app.buttons["Randomized"].tap()
+        XCTAssertTrue(interval.label.contains("15 minutes") || interval.value as? String == "15 minutes")
+        interval.tap(); app.buttons["20 minutes"].tap()
+        let explanation = element(app, "settings.notification-explanation")
+        XCTAssertTrue(explanation.label.contains("13.3–26.7"))
+        let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
+        recordScreen("RandomizedNotificationSettings", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(timing.label.contains("Randomized") || timing.value as? String == "Randomized")
+        XCTAssertTrue(interval.label.contains("20 minutes") || interval.value as? String == "20 minutes")
+        timing.tap(); app.buttons["Regular"].tap()
+        XCTAssertTrue(interval.label.contains("30 minutes") || interval.value as? String == "30 minutes")
+        reveal(save, in: app); save.tap()
+        app.terminate(); app.launch(); app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(interval.label.contains("30 minutes") || interval.value as? String == "30 minutes")
+        XCTAssertTrue(timing.label.contains("Regular") || timing.value as? String == "Regular")
+    }
+
+    func testRandomNotificationsQueueAndSwitchBackToRepeating() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        element(app, "settings.notification-timing").tap(); app.buttons["Randomized"].tap()
+        let allDay = app.switches["settings.notifications-all-day"]
+        allDay.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let enabled = app.switches["settings.notifications-enabled"]
+        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
+        let allow = app.alerts.buttons["Allow"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if springboard.alerts.buttons["Allow"].waitForExistence(timeout: 2) { springboard.alerts.buttons["Allow"].tap() }
+        let status = element(app, "settings.notification-schedule-status")
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        let scheduled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Scheduled through"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [scheduled], timeout: 10), .completed)
+        let queued = status.label
+        reveal(save, in: app); save.tap()
+        XCTAssertEqual(status.label, queued) // refilling does not postpone scheduled prompts
+        recordScreen("RandomNotificationQueue", in: app)
+        let timing = element(app, "settings.notification-timing"); reveal(timing, in: app); timing.tap()
+        app.buttons["Regular"].tap(); reveal(save, in: app); save.tap()
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        let repeating = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Repeats automatically"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [repeating], timeout: 10), .completed)
+        let off = app.switches["settings.notifications-enabled"]; reveal(off, in: app)
+        off.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        reveal(save, in: app); save.tap()
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
+    }
+
     func testTargetsAreAccessibleAndPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
         XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 10))

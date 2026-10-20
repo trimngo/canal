@@ -7,6 +7,7 @@ final class SiriAppDelegate: NSObject, UIApplicationDelegate {
         // Install its delegate now, rather than waiting for a SwiftUI task.
         LedgerStore.shared.start()
         NotificationScheduler.shared.configureActions()
+        NotificationScheduler.shared.registerBackgroundRefresh()
         ReminderInbox.shared.registerBackgroundRefresh()
         return true
     }
