@@ -10,7 +10,7 @@ destination.mkdir(parents=True, exist_ok=True)
 for item in json.loads((source / 'manifest.json').read_text()):
     for attachment in item.get('attachments', []):
         name = attachment.get('suggestedHumanReadableName', '')
-        if name.startswith('Review-') and name.endswith('.png'):
+        if name.endswith('.png') or attachment.get('exportedFileName', '').endswith('.txt'):
             filename = attachment.get('exportedFileName')
             if filename and (source / filename).is_file():
                 shutil.copy2(source / filename, destination / Path(name).name)
