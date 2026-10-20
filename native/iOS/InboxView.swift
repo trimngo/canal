@@ -10,6 +10,7 @@ struct InboxView: View {
     @FocusState private var focused: Bool
     @FocusState private var searchFocused: Bool
     @State private var searchText = ""
+    @State private var categoryFilter: String?
     @State private var showDone = false
     @State private var ranking = false
     @State private var showBacklog = false
@@ -22,8 +23,8 @@ struct InboxView: View {
     private var waiting: [Capture] { store.inbox.unseen }
     private var inProgress: [Capture] { store.inbox.inProgress }
     private var backlog: [Capture] { store.inbox.backlog }
-    private var searching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var searchResults: [Capture] { store.ledger.searchInbox(searchText) }
+    private var searching: Bool { categoryFilter != nil || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var searchResults: [Capture] { store.ledger.searchInbox(searchText, categoryID: categoryFilter) }
     private var completed: [Capture] {
         store.ledger.captures.filter { $0.deletedAt == nil && $0.isDone }.sorted { $0.createdAt > $1.createdAt }
     }
@@ -53,6 +54,23 @@ struct InboxView: View {
                                 .labelStyle(.iconOnly).buttonStyle(.borderless)
                                 .accessibilityIdentifier("inbox.search-clear")
                         }
+                        Menu {
+                            Button("All categories") { categoryFilter = nil }
+                            Button("Uncategorized") { categoryFilter = "uncategorized" }
+                                .accessibilityIdentifier("inbox.filter.uncategorized")
+                            ForEach(store.ledger.orderedCategories) { category in
+                                Button(store.ledger.categoryPath(category.id)) { categoryFilter = category.id }
+                                    .accessibilityIdentifier("inbox.filter.\(category.id)")
+                            }
+                        } label: {
+                            Image(systemName: categoryFilter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                                .frame(width: 44, height: 44)
+                        }.buttonStyle(.borderless).accessibilityLabel("Filter ideas by category").accessibilityIdentifier("inbox.category-filter")
+                    }
+                    if let categoryFilter {
+                        Button { self.categoryFilter = nil } label: {
+                            Label(store.ledger.categoryPath(categoryFilter), systemImage: "xmark.circle.fill")
+                        }.font(.subheadline).accessibilityLabel("Clear category filter").accessibilityIdentifier("inbox.category-filter-clear")
                     }
                 }
                 if store.canUndoCaptureDeletion {
@@ -74,7 +92,7 @@ struct InboxView: View {
                         ForEach(ranked) { captureRow($0) }
 
                     } header: {
-                        Text("Top 10 Priorities (\(ranked.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.ranked-title")
+                        Text("Top \(InboxRanking.priorityLimit) Priorities (\(ranked.count))").textCase(nil).font(.headline).accessibilityIdentifier("inbox.ranked-title")
                     } footer: {
                         Text(rankingStatus).accessibilityIdentifier("inbox.ranking-status")
                     }
@@ -220,6 +238,7 @@ struct InboxView: View {
                     .accessibilityAction(named: "Edit idea") { focused = false; editing = capture }
                     .accessibilityIdentifier("inbox.details.\(capture.id)")
                 Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
+                CaptureCategoryButton(capture: capture, identifier: "inbox.category.\(capture.id)")
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button("Edit idea") { focused = false; editing = capture }
@@ -443,6 +462,7 @@ private struct RankingView: View {
             } label: {
                 Text(capture.text).font(.title3).frame(maxWidth: .infinity, minHeight: 90).padding(12)
             }.buttonStyle(.bordered).accessibilityIdentifier(id)
+            CaptureCategoryButton(capture: capture, identifier: "\(id).category")
             HStack {
                 Button("Snooze", systemImage: "moon.zzz") { snoozing = capture }
                     .accessibilityIdentifier("\(id).snooze")

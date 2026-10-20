@@ -570,6 +570,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-many-trends-fixture"]; app.launch()
         element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
         app.buttons["Show heatmap"].tap()
+        recordScreen("FullScreenHeatmapInitial", in: app)
         let units = app.segmentedControls["report.heatmap.units"]
         XCTAssertTrue(units.waitForExistence(timeout: 5))
         units.buttons["Percentages"].tap()
@@ -973,8 +974,8 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-ranked-inbox-fixture"]; app.launch()
         openInbox(app)
         XCTAssertTrue(app.staticTexts["Ranked priority 1"].waitForExistence(timeout: 5))
-        XCTAssertTrue(element(app, "inbox.ranked-title").label.contains("10"))
-        XCTAssertFalse(app.staticTexts["Ranked priority 11"].exists)
+        XCTAssertTrue(element(app, "inbox.ranked-title").label.contains("20"))
+        XCTAssertFalse(app.staticTexts["Ranked priority 21"].exists)
         XCTAssertFalse(app.staticTexts["New imported idea"].isHittable)
         recordScreen("InboxRankedFirst", in: app)
         app.buttons["inbox.new-shortcut"].tap()
@@ -1191,7 +1192,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-screening-inbox-fixture"]; app.launch()
         openInbox(app, capture: true); openRanking(app)
         XCTAssertEqual(app.buttons["ranking.first"].label, "One quick new idea")
-        XCTAssertEqual(app.buttons["ranking.second"].label, "Priority 10")
+        XCTAssertEqual(app.buttons["ranking.second"].label, "Priority 20")
         XCTAssertTrue(element(app, "ranking.review-progress").exists)
         recordScreen("FastNewIdeaScreening", in: app)
         app.buttons["ranking.second"].tap()
@@ -1230,6 +1231,53 @@ final class TimeLedgerUITests: XCTestCase {
         if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
         XCTAssertTrue(element(app, "inbox.waiting-title").exists)
         XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+    }
+
+    func testInboxUsesJournalCategoriesAndCombinesCategoryAndTextSearch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        openInbox(app)
+        let categorize = app.buttons["inbox.category.a"]; reveal(categorize, in: app); categorize.tap()
+        let context = element(app, "category-context.activity")
+        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains("First idea"))
+        app.buttons["category-select.work"].tap(); app.buttons["category-select.social"].tap()
+        XCTAssertTrue(context.isHittable)
+        app.buttons["idea-categories.done"].tap()
+        XCTAssertTrue(categorize.label.contains("Work")); XCTAssertTrue(categorize.label.contains("Socializing"))
+        let filter = app.buttons["inbox.category-filter"]; reveal(filter, in: app); filter.tap()
+        app.buttons["inbox.filter.work"].tap()
+        XCTAssertTrue(app.staticTexts["First idea"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Second idea"].exists)
+        let search = app.textFields["inbox.search"]; search.tap(); search.typeText("first")
+        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        XCTAssertTrue(app.staticTexts["First idea"].exists)
+        recordScreen("InboxSharedCategoriesAndSearch", in: app)
+        app.buttons["inbox.search-clear"].tap(); app.buttons["inbox.category-filter-clear"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        reveal(categorize, in: app); XCTAssertTrue(categorize.label.contains("Work"))
+    }
+
+    func testRankingCanCategorizeWithoutAnsweringOrChangingTheComparison() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        openInbox(app); openRanking(app)
+        let first = app.buttons["ranking.first"], second = app.buttons["ranking.second"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let firstTitle = first.label, secondTitle = second.label
+        let categorize = app.buttons["ranking.first.category"]; categorize.tap()
+        let context = element(app, "category-context.activity")
+        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains(firstTitle))
+        app.buttons["category-select.work"].tap()
+        app.buttons["category-select.create"].tap()
+        app.alerts.textFields["Group name"].typeText("Creative Projects")
+        app.alerts.buttons["Create"].tap()
+        XCTAssertTrue(context.isHittable)
+        app.buttons["idea-categories.done"].tap()
+        XCTAssertEqual(first.label, firstTitle); XCTAssertEqual(second.label, secondTitle)
+        XCTAssertTrue(categorize.label.contains("Work")); XCTAssertTrue(categorize.label.contains("Creative Projects"))
+        recordScreen("RankingCategoryShortcut", in: app)
+        app.navigationBars["Rank ideas"].buttons["Done"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app); openRanking(app)
+        XCTAssertEqual(first.label, firstTitle); XCTAssertEqual(second.label, secondTitle)
+        XCTAssertTrue(categorize.label.contains("Creative Projects"))
     }
 
     private func openInbox(_ app: XCUIApplication, capture: Bool = false) {

@@ -3,12 +3,12 @@ import XCTest
 
 /// Compatibility with the retired engine; no tournament executes in Inbox.
 final class PriorityTournamentTests: XCTestCase {
-    private func legacy(_ count: Int = 110) throws -> Ledger {
+    private func legacy(_ count: Int = 110, limit: Int = 10) throws -> Ledger {
         var ledger = Ledger(), ranking = InboxRanking()
         let ids = (0..<count).map { String(format: "%04d", $0) }
         for id in ids { try ledger.addCapture(text: id, id: id, writer: "old-phone") }
-        ranking.ordered = Array(ids.prefix(10))
-        ranking.topTen = TopTenRanking(backlog: Array(ids.dropFirst(10)), preferences: ids.dropFirst(10).map { InboxPreference(winner: "0009", loser: $0) })
+        ranking.ordered = Array(ids.prefix(limit))
+        ranking.topTen = TopTenRanking(backlog: Array(ids.dropFirst(limit)), preferences: ids.dropFirst(limit).map { InboxPreference(winner: String(format: "%04d", limit - 1), loser: $0) })
         ranking.priorityTournament = PriorityTournament(ids: ids)
         ranking.priorityTournament?.confirmed = ranking.ordered
         ranking.tournamentVersion = 1
@@ -66,7 +66,7 @@ final class PriorityTournamentTests: XCTestCase {
         XCTAssertEqual(ledger.captures.count, 14)
         ledger.prepareRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "0010")
-        XCTAssertEqual(ledger.rankingPair?.second, "0009")
+        XCTAssertEqual(ledger.rankingPair?.second, "0005") // Ten legacy priorities leave vacancies in the expanded shortlist.
     }
 
     func testSnapshotPartitionsInboxAndMatchesPublicViews() throws {
@@ -84,16 +84,16 @@ final class PriorityTournamentTests: XCTestCase {
     }
 
     func testThousandIdeaInboxReviewsOneNewIdeaWithoutTraversingATournament() throws {
-        var ledger = try legacy(1000)
+        var ledger = try legacy(1000, limit: 20)
         ledger.normalizeInboxRanking(writer: "phone")
         try ledger.addCapture(text: "New idea", id: "new", writer: "phone")
         ledger.prepareRanking(writer: "phone")
         let pair = try XCTUnwrap(ledger.rankingPair)
-        XCTAssertEqual(pair.first, "new"); XCTAssertEqual(pair.second, "0009")
+        XCTAssertEqual(pair.first, "new"); XCTAssertEqual(pair.second, "0019")
         ledger.chooseCapture(pair.second, from: pair, writer: "phone")
         XCTAssertNil(ledger.rankingPair)
         XCTAssertNil(ledger.inboxRanking?.priorityTournament)
-        XCTAssertEqual(ledger.inboxSnapshot.backlog.count, 991)
+        XCTAssertEqual(ledger.inboxSnapshot.backlog.count, 981)
         XCTAssertTrue(ledger.inboxRanking?.screeningReview?.backlogRemaining.isEmpty == true)
     }
 }

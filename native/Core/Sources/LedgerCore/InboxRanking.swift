@@ -105,6 +105,8 @@ private final class PreferenceGraph {
 }
 
 public struct InboxRanking: Codable, Equatable, Sendable {
+    public static let priorityLimit = 20
+    // Keep the topTen wire field for existing ledgers; capacity is now 20.
     // Legacy fields remain decodable; migration keeps every known ordering edge.
     public var ordered: [String] = []
     public var merge: MergeRanking?
@@ -216,7 +218,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         let valid = Set(ids)
         var seen = Set<String>()
         let previous = ordered.filter { seen.insert($0).inserted }
-        ordered = Array(previous.filter(valid.contains).prefix(10))
+        ordered = Array(previous.filter(valid.contains).prefix(Self.priorityLimit))
         for id in previous where !ordered.contains(id) {
             if !(topTen?.backlog.contains(id) ?? false) { topTen?.backlog.append(id) }
         }
@@ -245,7 +247,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         return ids.filter { !evaluated.contains($0) }
     }
     func needsReview(ids: [String]) -> Bool {
-        !newIDs(ids: ids).isEmpty || (ordered.count < 10 && !backlogIDs(ids: ids).isEmpty)
+        !newIDs(ids: ids).isEmpty || (ordered.count < Self.priorityLimit && !backlogIDs(ids: ids).isEmpty)
     }
     // Compatibility for older callers. Global verification is never a
     // requirement for finishing a screening review.
@@ -253,7 +255,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         guard newIDs(ids: ids).isEmpty, !isActive else { return false }
         let backlog = backlogIDs(ids: ids)
         if backlog.isEmpty { return true }
-        guard ordered.count == 10, let threshold = ordered.last else { return false }
+        guard ordered.count == Self.priorityLimit, let threshold = ordered.last else { return false }
         let below = PreferenceGraph(topTen?.preferences ?? []).below(threshold)
         return backlog.allSatisfy(below.contains)
     }
@@ -280,7 +282,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
     }
     mutating func replenish(ids: [String]) { startSession(ids: ids) }
 
-    /// Screen one idea against #10, then use binary insertion only if it wins.
+    /// Screen one idea against the last priority, then use binary insertion only if it wins.
     /// A new-idea session ends without automatically starting a backlog pass.
     /// Backlog passes are optional, oldest-review first, and visit each item once.
     mutating func advance(ids: [String], includeNewIdeas: Bool = false) {
@@ -314,7 +316,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
                     topTen?.replenishing = false
                     return
                 }
-                topTen?.candidate = TopTenInsertion(item: item, base: ordered, high: ordered.count, screening: ordered.count == 10)
+                topTen?.candidate = TopTenInsertion(item: item, base: ordered, high: ordered.count, screening: ordered.count == Self.priorityLimit)
             }
             guard let candidate = topTen?.candidate else { return }
             if !candidate.screening, candidate.low == candidate.high {
@@ -334,7 +336,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         topTen?.candidate = nil
         topTen?.backlog.removeAll { $0 == candidate.item }
         ordered.insert(candidate.item, at: min(candidate.low, ordered.count))
-        if ordered.count > 10 {
+        if ordered.count > Self.priorityLimit {
             let displaced = ordered.removeLast()
             topTen?.backlog.append(displaced)
         }
@@ -374,7 +376,7 @@ public struct InboxRanking: Codable, Equatable, Sendable {
         topTen?.preferences.removeAll { $0.winner == id || $0.loser == id }
         rememberChain(ordered)
         topTen?.presented?.removeAll { $0 == id }
-        topTen?.candidate = TopTenInsertion(item: id, base: ordered, high: ordered.count, screening: ordered.count == 10)
+        topTen?.candidate = TopTenInsertion(item: id, base: ordered, high: ordered.count, screening: ordered.count == Self.priorityLimit)
         screeningReview?.reviewingBacklog = false
         topTen?.replenishing = true
         advance(ids: [id] + ids.filter { $0 != id }, includeNewIdeas: true)

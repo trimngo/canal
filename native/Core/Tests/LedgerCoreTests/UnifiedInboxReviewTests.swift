@@ -2,16 +2,16 @@ import XCTest
 @testable import LedgerCore
 
 final class UnifiedInboxReviewTests: XCTestCase {
-    private func ranked(_ count: Int = 16) throws -> Ledger {
+    private func ranked(_ count: Int = 26) throws -> Ledger {
         var ledger = Ledger(), ranking = InboxRanking()
         for index in 0..<count {
             let id = String(format: "%03d", index)
             try ledger.addCapture(text: id, id: id, writer: "old-phone", now: Date(timeIntervalSince1970: Double(index)))
-            if index < 10 { ranking.ordered.append(id) }
+            if index < InboxRanking.priorityLimit { ranking.ordered.append(id) }
             else {
                 if ranking.topTen == nil { ranking.topTen = TopTenRanking() }
                 ranking.topTen?.backlog.append(id)
-                ranking.topTen?.preferences.append(InboxPreference(winner: "009", loser: id))
+                ranking.topTen?.preferences.append(InboxPreference(winner: "019", loser: id))
             }
         }
         ranking.revision = ledger.nextRevision(writer: "old-phone")
@@ -46,7 +46,7 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertNotNil(ledger.inboxRanking?.topTen?.candidate)
         XCTAssertNil(ledger.inboxRanking?.priorityTournament)
         try finish(&ledger)
-        XCTAssertEqual(ledger.rankedCaptureIDs, (1...9).map { String(format: "%03d", $0) } + ["new"])
+        XCTAssertEqual(ledger.rankedCaptureIDs, (1...19).map { String(format: "%03d", $0) } + ["new"])
         XCTAssertFalse(ledger.topTenIsVerified)
     }
 
@@ -64,7 +64,7 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertEqual(ledger.rankedCaptureIDs, ["newest"])
         XCTAssertEqual(ledger.rankingPair?.second, "newest")
         try finish(&ledger)
-        XCTAssertEqual(ledger.rankedCaptureIDs, Array(oldIDs.prefix(10)))
+        XCTAssertEqual(ledger.rankedCaptureIDs, Array(oldIDs.prefix(InboxRanking.priorityLimit)))
     }
 
     func testBackgroundArrivalPreservesQuestionThenNextAnswerReviewsNewest() throws {
@@ -80,7 +80,7 @@ final class UnifiedInboxReviewTests: XCTestCase {
         ledger.chooseCapture(min(visible.first, visible.second), from: visible, writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "new")
         try finish(&ledger)
-        XCTAssertEqual(ledger.captures.count, 18)
+        XCTAssertEqual(ledger.captures.count, 28)
     }
 
     func testExplicitReviewRefreshesPausedQuestionButRetainsAnswersAcrossSyncAndBackup() throws {
@@ -97,11 +97,11 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertEqual(watch.rankingPair?.first, "newest")
         XCTAssertEqual(watch.inboxRanking?.topTen?.preferences, preferences)
         try finish(&watch)
-        XCTAssertEqual(watch.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
+        XCTAssertEqual(watch.rankedCaptureIDs, (0..<InboxRanking.priorityLimit).map { String(format: "%03d", $0) })
     }
 
     func testLegacyPartialCandidateBecomesScreeningAndRetainsItsAnsweredBounds() throws {
-        var ledger = try ranked(10)
+        var ledger = try ranked(20)
         try ledger.addCapture(text: "Partial", id: "004a", writer: "phone")
         let original = ledger.captures
         let base = ledger.inboxRanking!.ordered
@@ -113,19 +113,19 @@ final class UnifiedInboxReviewTests: XCTestCase {
         XCTAssertTrue(saved.contains(InboxPreference(winner: "002", loser: "004a")))
         XCTAssertTrue(saved.contains(InboxPreference(winner: "004a", loser: "006")))
         try finish(&ledger)
-        XCTAssertEqual(ledger.rankedCaptureIDs, ["000", "001", "002", "003", "004", "004a", "005", "006", "007", "008"])
+        XCTAssertEqual(ledger.rankedCaptureIDs, ((0..<19).map { String(format: "%03d", $0) } + ["004a"]).sorted())
         XCTAssertEqual(ledger.captures, original)
         XCTAssertTrue(ledger.topTenIsVerified)
     }
 
     func testLegacyDeferredAndPendingIdeasRemainAvailableInScreening() throws {
-        var ledger = try ranked(10)
+        var ledger = try ranked(20)
         try ledger.addCapture(text: "Deferred", id: "deferred", writer: "phone")
         try ledger.addCapture(text: "Pending", id: "pending", writer: "phone")
-        ledger.inboxRanking?.topTen = TopTenRanking(preferences: [InboxPreference(winner: "deferred", loser: "009")], pending: ["pending"], deferred: ["deferred"])
+        ledger.inboxRanking?.topTen = TopTenRanking(preferences: [InboxPreference(winner: "deferred", loser: "019")], pending: ["pending"], deferred: ["deferred"])
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertNil(ledger.inboxRanking?.topTen?.deferred)
-        XCTAssertEqual(ledger.captures.count, 12)
+        XCTAssertEqual(ledger.captures.count, 22)
         try finish(&ledger) { pair in
             if pair.first == "deferred" || pair.second == "deferred" { return "deferred" }
             return min(pair.first, pair.second)
@@ -138,21 +138,21 @@ final class UnifiedInboxReviewTests: XCTestCase {
         var ledger = try ranked()
         ledger.prepareRanking(writer: "phone")
         let old = ledger.rankedCaptureIDs
-        ledger.rerankCapture("015", writer: "phone")
+        ledger.rerankCapture("025", writer: "phone")
         XCTAssertNotNil(ledger.inboxRanking?.topTen?.candidate)
         try finish(&ledger) { pair in
-            if pair.first == "015" || pair.second == "015" { return "015" }
+            if pair.first == "025" || pair.second == "025" { return "025" }
             return min(pair.first, pair.second)
         }
-        XCTAssertEqual(ledger.rankedCaptureIDs, ["015"] + old.dropLast())
-        ledger.setCaptureDone(id: "015", done: true, writer: "phone")
+        XCTAssertEqual(ledger.rankedCaptureIDs, ["025"] + old.dropLast())
+        ledger.setCaptureDone(id: "025", done: true, writer: "phone")
         ledger.prepareRanking(writer: "phone")
         try finish(&ledger)
         XCTAssertEqual(ledger.rankedCaptureIDs, old)
     }
 
     func testRerankingOnePriorityKeepsAllOtherPrioritiesRelativeOrderWithoutReasking() throws {
-        var ledger = try ranked(10)
+        var ledger = try ranked(20)
         ledger.prepareRanking(writer: "phone")
         let others = ledger.rankedCaptureIDs.filter { $0 != "005" }
         ledger.rerankCapture("005", writer: "phone")

@@ -133,7 +133,7 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertEqual(ledger.captures.first { $0.id == "reminder-old" }?.createdAt, baseline)
     }
 
-    private func legacyRanked(_ count: Int = 10) throws -> Ledger {
+    private func legacyRanked(_ count: Int = InboxRanking.priorityLimit) throws -> Ledger {
         let ids = (0..<count).map { String(format: "%03d", $0) }
         var ledger = try fixture(ids), ranking = InboxRanking()
         ranking.ordered = ids; ranking.revision = ledger.nextRevision(writer: "old-phone")
@@ -156,37 +156,37 @@ final class InboxRankingTests: XCTestCase {
         var ledger = try legacyRanked()
         ledger.normalizeInboxRanking(writer: "phone")
         let top = ledger.rankedCaptureIDs
-        try ledger.addCapture(text: "Low priority", id: "020", writer: "phone")
+        try ledger.addCapture(text: "Low priority", id: "030", writer: "phone")
         XCTAssertEqual(ledger.rankedCaptureIDs, top)
         XCTAssertFalse(ledger.topTenIsVerified)
         ledger.prepareRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankingPair?.first, "020")
+        XCTAssertEqual(ledger.rankingPair?.first, "030")
         XCTAssertEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 1)
         XCTAssertEqual(ledger.rankedCaptureIDs, top)
-        XCTAssertEqual(ledger.backlogCaptures.map(\.id), ["020"])
+        XCTAssertEqual(ledger.backlogCaptures.map(\.id), ["030"])
         XCTAssertTrue(ledger.unrankedCaptures.isEmpty)
         XCTAssertTrue(ledger.topTenIsVerified)
     }
 
-    func testScreeningFindsAllTenPossibleNewPriorityPositions() throws {
-        for position in 0..<10 {
+    func testScreeningFindsAllTwentyPossibleNewPriorityPositions() throws {
+        for position in 0..<InboxRanking.priorityLimit {
             var ledger = try legacyRanked()
             let before = ledger.rankedCaptureIDs
             try ledger.addCapture(text: "Candidate", id: "candidate", writer: "phone")
             ledger.prepareRanking(writer: "phone")
             func score(_ id: String) -> Int { id == "candidate" ? position * 2 - 1 : Int(id)! * 2 }
             let count = try answerBatch(&ledger) { score($0.first) < score($0.second) ? $0.first : $0.second }
-            XCTAssertLessThanOrEqual(count, 5)
+            XCTAssertLessThanOrEqual(count, 6)
             var expected = before; expected.insert("candidate", at: position); expected.removeLast()
             XCTAssertEqual(ledger.rankedCaptureIDs, expected)
-            XCTAssertEqual(ledger.backlogCaptures.map(\.id), ["009"])
+            XCTAssertEqual(ledger.backlogCaptures.map(\.id), ["019"])
             XCTAssertEqual(ledger.rankedCaptureIDs.filter { $0 != "candidate" }, Array(before.dropLast()))
             XCTAssertTrue(ledger.topTenIsVerified)
         }
     }
 
     func testSessionReviewsAllWaitingIdeasAndCaptureDoesNotStartOrInterruptRanking() throws {
-        var ledger = try fixture((0..<18).map { String(format: "%03d", $0) })
+        var ledger = try fixture((0..<28).map { String(format: "%03d", $0) })
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertNil(ledger.rankingPair); XCTAssertTrue(ledger.rankedCaptureIDs.isEmpty)
         ledger.prepareRanking(writer: "phone")
@@ -196,7 +196,7 @@ final class InboxRankingTests: XCTestCase {
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertEqual(ledger.rankingPair, pair); XCTAssertEqual(ledger.inboxRanking, originalState)
         try answerBatch(&ledger) { min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
+        XCTAssertEqual(ledger.rankedCaptureIDs, (0..<InboxRanking.priorityLimit).map { String(format: "%03d", $0) })
         XCTAssertEqual(ledger.backlogCaptures.count, 9)
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "newest" })
         XCTAssertTrue(ledger.unrankedCaptures.isEmpty)
@@ -208,7 +208,7 @@ final class InboxRankingTests: XCTestCase {
 
     func testContinuePrioritizesNewIdeasOverAnUnfinishedBacklogReview() throws {
         var ledger = try legacyRanked()
-        for id in ["011", "012", "013"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
+        for id in ["021", "022", "023"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
         try finish(&ledger)
         ledger.setCaptureDone(id: "000", done: true, writer: "phone")
         ledger.replenishTopTen(writer: "phone")
@@ -220,10 +220,10 @@ final class InboxRankingTests: XCTestCase {
         // This was the Top 10 section's Continue action: it must refresh too.
         ledger.replenishTopTen(writer: "phone")
         XCTAssertEqual(ledger.rankingPair?.first, "newest")
-        XCTAssertEqual(ledger.captures.count, 14)
+        XCTAssertEqual(ledger.captures.count, 24)
         XCTAssertNil(ledger.inboxRanking?.priorityTournament) // No tournament runs in the new flow.
         try answerBatch(&ledger) { min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, InboxRanking.priorityLimit)
         XCTAssertTrue(ledger.rankedCaptureIDs.contains("newest"))
         XCTAssertFalse(ledger.topTenIsVerified)
     }
@@ -270,45 +270,45 @@ final class InboxRankingTests: XCTestCase {
 
     func testOptionalBacklogPassScreensEachCandidateAndCanPauseAtEveryAnswer() throws {
         var ledger = try legacyRanked()
-        for id in ["011", "015", "020"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
+        for id in ["021", "025", "030"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
         try finish(&ledger)
         ledger.setCaptureDone(id: "000", done: true, writer: "watch")
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 9)
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, 19)
         XCTAssertTrue(ledger.needsTopTenReplenishment); XCTAssertNil(ledger.rankingPair)
         XCTAssertFalse(ledger.topTenIsVerified)
         ledger.replenishTopTen(writer: "phone")
         XCTAssertLessThanOrEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 15)
-        XCTAssertEqual(ledger.rankedCaptureIDs.last, "011")
-        XCTAssertEqual(Set(ledger.backlogCaptures.map(\.id)), ["015", "020"])
+        XCTAssertEqual(ledger.rankedCaptureIDs.last, "021")
+        XCTAssertEqual(Set(ledger.backlogCaptures.map(\.id)), ["025", "030"])
         XCTAssertTrue(ledger.topTenIsVerified)
-        ledger.setCaptureDeleted("011", deleted: true, writer: "phone")
+        ledger.setCaptureDeleted("021", deleted: true, writer: "phone")
         ledger.replenishTopTen(writer: "phone")
         XCTAssertGreaterThan(try answerBatch(&ledger) { min($0.first, $0.second) }, 0) // Fresh backlog judgments revisit old rejections.
-        XCTAssertEqual(ledger.rankedCaptureIDs.last, "015")
+        XCTAssertEqual(ledger.rankedCaptureIDs.last, "025")
     }
 
     func testLegacyFullOrderMigratesWithoutLossAndBacklogReviewIsExplicit() throws {
-        var ledger = try legacyRanked(15)
+        var ledger = try legacyRanked(25)
         let oldCaptures = ledger.captures
         let legacyBytes = try JSONEncoder().encode(ledger)
         ledger = try JSONDecoder().decode(Ledger.self, from: legacyBytes)
         ledger.normalizeInboxRanking(writer: "phone")
-        XCTAssertEqual(ledger.rankedCaptureIDs, (0..<10).map { String(format: "%03d", $0) })
-        XCTAssertEqual(Set(ledger.backlogCaptures.map(\.id)), Set((10..<15).map { String(format: "%03d", $0) }))
+        XCTAssertEqual(ledger.rankedCaptureIDs, (0..<InboxRanking.priorityLimit).map { String(format: "%03d", $0) })
+        XCTAssertEqual(Set(ledger.backlogCaptures.map(\.id)), Set((20..<25).map { String(format: "%03d", $0) }))
         XCTAssertEqual(ledger.captures, oldCaptures)
         ledger.setCaptureDeleted("000", deleted: true, writer: "phone")
         XCTAssertTrue(ledger.needsTopTenReplenishment)
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 9) // Refilling is optional.
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, 19) // Refilling is optional.
         ledger.replenishTopTen(writer: "phone")
         XCTAssertNotNil(ledger.rankingPair)
         try answerBatch(&ledger) { min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs.last, "010")
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
+        XCTAssertEqual(ledger.rankedCaptureIDs.last, "020")
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, InboxRanking.priorityLimit)
         XCTAssertTrue(ledger.topTenIsVerified)
     }
 
     func testRerankedTopIdeaCanFallBelowBacklogWithoutFalselyVerifyingTopTen() throws {
-        var ledger = try legacyRanked(12)
+        var ledger = try legacyRanked(22)
         ledger.normalizeInboxRanking(writer: "phone")
         let remaining = ledger.rankedCaptureIDs.filter { $0 != "005" }
         ledger.rerankCapture("005", writer: "phone")
@@ -320,7 +320,7 @@ final class InboxRankingTests: XCTestCase {
         XCTAssertFalse(ledger.topTenIsVerified)
         ledger.prepareRanking(writer: "phone")
         try answerBatch(&ledger) { $0.first == "005" ? $0.second : $0.second == "005" ? $0.first : min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs, remaining + ["010"])
+        XCTAssertEqual(ledger.rankedCaptureIDs, remaining + ["020"])
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == "005" })
     }
 
@@ -332,7 +332,7 @@ final class InboxRankingTests: XCTestCase {
         ledger.inboxRanking?.insertion = InsertionRanking(item: "003a", base: base, low: 2, high: 5)
         ledger.normalizeInboxRanking(writer: "phone")
         XCTAssertLessThanOrEqual(try answerBatch(&ledger) { min($0.first, $0.second) }, 5)
-        XCTAssertEqual(ledger.rankedCaptureIDs, ["000", "001", "002", "003", "003a", "004", "005", "006", "007", "008"])
+        XCTAssertEqual(ledger.rankedCaptureIDs, ((0..<15).map { String(format: "%03d", $0) } + ["003a"]).sorted())
         XCTAssertEqual(ledger.captures.count, 16)
     }
 
@@ -353,7 +353,7 @@ final class InboxRankingTests: XCTestCase {
 
     func testCompletionDeletionAndRestorationDuringReviewKeepAllCandidatesRecoverable() throws {
         var ledger = try legacyRanked()
-        for id in ["011", "012", "013"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
+        for id in ["021", "022", "023"] { try ledger.addCapture(text: id, id: id, writer: "phone") }
         try finish(&ledger)
         ledger.setCaptureDone(id: "000", done: true, writer: "phone")
         ledger.replenishTopTen(writer: "phone")
@@ -363,7 +363,7 @@ final class InboxRankingTests: XCTestCase {
         ledger.chooseCapture(oldPair.second, from: oldPair, writer: "phone")
         XCTAssertEqual(ledger, before)
         try answerBatch(&ledger) { min($0.first, $0.second) }
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, InboxRanking.priorityLimit)
         ledger.setCaptureDeleted(oldPair.first, deleted: false, writer: "phone")
         XCTAssertTrue(ledger.backlogCaptures.contains { $0.id == oldPair.first })
         XCTAssertFalse(ledger.topTenIsVerified)
@@ -406,7 +406,7 @@ final class InboxRankingTests: XCTestCase {
             for index in (1..<ids.count).reversed() { ids.swapAt(index, next(index + 1)) }
             var ledger = try fixture(ids)
             try finish(&ledger)
-            XCTAssertEqual(ledger.rankedCaptureIDs, Array(ids.sorted().prefix(10)))
+            XCTAssertEqual(ledger.rankedCaptureIDs, Array(ids.sorted().prefix(InboxRanking.priorityLimit)))
             XCTAssertTrue(ledger.topTenIsVerified)
             for _ in 0..<4 {
                 let removed = ledger.rankedCaptureIDs[next(ledger.rankedCaptureIDs.count)]
@@ -415,12 +415,12 @@ final class InboxRankingTests: XCTestCase {
                 XCTAssertNil(ledger.rankingPair) // No forced replenishment.
                 ledger.replenishTopTen(writer: "phone")
                 try answerBatch(&ledger) { min($0.first, $0.second) }
-                XCTAssertEqual(ledger.rankedCaptureIDs, Array(ledger.activeCaptures.map(\.id).sorted().prefix(10)))
+                XCTAssertEqual(ledger.rankedCaptureIDs, Array(ledger.activeCaptures.map(\.id).sorted().prefix(InboxRanking.priorityLimit)))
                 XCTAssertTrue(ledger.topTenIsVerified)
                 ledger.setCaptureDeleted(removed, deleted: false, writer: "phone")
                 ledger.replenishTopTen(writer: "phone")
                 try answerBatch(&ledger) { min($0.first, $0.second) }
-                XCTAssertEqual(ledger.rankedCaptureIDs, Array(ids.sorted().prefix(10)))
+                XCTAssertEqual(ledger.rankedCaptureIDs, Array(ids.sorted().prefix(InboxRanking.priorityLimit)))
                 XCTAssertTrue(ledger.topTenIsVerified)
             }
         }

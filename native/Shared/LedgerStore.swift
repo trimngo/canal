@@ -144,7 +144,7 @@ final class LedgerStore: ObservableObject {
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-ranked-inbox-fixture") {
                 var fixture = Ledger(), ranked = InboxRanking()
-                for index in 1...14 {
+                for index in 1...24 {
                     let id = "ranked-\(index)"
                     try fixture.addCapture(text: "Ranked priority \(index)", id: id, writer: "fixture", now: Date().addingTimeInterval(Double(-index * 60)))
                     ranked.ordered.append(id)
@@ -159,13 +159,13 @@ final class LedgerStore: ObservableObject {
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-tournament-fixture") {
                 var fixture = Ledger(), ranking = InboxRanking()
-                for index in 1...26 {
+                for index in 1...36 {
                     let id = "priority-\(index)"
                     try fixture.addCapture(text: "Priority \(index)", id: id, writer: "fixture", now: Date().addingTimeInterval(Double(index - 60)))
-                    if index <= 10 { ranking.ordered.append(id) }
+                    if index <= InboxRanking.priorityLimit { ranking.ordered.append(id) }
                 }
-                let tail = (11...26).map { "priority-\($0)" }
-                let legacy: [String: Any] = ["backlog": tail, "preferences": tail.map { ["winner": "priority-10", "loser": $0] }, "pending": [], "replenishing": false]
+                let tail = (11...36).map { "priority-\($0)" }
+                let legacy: [String: Any] = ["backlog": tail, "preferences": tail.map { ["winner": "priority-20", "loser": $0] }, "pending": [], "replenishing": false]
                 ranking.topTen = try JSONDecoder().decode(TopTenRanking.self, from: JSONSerialization.data(withJSONObject: legacy))
                 ranking.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranking
                 fixture.prepareRanking(writer: "fixture")
@@ -175,7 +175,7 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-screening-inbox-fixture") {
                 var fixture = Ledger(), ranked = InboxRanking()
                 let now = Date()
-                for index in 1...12 {
+                for index in 1...22 {
                     let id = "screening-\(index)"
                     try fixture.addCapture(text: "Priority \(index)", id: id, writer: "fixture", now: now.addingTimeInterval(Double(index - 60)))
                     ranked.ordered.append(id)
@@ -429,6 +429,12 @@ final class LedgerStore: ObservableObject {
 
     func updateCaptureText(_ capture: Capture, text: String) throws {
         var draft = ledger; try draft.updateCaptureText(id: capture.id, text: text, writer: writer); try commit(draft)
+    }
+
+    func categorizeCapture(_ capture: Capture, categoryIDs: [String]) throws {
+        var draft = ledger
+        try draft.categorizeCapture(id: capture.id, categoryIDs: categoryIDs, writer: writer)
+        try commit(draft)
     }
 
     func updateCapture(_ capture: Capture, text: String, notes: String) throws {

@@ -4,7 +4,7 @@ import XCTest
 final class InboxReferenceTests: XCTestCase {
     private func ranked() throws -> Ledger {
         var ledger = Ledger(), ranking = InboxRanking()
-        for index in 1...12 {
+        for index in 1...22 {
             let id = "task-\(index)"
             try ledger.addCapture(text: id, id: id, writer: "phone")
             ranking.ordered.append(id)
@@ -21,20 +21,20 @@ final class InboxReferenceTests: XCTestCase {
         try ledger.updateCapture(id: before.id, text: before.text, notes: "Useful reference\nNo next action", writer: "phone")
         ledger.setCaptureReference(before.id, reference: true, writer: "phone")
         XCTAssertEqual(ledger.referenceCaptures.map(\.id), [before.id])
-        XCTAssertEqual(ledger.rankedCaptureIDs, (1...10).filter { $0 != 3 }.map { "task-\($0)" })
+        XCTAssertEqual(ledger.rankedCaptureIDs, (1...20).filter { $0 != 3 }.map { "task-\($0)" })
         XCTAssertFalse(ledger.activeCaptures.contains { $0.id == before.id })
         XCTAssertFalse(ledger.backlogCaptures.contains { $0.id == before.id })
         XCTAssertFalse(ledger.unseenCaptures.contains { $0.id == before.id })
         let saved = try XCTUnwrap(ledger.captures.first { $0.id == before.id })
         XCTAssertEqual(saved.createdAt, before.createdAt)
         XCTAssertEqual(saved.notes, "Useful reference\nNo next action")
-        XCTAssertEqual(ledger.captures.count, 12)
+        XCTAssertEqual(ledger.captures.count, 22)
         ledger.replenishTopTen(writer: "phone")
         while let pair = ledger.rankingPair {
             XCTAssertNotEqual(pair.first, before.id); XCTAssertNotEqual(pair.second, before.id)
             ledger.chooseCapture(pair.first, from: pair, writer: "phone")
         }
-        XCTAssertEqual(ledger.rankedCaptureIDs.count, 10)
+        XCTAssertEqual(ledger.rankedCaptureIDs.count, 20)
     }
 
     func testMovingReferenceBackRequiresFreshReviewWithoutReorderingOtherIdeas() throws {
@@ -60,7 +60,7 @@ final class InboxReferenceTests: XCTestCase {
         let saved = ledger
         ledger.chooseCapture(pair.first, from: pair, writer: "phone")
         XCTAssertEqual(ledger, saved)
-        XCTAssertEqual(ledger.rankedCaptureIDs, (1...10).map { "task-\($0)" })
+        XCTAssertEqual(ledger.rankedCaptureIDs, (1...20).map { "task-\($0)" })
         XCTAssertEqual(ledger.referenceCaptures.map(\.id), ["new"])
     }
 
@@ -150,9 +150,9 @@ final class InboxReferenceTests: XCTestCase {
         XCTAssertTrue(try block("Title partial").contains("List: In progress\n   Rank: Placement incomplete"))
         XCTAssertTrue(try block("Title unseen").contains("List: New Ideas\n   Rank: Not evaluated"))
         XCTAssertTrue(try block("Title done").contains("List: Completed\n   Rank: Not ranked"))
-        XCTAssertTrue(try block(". task-1\n").contains("List: Top 10 Priorities\n   Rank: 1"))
-        XCTAssertTrue(try block(". task-11\n").contains("List: Backlog\n   Rank: Evaluated, outside Top 10"))
+        XCTAssertTrue(try block(". task-1\n").contains("List: Top 20 Priorities\n   Rank: 1"))
+        XCTAssertTrue(try block(". task-21\n").contains("List: Backlog\n   Rank: Evaluated, outside Top 20"))
         XCTAssertFalse(export.text.contains("Title deleted"))
-        XCTAssertEqual(export.count, 17)
+        XCTAssertEqual(export.count, 27)
     }
 }

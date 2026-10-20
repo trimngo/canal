@@ -29,13 +29,15 @@ extension Ledger {
             if idea.isDone { list = "Completed"; rank = "Not ranked" }
             else if idea.isReference == true { list = "Reference"; rank = "Not ranked" }
             else if idea.isSnoozed(at: now) { list = "Snoozed"; rank = "Not ranked" }
-            else if let position = ranks[idea.id] { list = "Top 10 Priorities"; rank = String(position) }
-            else if backlog.contains(idea.id) { list = "Backlog"; rank = "Evaluated, outside Top 10" }
+            else if let position = ranks[idea.id] { list = "Top \(InboxRanking.priorityLimit) Priorities"; rank = String(position) }
+            else if backlog.contains(idea.id) { list = "Backlog"; rank = "Evaluated, outside Top \(InboxRanking.priorityLimit)" }
             else if inProgress.contains(idea.id) { list = "In progress"; rank = "Placement incomplete" }
             else { list = "New Ideas"; rank = "Not evaluated" }
+            let labels = categoryIDs(for: idea).map { categoryPath($0) }
+            let categories = "\n   Categories: " + (labels.isEmpty ? "Uncategorized" : labels.joined(separator: "; "))
             let notes = idea.notes.map { "\n   Notes: " + $0.replacingOccurrences(of: "\n", with: "\n   ") } ?? ""
             let snooze = idea.snoozeReturnDate().map { "\n   " + ($0 > now ? "Snoozed until: " : "Returned from snooze: ") + formatter.string(from: $0) } ?? ""
-            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(notes)\(snooze)"
+            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(categories)\(notes)\(snooze)"
         }
         let noun = ideas.count == 1 ? "idea" : "ideas"
         return InboxExport(count: ideas.count, text: (["Dash inbox — \(ideas.count) \(noun)"] + items).joined(separator: "\n\n"))

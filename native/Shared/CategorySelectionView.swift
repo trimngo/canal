@@ -32,6 +32,7 @@ struct CategorySelectionList: View {
     @Binding var selection: [String]
     var activity: String? = nil
     var timestamp: Date? = nil
+    var selectionHelp = "Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected."
     @State private var replacing: String?
     @State private var creating = false
     @State private var groupName = ""
@@ -57,7 +58,7 @@ struct CategorySelectionList: View {
             Button("Create new group…", systemImage: "plus") { groupName = ""; creating = true }
                 .accessibilityIdentifier("category-select.create")
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("category-select.error") }
-            Text("Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected.").font(.footnote).foregroundStyle(.secondary)
+            Text(selectionHelp).font(.footnote).foregroundStyle(.secondary)
         }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let activity, !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

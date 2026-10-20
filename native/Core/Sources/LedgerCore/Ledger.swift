@@ -83,6 +83,8 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {
+    /// Shared category IDs; absent in older backups and Watch captures.
+    public var categoryIDs: [String]?
     public var deletedAt: Date?
     public var notes: String?
     public var snoozedUntil: Date?
