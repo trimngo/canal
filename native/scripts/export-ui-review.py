@@ -13,4 +13,4 @@ for item in json.loads((source / 'manifest.json').read_text()):
         if name.endswith('.png') or attachment.get('exportedFileName', '').endswith('.txt'):
             filename = attachment.get('exportedFileName')
             if filename and (source / filename).is_file():
-                shutil.copy2(source / filename, destination / Path(name).name)
+                shutil.copy2(source / filename, destination / (Path(name).name if name.startswith('Review-') else filename))
