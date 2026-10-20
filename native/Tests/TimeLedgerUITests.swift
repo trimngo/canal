@@ -23,7 +23,9 @@ final class TimeLedgerUITests: XCTestCase {
             let frame = bar.frame
             return usable(frame) && frame.intersects(bounds) ? frame : nil
         }
-        for _ in 0..<10 {
+        // Lazy lists omit offscreen rows from accessibility. Search later rows
+        // first, then earlier rows if the target has not been materialized.
+        for attempt in 0..<20 {
             let bounds = app.frame
             guard usable(bounds) else { XCTFail("App has no visible bounds"); return }
             // Dismissed sheets can leave offscreen bars with CGRect.null frames.
@@ -36,7 +38,7 @@ final class TimeLedgerUITests: XCTestCase {
                 if usable(keyboard) { bottom = min(bottom, keyboard.minY) }
             }
             let grouping = app.buttons["plan.group-selected"]
-            if grouping.exists && grouping.isHittable && target.identifier != "plan.group-selected" && target.identifier != "plan.clear-selection" {
+            if grouping.exists && grouping.isHittable && (!target.exists || (target.identifier != "plan.group-selected" && target.identifier != "plan.clear-selection")) {
                 let bar = grouping.frame
                 if usable(bar) { bottom = min(bottom, bar.minY - 16) }
             }
@@ -48,7 +50,7 @@ final class TimeLedgerUITests: XCTestCase {
             let origin = app.coordinate(withNormalizedOffset: .zero)
             let high = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.3))
             let low = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.75))
-            if !frame.isEmpty, frame.maxY < top { high.press(forDuration: 0.01, thenDragTo: low) }
+            if (!frame.isEmpty && frame.maxY < top) || (frame.isEmpty && attempt >= 10) { high.press(forDuration: 0.01, thenDragTo: low) }
             else { low.press(forDuration: 0.01, thenDragTo: high) }
 
         }
