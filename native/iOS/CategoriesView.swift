@@ -86,9 +86,14 @@ struct CategoriesView: View {
                     HStack(spacing: 5) {
                         Text(category.name)
                         Text("\(store.ledger.groupEntryCounts()[category.id, default: 0])").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.plain).foregroundStyle(.primary).accessibilityIdentifier("groups.open.\(category.id)")
+                    .contextMenu {
+                        Button("Edit category") { editing = category }
+                        Button("Move up") { reorder(category, direction: -1) }
+                        Button("Move down") { reorder(category, direction: 1) }
                     }
-                }.buttonStyle(.borderless).foregroundStyle(.primary).accessibilityIdentifier("groups.open.\(category.id)")
-                Spacer()
             }
             if !children.isEmpty {
                 Button { if !collapsed.insert(category.id).inserted { collapsed.remove(category.id) } } label: {
@@ -96,11 +101,6 @@ struct CategoriesView: View {
                 }.buttonStyle(.borderless).accessibilityLabel("Expand or collapse \(category.name)")
             }
         }.padding(.leading, CGFloat(min(depth(category.id), 6)) * 16)
-            .contextMenu {
-                Button("Edit category") { editing = category }
-                Button("Move up") { reorder(category, direction: -1) }
-                Button("Move down") { reorder(category, direction: 1) }
-            }
     }
     private func reorder(_ category: LedgerCategory, direction: Int) {
         let parent = store.ledger.categoryParents[category.id]
