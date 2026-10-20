@@ -433,7 +433,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testLongEntryStaysVisibleAboveTheCategoryChecklist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-long-grouping-ledger"]; app.launch()
         let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
-        app.buttons["Choose group"].tap()
+        let choose = app.buttons["Choose group"]; reveal(choose, in: app); choose.tap()
         let context = element(app, "category-context.activity")
         XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.hasPrefix("Preparing classes"))
         app.buttons["category-context.expand"].tap()

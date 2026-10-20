@@ -9,7 +9,7 @@ final class TrendPresentationTests: XCTestCase {
         ledger.settings.reportingTimeZoneIdentifier = "Europe/Berlin"
         let now = date("2026-10-25T15:00:00Z")
         for (stamp, ids) in [("2026-10-22T08:00:00Z", ["work"]), ("2026-10-22T09:00:00Z", ["social"]),
-                             ("2026-10-24T22:30:00Z", ["work", "social"]), ("2026-10-25T12:00:00Z", ["leisure"])] {
+                             ("2026-10-24T22:30:00Z", ["work", "social"]), ("2026-10-25T12:00:00Z", ["leisure"]), ("2026-10-25T13:00:00Z", ["personal"])] {
             try ledger.saveSample(at: date(stamp), activity: stamp, categoryIDs: ids, writer: "test", now: now)
         }
         return ledger.history(range: .week, now: now, calendar: calendar)
@@ -17,6 +17,7 @@ final class TrendPresentationTests: XCTestCase {
 
     func testInitialComparisonHasAtMostThreeLargestTopLevelCategories() throws {
         let report = try report()
+        XCTAssertEqual(report.rows.count, 4)
         XCTAssertEqual(report.trendRows(selectedIDs: nil), Array(report.rows.prefix(3)))
         XCTAssertLessThanOrEqual(report.trendRows(selectedIDs: nil).count, 3)
     }
