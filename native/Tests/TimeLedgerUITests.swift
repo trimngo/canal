@@ -1,6 +1,15 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    override func setUpWithError() throws { continueAfterFailure = false }
+    override func tearDownWithError() throws {
+        if testRun?.hasSucceeded == false {
+            let app = XCUIApplication()
+            recordScreen("Failure", in: app)
+            print("SYNTHETIC UI FIXTURE FAILURE: \(app.debugDescription)")
+        }
+    }
+
     private func recordScreen(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Review-\(name).png"; attachment.lifetime = .keepAlways
