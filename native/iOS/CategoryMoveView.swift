@@ -43,13 +43,15 @@ struct CategoryMoveView: View {
         NavigationStack {
             Form {
                 Section("Group under") {
-                    destinationRow("Create a new parent", id: "__new")
+                    Picker("Parent", selection: $destination) {
+                        Text("Create a new parent").tag("__new")
+                        Text("Top level (no parent)").tag("__top")
+                        ForEach(store.ledger.orderedCategories.filter { !excluded.contains($0.id) }) { category in
+                            Text(store.ledger.categoryPath(category.id)).tag(category.id)
+                        }
+                    }.pickerStyle(.menu).accessibilityIdentifier("categories.destination")
                     if destination == "__new" {
                         TextField("Parent name", text: $name).accessibilityIdentifier("categories.new-parent-name")
-                    }
-                    destinationRow("Top level (no parent)", id: "__top")
-                    ForEach(store.ledger.orderedCategories.filter { !excluded.contains($0.id) }) { category in
-                        destinationRow(store.ledger.categoryPath(category.id), id: category.id)
                     }
                 }
                 Section("Move preview") {
@@ -76,7 +78,7 @@ struct CategoryMoveView: View {
                         }
                     }
                     if let error { Text(error).foregroundStyle(.red) }
-                }.accessibilityIdentifier("categories.move-preview")
+                }
             }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
                 .navigationTitle("Group categories").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -95,9 +97,4 @@ struct CategoryMoveView: View {
     }
     private var isValid: Bool { if case .success = preview { return store.storageAvailable }; return false }
     private func percent(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
-    private func destinationRow(_ title: String, id: String) -> some View {
-        Button { destination = id } label: {
-            HStack { Text(title).foregroundStyle(.primary); Spacer(); if destination == id { Image(systemName: "checkmark") } }
-        }.accessibilityIdentifier("categories.destination.\(id)")
-    }
 }

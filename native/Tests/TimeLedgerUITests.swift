@@ -201,7 +201,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.open.", "Creative Practice")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let groupID = String(row.identifier.dropFirst("groups.open.".count)); row.tap()
+        let groupID = String(row.identifier.dropFirst("groups.open.".count)); reveal(row, in: app); row.tap()
+        recordScreen("CategoryEditorAfterTap", in: app)
         let rename = app.textFields["categories.name"]
         XCTAssertTrue(rename.waitForExistence(timeout: 5)); rename.tap()
         rename.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30))
@@ -931,9 +932,9 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(admin.waitForExistence(timeout: 5)); admin.tap()
         app.buttons["categories.select.music"].tap()
         app.buttons["categories.group-selected"].tap()
-        let work = app.buttons["categories.destination.work"]; reveal(work, in: app); work.tap()
-        let preview = element(app, "categories.move-preview"); reveal(preview, in: app)
-        XCTAssertTrue(app.staticTexts["30% → 55%"].exists)
+        element(app, "categories.destination").tap(); app.buttons["Work"].tap()
+        let preview = app.staticTexts["30% → 55%"]
+        reveal(preview, in: app); XCTAssertTrue(preview.exists)
         recordScreen("BulkGroupingPreview", in: app)
         let move = app.buttons["categories.apply-move"]; XCTAssertTrue(move.isEnabled); move.tap()
         let undo = app.buttons["categories.undo-move"]; reveal(undo, in: app)
@@ -971,7 +972,7 @@ final class TimeLedgerUITests: XCTestCase {
         let loose = element(app, "plan.loose-categories"); reveal(loose, in: app); loose.tap()
         XCTAssertTrue(app.staticTexts["German"].waitForExistence(timeout: 5))
         let add = app.buttons["plan.add-area"]; reveal(add, in: app); add.tap()
-        app.buttons["Create life area"].tap()
+        recordScreen("NewLifeAreaAlert", in: app)
         let alert = app.alerts["New life area"]; XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.textFields.firstMatch.tap(); alert.textFields.firstMatch.typeText("Relationships"); alert.buttons["Create"].tap()
         let field = app.textFields["Relationships goal percent"]; reveal(field, in: app)

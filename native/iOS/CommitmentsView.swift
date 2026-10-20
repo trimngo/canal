@@ -29,37 +29,32 @@ struct CommitmentsView: View {
             let week = store.ledger.rollingAllocation(now: context.date)
             List {
                 Section {
-                    Text("How do you want to divide your time?").font(.headline)
-                    Text("Group detailed categories into a few broad life areas, then give each a share. Choose as many areas as you need.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    HStack {
-                        Text("Total").bold(); Spacer()
-                        Text(plan.total.map { "\(percent($0))% / 100%" } ?? "Check percentages")
-                            .bold().monospacedDigit().accessibilityIdentifier("plan.total")
-                    }
-                    if let total = plan.total {
-                        Text(abs(total - 100) < 0.0000001 ? "100% assigned" : total > 100 ? "\(percent(total - 100))% over — reduce a goal" : "\(percent(100 - total))% left to assign")
-                            .foregroundStyle(total > 100 ? Color.red : Color.secondary)
-                            .accessibilityIdentifier("plan.balance")
-                    } else {
-                        Text("Enter percentages between 0 and 100.").foregroundStyle(.red)
-                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Your allocation").bold(); Spacer()
+                            Text(plan.total.map { "\(percent($0))% / 100%" } ?? "Check percentages")
+                                .bold().monospacedDigit().accessibilityIdentifier("plan.total")
+                        }
+                        if let total = plan.total {
+                            Text(abs(total - 100) < 0.0000001 ? "100% assigned" : total > 100 ? "\(percent(total - 100))% over — reduce a goal" : "\(percent(100 - total))% left to assign")
+                                .font(.subheadline).foregroundStyle(total > 100 ? Color.red : Color.secondary)
+                                .accessibilityIdentifier("plan.balance")
+                        } else {
+                            Text("Enter percentages between 0 and 100.").font(.subheadline).foregroundStyle(.red)
+                        }
+                    }.padding(.vertical, 4)
                     if stale {
                         Text("Categories changed while you were editing. Reload the saved plan to continue.").font(.caption).foregroundStyle(.red)
                         Button("Reload saved plan") { load() }.accessibilityIdentifier("plan.reload")
                     }
                     Button("Save plan") { save() }.disabled(!canSave).accessibilityIdentifier("categories.save-targets")
                 } footer: {
-                    Text("Changing one goal leaves the others unchanged. Save when the total is exactly 100%. Earlier plans are kept.")
+                    Text("Give broad life areas shares totaling 100%. Editing one share leaves the others unchanged.")
                 }
                 Section {
                     ForEach(areas) { category in areaRow(category, today: today, week: week) }
-                    Menu {
-                        ForEach(loose) { category in
-                            Button(category.name) { pinned.insert(category.id) }
-                        }
-                        Button("Create life area", systemImage: "plus") { name = ""; creating = true }
-                    } label: { Label("Add life area", systemImage: "plus") }.accessibilityIdentifier("plan.add-area")
+                    Button("Add life area", systemImage: "plus") { name = ""; creating = true }
+                        .accessibilityIdentifier("plan.add-area")
                 } header: { Text("Life areas") } footer: {
                     Text("Actual time: today since your first log, and \(week.representedDays) of the last 7 days. Hours are estimates from your logs. A difference from a goal is not a score.")
                         .accessibilityIdentifier("plan.coverage")
@@ -112,6 +107,7 @@ struct CommitmentsView: View {
                 do { let id = try store.saveCategory(id: nil, name: name); pinned.insert(id) }
                 catch { self.error = error.localizedDescription }
             }
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Button("Cancel", role: .cancel) {}
         }
     }
@@ -136,7 +132,7 @@ struct CommitmentsView: View {
                         AllocationValues(today: today, week: week, todayMinutes: today.directMinutes[category.id, default: 0], weekMinutes: week.directMinutes[category.id, default: 0], target: nil)
                         ForEach(children) { child in AllocationCategoryRow(category: child, today: today, week: week) }
                     }.padding(.vertical, 4)
-                } label: { Text("\(children.count) subcategories").font(.caption) }
+                } label: { Text(children.count == 1 ? "1 subcategory" : "\(children.count) subcategories").font(.caption) }
                 .accessibilityIdentifier("plan.children.\(category.id)")
             }
             Button("Use remaining") { plan.useRemaining(for: category.id) }
