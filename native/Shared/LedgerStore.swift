@@ -139,8 +139,10 @@ final class LedgerStore: ObservableObject {
                     try fixture.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 60, writer: "fixture")
                     try fixture.saveWeeklyCommitment(categoryID: "music", minimumMinutes: 600, writer: "fixture")
                 }
-                if ProcessInfo.processInfo.arguments.contains("--ui-category-log-links") {
+                if ProcessInfo.processInfo.arguments.contains("--ui-category-outline") {
                     try fixture.moveCategory("music", to: "work", writer: "fixture")
+                    fixture.categories.append(LedgerCategory(id: "guitar", name: "Guitar"))
+                    try fixture.moveCategory("guitar", to: "music", writer: "fixture")
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }

@@ -920,17 +920,19 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Saved. You can change it anytime."].waitForExistence(timeout: 5))
     }
 
-    func testCategoryRemainderKeepsOtherGoalsAndActivityLogs() {
+    func testCompactCommitmentsKeepsGoalsAndActivityLogs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-commitments-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertTrue(element(app, "plan.total").waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Weekly minimum"].exists)
-        let remaining = app.buttons["plan.remaining.work"]; reveal(remaining, in: app); remaining.tap()
+        XCTAssertFalse(app.buttons["plan.remaining.work"].exists)
+        setPlanNumber("categories.target.work", to: "85", in: app)
+        showPlanSummary(in: app)
         XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "85")
         let save = app.buttons["categories.save-targets"]; reveal(save, in: app); save.tap()
         let children = element(app, "plan.children.work"); reveal(children, in: app); children.tap()
         XCTAssertTrue(app.staticTexts["Teaching"].waitForExistence(timeout: 5))
-        recordScreen("LifeAreaBreakdown", in: app)
+        recordScreen("CompactCategoryOutline", in: app)
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
     }
@@ -1001,32 +1003,35 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(group.exists)
     }
 
-    func testExpandedCategoryLogButtonsOpenOnlyTheirOwnLogs() {
+    func testCompactOutlineExpandsChildrenWithoutOpeningLogs() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-allocation-fixture", "--ui-category-log-links"]; app.launch()
+        app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(element(app, "plan.total").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["categories.save-targets"].exists)
         let work = app.buttons["plan.children.work"]; reveal(work, in: app); work.tap()
-        for id in ["teaching", "music"] {
-            let child = element(app, "dashboard.group.\(id)"); reveal(child, in: app); child.tap()
-            XCTAssertFalse(app.buttons["group.done"].exists)
-        }
-        for (id, name, activity, other) in [
-            ("teaching", "Teaching", "Preparing classes", "Guitar practice"),
-            ("music", "Music", "Guitar practice", "Preparing classes")
-        ] {
-            let logs = app.buttons["allocation.logs.\(id)"]; reveal(logs, in: app); logs.tap()
-            XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts[activity].exists)
-            XCTAssertFalse(app.staticTexts[other].exists)
-            recordScreen("CategoryLogs-\(id)", in: app)
-            let done = app.buttons["group.done"]; done.tap()
-            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: done)
-            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
-            let unexpectedSheet = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: done)
-            unexpectedSheet.isInverted = true
-            XCTAssertEqual(XCTWaiter.wait(for: [unexpectedSheet], timeout: 2), .completed)
-            XCTAssertTrue(app.navigationBars["Commitments"].exists)
-        }
+        let teaching = element(app, "plan.name.teaching"); reveal(teaching, in: app)
+        XCTAssertTrue(teaching.exists)
+        let music = app.buttons["plan.children.music"]; reveal(music, in: app); music.tap()
+        let guitar = element(app, "plan.name.guitar"); reveal(guitar, in: app)
+        XCTAssertTrue(guitar.exists)
+        XCTAssertTrue(element(app, "plan.direct.music").exists)
+        XCTAssertFalse(app.buttons["group.done"].exists)
+        XCTAssertFalse(app.buttons["View logs"].exists)
+        XCTAssertFalse(app.buttons["plan.remaining.work"].exists)
+        XCTAssertFalse(app.textFields["categories.target.music"].exists)
+        // Leaf names and totals have no navigation action.
+        guitar.tap()
+        XCTAssertTrue(app.navigationBars["Commitments"].exists)
+        XCTAssertFalse(app.buttons["group.done"].exists)
+        recordScreen("CompactNestedOutline", in: app)
+        reveal(music, in: app); music.tap()
+        XCTAssertFalse(guitar.exists)
+        XCTAssertTrue(teaching.exists)
+        reveal(work, in: app); work.tap()
+        XCTAssertFalse(teaching.exists)
+        XCTAssertFalse(music.exists)
+        XCTAssertFalse(app.buttons["group.done"].exists)
     }
 
     func testGroupingProtectsUnsavedGoalsAndCancelKeepsSelection() {

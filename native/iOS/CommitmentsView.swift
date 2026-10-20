@@ -7,8 +7,16 @@ private struct CategoryGroupingRequest: Identifiable {
     let categoryIDs: [String]
 }
 
+private struct CategoryOutlineItem: Identifiable {
+    let category: LedgerCategory
+    let depth: Int
+    var direct = false
+    var id: String { direct ? "direct:\(category.id)" : category.id }
+}
+
 struct CommitmentsView: View {
     @EnvironmentObject private var store: LedgerStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var plan = AllocationPlanDraft([:])
     @State private var loaded = false
     @State private var selected = Set<String>()
@@ -53,7 +61,11 @@ struct CommitmentsView: View {
                     Text("Set top-level category goals totaling 100%. Editing one share leaves the others unchanged.")
                 }
                 Section {
-                    ForEach(roots) { category in categoryRow(category, today: today, week: week) }
+                    if !typeSize.isAccessibilitySize { columnHeadings }
+                    ForEach(outline(today: today, week: week)) { item in
+                        categoryRow(item, today: today, week: week)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                    }
                 } header: { Text("Categories") } footer: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Select circles to group categories under a parent. Tap a parent’s name to see its children.")
@@ -63,7 +75,7 @@ struct CommitmentsView: View {
                 }
                 CategoryMoveUndoSection()
                 if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
-            }.listStyle(.insetGrouped).listSectionSpacing(12)
+            }.listStyle(.plain).listSectionSpacing(0)
                 .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
         }
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
@@ -107,54 +119,124 @@ struct CommitmentsView: View {
         }
     }
 
-    private func categoryRow(_ category: LedgerCategory, today: AllocationPeriod, week: AllocationPeriod) -> some View {
-        let children = store.ledger.children(of: category.id)
-        let isExpanded = expanded.contains(category.id)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Button {
-                    if !selected.insert(category.id).inserted { selected.remove(category.id) }
-                } label: {
-                    Image(systemName: selected.contains(category.id) ? "checkmark.circle.fill" : "circle")
-                        .font(.title3).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
-                }.buttonStyle(.borderless)
-                    .accessibilityLabel("Select \(category.name) for grouping")
-                    .accessibilityValue(selected.contains(category.id) ? "Selected" : "Not selected")
-                    .accessibilityAddTraits(selected.contains(category.id) ? .isSelected : [])
-                    .accessibilityIdentifier("plan.select.\(category.id)")
-                if children.isEmpty {
-                    Text(category.name).font(.headline).frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Button {
-                        if !expanded.insert(category.id).inserted { expanded.remove(category.id) }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(category.name).font(.headline)
-                            Spacer(minLength: 2)
-                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.caption)
-                        }.contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                        .accessibilityLabel("\(isExpanded ? "Collapse" : "Expand") \(category.name)")
-                        .accessibilityValue("\(children.count) subcategories")
-                        .accessibilityIdentifier("plan.children.\(category.id)")
+    private var columnHeadings: some View {
+        HStack(spacing: 4) {
+            Color.clear.frame(width: 44, height: 1)
+            Text("Category").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Goal").frame(width: 52, alignment: .trailing)
+            Text("Today").frame(width: 60, alignment: .trailing)
+            Text("7 days").frame(width: 60, alignment: .trailing)
+        }.font(.caption2).foregroundStyle(.secondary)
+            .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+    }
+
+    private func outline(today: AllocationPeriod, week: AllocationPeriod) -> [CategoryOutlineItem] {
+        var result: [CategoryOutlineItem] = []
+        func append(_ category: LedgerCategory, depth: Int) {
+            result.append(CategoryOutlineItem(category: category, depth: depth))
+            let children = store.ledger.children(of: category.id)
+            guard expanded.contains(category.id), !children.isEmpty else { return }
+            if today.directMinutes[category.id, default: 0] > 0 || week.directMinutes[category.id, default: 0] > 0 {
+                result.append(CategoryOutlineItem(category: category, depth: depth + 1, direct: true))
+            }
+            for child in children { append(child, depth: depth + 1) }
+        }
+        for category in roots { append(category, depth: 0) }
+        return result
+    }
+
+    private func categoryRow(_ item: CategoryOutlineItem, today: AllocationPeriod, week: AllocationPeriod) -> some View {
+        let category = item.category
+        let target = item.depth == 0 ? plan.values?[category.id] : nil
+        let todayMinutes = item.direct ? today.directMinutes[category.id, default: 0] : today.total(for: category.id, ledger: store.ledger)
+        let weekMinutes = item.direct ? week.directMinutes[category.id, default: 0] : week.total(for: category.id, ledger: store.ledger)
+        return Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) { selection(item); categoryName(item); goal(item) }
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Today").font(.caption)
+                            AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target, compact: false)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading) {
+                            Text("7 days").font(.caption)
+                            AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target, compact: false)
+                        }
+                    }.padding(.leading, 48)
                 }
-                TextField("—", text: Binding(get: { plan.text[category.id] ?? "" }, set: { plan.text[category.id] = $0 }))
-                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 60)
-                    .focused($focusedTarget, equals: category.id)
-                    .accessibilityLabel("\(category.name) goal percent").accessibilityIdentifier("categories.target.\(category.id)")
-                Text("%").foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 4) {
+                    selection(item)
+                    categoryName(item)
+                    goal(item)
+                    AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target)
+                    AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target)
+                }
             }
-            AllocationValues(today: today, week: week, todayMinutes: today.total(for: category.id, ledger: store.ledger), weekMinutes: week.total(for: category.id, ledger: store.ledger), target: plan.values?[category.id])
-            if isExpanded && !children.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Directly assigned to \(category.name)").font(.caption.bold())
-                    AllocationValues(today: today, week: week, todayMinutes: today.directMinutes[category.id, default: 0], weekMinutes: week.directMinutes[category.id, default: 0], target: nil)
-                    ForEach(children) { child in AllocationCategoryRow(category: child, today: today, week: week) }
-                }.padding(.vertical, 4).padding(.leading, 16)
+        }.accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private func selection(_ item: CategoryOutlineItem) -> some View {
+        if item.depth == 0 {
+            Button {
+                if !selected.insert(item.category.id).inserted { selected.remove(item.category.id) }
+            } label: {
+                Image(systemName: selected.contains(item.category.id) ? "checkmark.circle.fill" : "circle")
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+            }.buttonStyle(.borderless)
+                .accessibilityLabel("Select \(item.category.name) for grouping")
+                .accessibilityValue(selected.contains(item.category.id) ? "Selected" : "Not selected")
+                .accessibilityAddTraits(selected.contains(item.category.id) ? .isSelected : [])
+                .accessibilityIdentifier("plan.select.\(item.category.id)")
+        } else { Color.clear.frame(width: 44, height: 1).accessibilityHidden(true) }
+    }
+
+    private func categoryName(_ item: CategoryOutlineItem) -> some View {
+        let category = item.category
+        let hasChildren = !item.direct && !store.ledger.children(of: category.id).isEmpty
+        return Group {
+            if hasChildren {
+                Button {
+                    if !expanded.insert(category.id).inserted { expanded.remove(category.id) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: expanded.contains(category.id) ? "chevron.down" : "chevron.right")
+                            .font(.caption2).frame(width: 10)
+                        Text(category.name).multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }.frame(minHeight: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                    .accessibilityLabel("\(expanded.contains(category.id) ? "Collapse" : "Expand") \(category.name)")
+                    .accessibilityIdentifier("plan.children.\(category.id)")
+            } else {
+                Text(item.direct ? "Direct" : category.name)
+                    .foregroundStyle(item.direct ? Color.secondary : Color.primary)
+                    .padding(.leading, 14).frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .accessibilityLabel(item.direct ? "Directly assigned to \(category.name)" : category.name)
+                    .accessibilityIdentifier(item.direct ? "plan.direct.\(category.id)" : "plan.name.\(category.id)")
             }
-            Button("Use remaining") { plan.useRemaining(for: category.id) }
-                .font(.caption).buttonStyle(.borderless).accessibilityIdentifier("plan.remaining.\(category.id)")
-        }.padding(.vertical, 4)
+        }.font(item.depth == 0 ? .subheadline.weight(.semibold) : .subheadline)
+            .lineLimit(typeSize.isAccessibilitySize ? nil : 2).padding(.leading, CGFloat(item.depth) * 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func goal(_ item: CategoryOutlineItem) -> some View {
+        if item.depth == 0 {
+            HStack(spacing: 0) {
+                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { plan.text[item.category.id] = $0 }))
+                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                    .focused($focusedTarget, equals: item.category.id)
+                    .accessibilityLabel("\(item.category.name) goal percent")
+                    .accessibilityIdentifier("categories.target.\(item.category.id)")
+                Text("%").font(.caption2).foregroundStyle(.secondary)
+            }.font(.subheadline).frame(width: typeSize.isAccessibilitySize ? 86 : 52, height: 44)
+        } else {
+            Text("—").font(.caption).foregroundStyle(.secondary)
+                .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
+                .accessibilityLabel("No goal for subcategories")
+        }
     }
     private func percent(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
     private func load() { plan = AllocationPlanDraft(store.ledger.currentTargets()); error = nil }
