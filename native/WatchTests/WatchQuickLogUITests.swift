@@ -43,6 +43,32 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertFalse(app.buttons["watch.fixture.done"].exists)
     }
 
+    func testWatchCanAuthorizeAndQueueItsOwnCheckInsAndTurnThemOff() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-watch-notification-ledger"]
+        app.launch()
+        let alerts = app.buttons["watch.notifications"]
+        XCTAssertTrue(alerts.waitForExistence(timeout: 15)); alerts.tap()
+        let enable = app.buttons["watch.notifications.enable"]
+        XCTAssertTrue(enable.waitForExistence(timeout: 10)); enable.tap()
+        if app.alerts.buttons["Allow"].waitForExistence(timeout: 3) { app.alerts.buttons["Allow"].tap() }
+        let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
+        if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 3) { carousel.alerts.buttons["Allow"].tap() }
+        let status = app.staticTexts["watch.notifications.status"]
+        let queued = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Scheduled through"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [queued], timeout: 20), .completed)
+        record("WatchLocalNotificationsQueued", app)
+        app.terminate(); app.launchArguments = []; app.launch()
+        XCTAssertTrue(alerts.waitForExistence(timeout: 15)); alerts.tap()
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        XCTAssertTrue(status.label.contains("Scheduled through"))
+        let off = app.buttons["watch.notifications.off"]
+        for _ in 0..<6 { if off.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(off.exists); off.tap()
+        let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
+    }
+
     private func assertCount(_ expected: String, _ app: XCUIApplication) {
         let count = app.descendants(matching: .any).matching(identifier: "watch.debug.sample-count").firstMatch
         // The narrow Watch screen may require scrolling below the summary.

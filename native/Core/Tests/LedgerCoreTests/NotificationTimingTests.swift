@@ -15,6 +15,7 @@ final class NotificationTimingTests: XCTestCase {
     func testLegacySettingsKeepRegularFifteenMinutePrompts() throws {
         let value = try JSONDecoder().decode(Settings.self, from: Data("{\"notificationsEnabled\":true,\"startMinute\":420,\"endMinute\":1320}".utf8))
         XCTAssertEqual(value.notificationTiming, .regular)
+        XCTAssertEqual(value.notificationDelivery, .automatic)
         XCTAssertEqual(value.regularNotificationInterval, 15)
         XCTAssertEqual(value.randomizedNotificationInterval, 15)
         XCTAssertEqual(try value.notificationSchedule().count, 61)
@@ -126,6 +127,7 @@ final class NotificationTimingTests: XCTestCase {
     func testBothModesRememberTheirIntervalAcrossBackupAndPhoneWatchMerge() throws {
         var phone = Ledger(), watch = phone, settings = phone.settings
         settings.notificationsEnabled = true; settings.notificationTiming = .randomized
+        settings.notificationDelivery = .watch
         settings.regularNotificationInterval = 30; settings.randomizedNotificationInterval = 20
         try phone.saveSettings(settings, writer: "phone")
         watch.merge(phone)
@@ -137,5 +139,13 @@ final class NotificationTimingTests: XCTestCase {
         XCTAssertEqual(phone.settings.regularNotificationInterval, 30)
         XCTAssertEqual(phone.settings.randomizedNotificationInterval, 20)
         XCTAssertEqual(phone.settings.notificationTiming, .regular)
+        XCTAssertEqual(phone.settings.notificationDelivery, .watch)
+    }
+
+    func testWatchDeliveryOwnsOnlyOneLocalScheduleAndAutomaticPreservesPhoneRouting() {
+        XCTAssertTrue(NotificationDelivery.watch.schedulesLocally(onWatch: true))
+        XCTAssertFalse(NotificationDelivery.watch.schedulesLocally(onWatch: false))
+        XCTAssertTrue(NotificationDelivery.automatic.schedulesLocally(onWatch: false))
+        XCTAssertFalse(NotificationDelivery.automatic.schedulesLocally(onWatch: true))
     }
 }

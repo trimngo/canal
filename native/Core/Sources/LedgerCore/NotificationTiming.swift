@@ -7,6 +7,13 @@ public enum NotificationTiming: String, Codable, CaseIterable, Identifiable, Sen
     public static let intervals = [5, 10, 15, 20, 30, 45, 60, 90, 120]
 }
 
+public enum NotificationDelivery: String, Codable, CaseIterable, Identifiable, Sendable {
+    case automatic, watch
+    public var id: String { rawValue }
+    public var name: String { self == .automatic ? "Automatic" : "Apple Watch" }
+    public func schedulesLocally(onWatch: Bool) -> Bool { (self == .watch) == onWatch }
+}
+
 extension Settings {
     /// A finite queue is needed for fresh random times, or a frequent window
     /// whose repeating requests would exceed Apple's pending-notification limit.

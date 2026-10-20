@@ -127,6 +127,7 @@ public struct Settings: Codable, Equatable, Sendable {
     public var notificationsAllDay = false
     public var notificationsEnabled = false
     public var notificationTiming = NotificationTiming.regular
+    public var notificationDelivery = NotificationDelivery.automatic
     public var regularNotificationInterval = 15
     public var randomizedNotificationInterval = 15
     public var startMinute = 7 * 60
@@ -139,7 +140,7 @@ public struct Settings: Codable, Equatable, Sendable {
         // Keep the existing wire key so older Watch versions retain the same time zone.
         case reportingTimeZoneIdentifier = "wakingTimeZoneIdentifier"
         case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision
-        case notificationTiming, regularNotificationInterval, randomizedNotificationInterval
+        case notificationTiming, notificationDelivery, regularNotificationInterval, randomizedNotificationInterval
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -147,6 +148,7 @@ public struct Settings: Codable, Equatable, Sendable {
         notificationsAllDay = try values.decodeIfPresent(Bool.self, forKey: .notificationsAllDay) ?? false
         notificationsEnabled = try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         notificationTiming = try values.decodeIfPresent(NotificationTiming.self, forKey: .notificationTiming) ?? .regular
+        notificationDelivery = try values.decodeIfPresent(NotificationDelivery.self, forKey: .notificationDelivery) ?? .automatic
         regularNotificationInterval = try values.decodeIfPresent(Int.self, forKey: .regularNotificationInterval) ?? 15
         randomizedNotificationInterval = try values.decodeIfPresent(Int.self, forKey: .randomizedNotificationInterval) ?? 15
         startMinute = try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? 420

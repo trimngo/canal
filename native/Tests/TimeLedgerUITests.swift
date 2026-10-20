@@ -740,8 +740,10 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         element(app, "settings.notification-timing").tap(); app.buttons["Randomized"].tap()
         let allDay = app.switches["settings.notifications-all-day"]
+        reveal(allDay, in: app)
         allDay.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         let enabled = app.switches["settings.notifications-enabled"]
+        reveal(enabled, in: app)
         enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
         let allow = app.alerts.buttons["Allow"]
@@ -766,6 +768,25 @@ final class TimeLedgerUITests: XCTestCase {
         reveal(save, in: app); save.tap()
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
+    }
+
+    func testWatchDeliveryChoicePersistsAndExplainsWatchSetup() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        let delivery = element(app, "settings.notification-delivery")
+        XCTAssertTrue(delivery.waitForExistence(timeout: 5))
+        delivery.tap(); app.buttons["Apple Watch"].tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "enable Watch alerts once")).firstMatch.exists)
+        let enabled = app.switches["settings.notifications-enabled"]; reveal(enabled, in: app)
+        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
+        let status = element(app, "settings.notification-schedule-status")
+        let watch = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "assigned to Apple Watch"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [watch], timeout: 10), .completed)
+        recordScreen("WatchDeliverySettings", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(delivery.label.contains("Apple Watch") || delivery.value as? String == "Apple Watch")
+        XCTAssertEqual(app.switches["settings.notifications-enabled"].value as? String, "1")
     }
 
     func testTargetsAreAccessibleAndPersist() {

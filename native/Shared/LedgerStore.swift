@@ -51,6 +51,11 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-watch-notification-ledger") {
+                var fixture = Ledger()
+                fixture.settings.notificationTiming = .randomized; fixture.settings.notificationsAllDay = true
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-legacy-ledger") {
                 var fixture = Ledger(); fixture.schemaVersion = 1
                 fixture.entries = [CheckIn(end: Ledger.slotEnd(at: Date()), activity: "Legacy sample UI fixture", categoryID: "work", revision: Revision(counter: 1, writer: "fixture"))]
@@ -270,10 +275,10 @@ final class LedgerStore: ObservableObject {
                 self?.cloud?.requestSync()
                 #if os(iOS)
                 if let self { self.backup?.request(self.ledger) }
+                #endif
                 if let self {
                     do { try await NotificationScheduler.shared.apply(self.ledger.settings) } catch { self.report(error) }
                 }
-                #endif
             }
         }
         importSiriCaptures()

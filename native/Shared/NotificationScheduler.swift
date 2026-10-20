@@ -19,10 +19,17 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     private let configurationKey = "notifications.schedule-configuration.v2"
     #if os(iOS)
     static let backgroundIdentifier = "com.trimngo.TimeLedger.checkins-refresh"
+    #endif
     private var lastConfiguration: Data?
     private var lastChecked = Date.distantPast
     private var lastUsedQueue = false
-    #endif
+    private static var isWatch: Bool {
+        #if os(watchOS)
+        return true
+        #else
+        return false
+        #endif
+    }
     private let promptBody = "Tap to type or dictate what you’re doing now."
     private override init() { super.init(); center.delegate = self }
 
@@ -41,9 +48,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         switch value.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             #if os(iOS)
-            status = "Allowed · check-ins scheduled on iPhone"
+            status = "Notifications allowed on iPhone"
             #else
-            status = "Allowed · check-in alerts come from iPhone"
+            status = "Notifications allowed on Apple Watch"
             #endif
         case .denied: status = "Blocked in system notification settings"
         default: status = "Not enabled"
@@ -63,7 +70,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     }
 
     private func applySerially(_ settings: Settings, force: Bool) async throws {
-        #if os(iOS)
         try settings.validateNotificationSettings()
         let calendar = Calendar.current
         let configuration = Configuration(settings: settings, timeZone: calendar.timeZone.identifier)
@@ -78,11 +84,16 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         let checkIns = pending.filter { $0.identifier.hasPrefix("checkin-") }
         let changed = UserDefaults.standard.data(forKey: configurationKey) != encoded
         let permission = await center.notificationSettings().authorizationStatus
-        guard settings.notificationsEnabled, permission == .authorized || permission == .provisional else {
+        let runsHere = settings.notificationDelivery.schedulesLocally(onWatch: Self.isWatch)
+        guard settings.notificationsEnabled, runsHere, permission == .authorized || permission == .provisional else {
             center.removePendingNotificationRequests(withIdentifiers: checkIns.map(\.identifier))
             UserDefaults.standard.removeObject(forKey: configurationKey)
-            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
-            scheduleStatus = settings.notificationsEnabled ? "No check-ins scheduled. Allow notifications to start." : "Check-ins are off."
+            cancelBackgroundRefresh()
+            if !settings.notificationsEnabled { scheduleStatus = "Check-ins are off." }
+            else if !runsHere {
+                scheduleStatus = Self.isWatch ? "Automatic delivery uses iPhone notification routing. Choose Watch alerts to schedule here."
+                    : "Check-ins are assigned to Apple Watch. Open Dash on your Watch and enable Watch alerts there."
+            } else { scheduleStatus = "No check-ins scheduled. Allow notifications on this device to start." }
             lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = false
             return
         }
@@ -124,7 +135,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                     try await center.add(UNNotificationRequest(identifier: time.id, content: content(), trigger: trigger))
                 }
                 scheduleStatus = "Repeats automatically until turned off."
-                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
+                cancelBackgroundRefresh()
             }
             UserDefaults.standard.set(encoded, forKey: configurationKey)
             lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = queued
@@ -134,9 +145,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             scheduleStatus = "Could not finish scheduling. Open Dash to retry."
             throw error
         }
-        #else
-        configureActions(); await refreshStatus()
-        #endif
     }
 
     private func content() -> UNMutableNotificationContent {
@@ -147,7 +155,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         return content
     }
 
-    #if os(iOS)
     private struct Configuration: Codable {
         let settings: Settings
         let timeZone: String
@@ -158,12 +165,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             value.notificationsAllDay = settings.notificationsAllDay
             value.startMinute = settings.startMinute; value.endMinute = settings.endMinute
             value.notificationTiming = settings.notificationTiming
+            value.notificationDelivery = settings.notificationDelivery
             value.regularNotificationInterval = settings.regularNotificationInterval
             value.randomizedNotificationInterval = settings.randomizedNotificationInterval
             self.settings = value; self.timeZone = timeZone
         }
     }
 
+    #if os(iOS)
     func registerBackgroundRefresh() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.backgroundIdentifier, using: nil) { task in
             guard let refresh = task as? BGAppRefreshTask else { task.setTaskCompleted(success: false); return }
@@ -177,12 +186,25 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
     }
 
+    #endif
+
     private func scheduleBackgroundRefresh() {
+        #if os(iOS)
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundIdentifier)
         request.earliestBeginDate = Date().addingTimeInterval(30 * 60)
         try? BGTaskScheduler.shared.submit(request)
+        #else
+        WKApplication.shared().scheduleBackgroundRefresh(withPreferredDate: Date().addingTimeInterval(30 * 60), userInfo: nil) { _ in }
+        #endif
     }
-    #endif
+
+    private func cancelBackgroundRefresh() {
+        #if os(iOS)
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
+        #endif
+        // A pending Watch refresh may still run once; it sees delivery disabled
+        // and completes without scheduling another refresh or any alerts.
+    }
 
     func sendTest() async throws {
         guard try await permission() else { throw NotificationError.denied }
