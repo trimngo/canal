@@ -59,19 +59,22 @@ struct CommitmentsView: View {
                     Button("Save plan") { save() }.disabled(!canSave).accessibilityIdentifier("categories.save-targets")
                 } footer: {
                     Text("Set top-level category goals totaling 100%. Editing one share leaves the others unchanged.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section {
-                    if !typeSize.isAccessibilitySize { columnHeadings }
                     ForEach(outline(today: today, week: week)) { item in
                         categoryRow(item, today: today, week: week)
                             .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     }
-                } header: { Text("Categories") } footer: {
+                } header: {
+                    if typeSize.isAccessibilitySize { Text("Categories") }
+                    else { columnHeadings }
+                } footer: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Select circles to group categories under a parent. Tap a parent’s name to see its children.")
-                        Text("Actual time: today since your first log, and \(week.representedDays) of the last 7 days. Hours are estimates from your logs. A difference from a goal is not a score.")
+                        Text("Actual time: today since your first log, and \(week.representedDays) of the last 7 days. Times are estimates; pp shows percentage points above or below your goal.")
                             .accessibilityIdentifier("plan.coverage")
-                    }
+                    }.font(.caption).foregroundStyle(.secondary)
                 }
                 CategoryMoveUndoSection()
                 if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
@@ -126,7 +129,7 @@ struct CommitmentsView: View {
             Text("Goal").frame(width: 52, alignment: .trailing)
             Text("Today").frame(width: 60, alignment: .trailing)
             Text("7 days").frame(width: 60, alignment: .trailing)
-        }.font(.caption2).foregroundStyle(.secondary)
+        }.font(.caption2).foregroundStyle(.secondary).textCase(nil)
             .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
     }
 
@@ -231,7 +234,7 @@ struct CommitmentsView: View {
                     .accessibilityLabel("\(item.category.name) goal percent")
                     .accessibilityIdentifier("categories.target.\(item.category.id)")
                 Text("%").font(.caption2).foregroundStyle(.secondary)
-            }.font(.subheadline).frame(width: typeSize.isAccessibilitySize ? 86 : 52, height: 44)
+            }.font(.subheadline).frame(width: typeSize.isAccessibilitySize ? 86 : 52).frame(minHeight: 44)
         } else {
             Text("—").font(.caption).foregroundStyle(.secondary)
                 .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
