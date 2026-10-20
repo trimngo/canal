@@ -23,10 +23,6 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGroupPickerKeepsMultipleSelectionsWhileCreatingAndCanCancel \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testLongEntryStaysVisibleAboveTheCategoryChecklist \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testMultiCategorySelectionResolvesParentConflictExplicitly \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryLineTrendsAndUnitsAreOnMainDashboard \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTrendComparisonFiltersHighlightsAndRemembersCategoriesAfterRelaunch \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTrendDayInspectionAndSeparateCategoryChartsUseBothUnits test
 fi
