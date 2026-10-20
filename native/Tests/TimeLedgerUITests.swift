@@ -932,7 +932,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(admin.waitForExistence(timeout: 5)); admin.tap()
         app.buttons["categories.select.music"].tap()
         app.buttons["categories.group-selected"].tap()
-        element(app, "categories.destination").tap(); app.buttons["Work"].tap()
+        element(app, "categories.destination").tap()
+        // The covered organizer also contains Work. Choose the menu option,
+        // not its underlying selection button.
+        app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Work", "categories.select.work")).firstMatch.tap()
         let preview = app.staticTexts["30% → 55%"]
         reveal(preview, in: app); XCTAssertTrue(preview.exists)
         recordScreen("BulkGroupingPreview", in: app)
