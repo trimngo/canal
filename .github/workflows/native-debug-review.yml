@@ -1,0 +1,39 @@
+name: Extract saved native UI diagnostics
+on:
+  push:
+    branches: [feat/native-inbox-migration-build]
+    paths: ['.github/workflows/native-debug-review.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  extract:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-simulator-results
+          run-id: 39415152997
+          github-token: ${{ github.token }}
+          path: debug
+      - name: Export saved failure diagnostics
+        run: |
+          xcrun xcresulttool export attachments --path debug/UITests.xcresult --output-path review
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          source = pathlib.Path('review'); target = pathlib.Path('compact'); target.mkdir()
+          for item in json.loads((source / 'manifest.json').read_text()):
+              for a in item.get('attachments', []):
+                  filename = a.get('exportedFileName', '')
+                  if filename.endswith(('.txt', '.png')):
+                      shutil.copy2(source / filename, target / filename)
+          shutil.copy2(source / 'manifest.json', target / 'manifest.json')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-failure-diagnostics
+          path: compact
+          retention-days: 2
