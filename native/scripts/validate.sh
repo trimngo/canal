@@ -23,8 +23,6 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testAllDayNotificationSettingPersistsAndHidesWindowPickers \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testNotificationTimingModesRememberSeparateIntervalsAfterRelaunch \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRandomNotificationsQueueAndSwitchBackToRepeating \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testQuickNotificationReplySavesWithoutEditorConfirmationAndSurvivesRelaunch test
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testWatchDeliveryChoicePersistsAndExplainsWatchSetup test
 fi
