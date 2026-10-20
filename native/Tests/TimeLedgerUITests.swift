@@ -1001,6 +1001,34 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(group.exists)
     }
 
+    func testExpandedCategoryLogButtonsOpenOnlyTheirOwnLogs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-allocation-fixture", "--ui-category-log-links"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        let work = app.buttons["plan.children.work"]; reveal(work, in: app); work.tap()
+        for id in ["teaching", "music"] {
+            let child = element(app, "dashboard.group.\(id)"); reveal(child, in: app); child.tap()
+            XCTAssertFalse(app.buttons["group.done"].exists)
+        }
+        for (id, name, activity, other) in [
+            ("teaching", "Teaching", "Preparing classes", "Guitar practice"),
+            ("music", "Music", "Guitar practice", "Preparing classes")
+        ] {
+            let logs = app.buttons["allocation.logs.\(id)"]; reveal(logs, in: app); logs.tap()
+            XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts[activity].exists)
+            XCTAssertFalse(app.staticTexts[other].exists)
+            recordScreen("CategoryLogs-\(id)", in: app)
+            let done = app.buttons["group.done"]; done.tap()
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: done)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+            let unexpectedSheet = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: done)
+            unexpectedSheet.isInverted = true
+            XCTAssertEqual(XCTWaiter.wait(for: [unexpectedSheet], timeout: 2), .completed)
+            XCTAssertTrue(app.navigationBars["Commitments"].exists)
+        }
+    }
+
     func testGroupingProtectsUnsavedGoalsAndCancelKeepsSelection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()

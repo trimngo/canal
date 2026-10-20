@@ -139,6 +139,9 @@ final class LedgerStore: ObservableObject {
                     try fixture.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 60, writer: "fixture")
                     try fixture.saveWeeklyCommitment(categoryID: "music", minimumMinutes: 600, writer: "fixture")
                 }
+                if ProcessInfo.processInfo.arguments.contains("--ui-category-log-links") {
+                    try fixture.moveCategory("music", to: "work", writer: "fixture")
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-fixture") {

@@ -17,7 +17,9 @@ struct AllocationCategoryRow: View {
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 8) {
-                Button("View logs") { viewingLogs = true }.font(.caption)
+                Button("View logs") { viewingLogs = true }
+                    .font(.caption).buttonStyle(.borderless)
+                    .accessibilityIdentifier("allocation.logs.\(category.id)")
                 let children = store.ledger.children(of: category.id)
                 if !children.isEmpty {
                     Text("Directly assigned to \(category.name)").font(.caption.bold())
@@ -34,7 +36,11 @@ struct AllocationCategoryRow: View {
                 }
                 AllocationValues(today: today, week: week, todayMinutes: today.total(for: category.id, ledger: store.ledger), weekMinutes: week.total(for: category.id, ledger: store.ledger), target: target)
             }.padding(.vertical, 3)
-        }.accessibilityIdentifier("dashboard.group.\(category.id)")
+        }
+            // All descendants share their top-level category's List cell.
+            // Automatic buttons otherwise activate together when that cell is tapped.
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("dashboard.group.\(category.id)")
             .sheet(isPresented: $viewingLogs) { GroupEntriesView(day: Date(), groupID: category.id, initialName: category.name, allTime: true) }
     }
     private func childRow(_ category: LedgerCategory) -> AnyView {
