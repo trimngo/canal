@@ -14,6 +14,7 @@ struct CategoryTrendView: View {
     @State private var choosing = false
     @State private var highlightedID: String?
     @State private var selectedDate: Date?
+    @State private var chartDate: Date?
 
     private var calendar: Calendar { store.ledger.reportingCalendar() }
     private var savedIDs: [String]? {
@@ -60,6 +61,11 @@ struct CategoryTrendView: View {
                 if visible, savedIDs == nil, !report.rows.isEmpty {
                     saveSelection(report.trendRows(selectedIDs: nil).map(\.id))
                 }
+            }
+            .onChange(of: chartDate) { _, date in
+                // Native chart selection can clear on finger-up. Keep the last
+                // inspected day readable after the gesture finishes.
+                if let date { selectedDate = date }
             }
             .onChange(of: report.start) { _, _ in selectedDate = nil }
             .onChange(of: calendar.startOfDay(for: report.end)) { _, _ in selectedDate = nil }
@@ -159,7 +165,7 @@ struct CategoryTrendView: View {
             }
         }
         .chartLegend(.hidden)
-        .chartXSelection(value: $selectedDate)
+        .chartXSelection(value: $chartDate)
         .chartXScale(domain: report.start...max(report.end, report.start.addingTimeInterval(3600)))
         .chartYScale(domain: 0...maximum)
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
