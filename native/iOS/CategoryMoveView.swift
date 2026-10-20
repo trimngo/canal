@@ -59,7 +59,7 @@ struct CategoryMoveView: View {
                     switch preview {
                     case .success(let (draft, undo)):
                         if undo.previousTargets != undo.resultingTargets {
-                            Text("Goals will combine under the destination life area. Other goals stay unchanged.").font(.subheadline)
+                            Text("Goals will combine under the destination parent category. Other goals stay unchanged.").font(.subheadline)
                             ForEach(Array(Set(undo.previousTargets.keys).union(undo.resultingTargets.keys)).sorted(), id: \.self) { id in
                                 if undo.previousTargets[id] != undo.resultingTargets[id] {
                                     HStack {

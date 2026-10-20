@@ -35,6 +35,11 @@ final class TimeLedgerUITests: XCTestCase {
                 let keyboard = app.keyboards.firstMatch.frame
                 if usable(keyboard) { bottom = min(bottom, keyboard.minY) }
             }
+            let grouping = app.buttons["plan.group-selected"]
+            if grouping.exists && grouping.isHittable && target.identifier != "plan.group-selected" && target.identifier != "plan.clear-selection" {
+                let bar = grouping.frame
+                if usable(bar) { bottom = min(bottom, bar.minY - 16) }
+            }
             let proposed = target.exists ? target.frame : .zero
             let frame = usable(proposed) ? proposed : .zero
             if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
@@ -910,7 +915,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Saved. You can change it anytime."].waitForExistence(timeout: 5))
     }
 
-    func testLifeAreaRemainderKeepsOtherGoalsAndActivityLogs() {
+    func testCategoryRemainderKeepsOtherGoalsAndActivityLogs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-commitments-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertTrue(element(app, "plan.total").waitForExistence(timeout: 5))
@@ -927,22 +932,20 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testBulkGroupingIntoExistingParentPreviewsGoalsAndCanUndo() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["plan.organize"].tap()
-        let admin = app.buttons["categories.select.admin"]
-        XCTAssertTrue(admin.waitForExistence(timeout: 5)); admin.tap()
-        app.buttons["categories.select.music"].tap()
-        app.buttons["categories.group-selected"].tap()
+        app.tabBars.buttons["Commitments"].tap()
+        selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
+        XCTAssertTrue(app.textFields["categories.target.music"].exists)
+        XCTAssertFalse(app.navigationBars["Categories"].exists)
+        app.buttons["plan.group-selected"].tap()
         element(app, "categories.destination").tap()
-        // The covered organizer also contains Work. Choose the menu option,
-        // not its underlying selection button.
-        app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Work", "categories.select.work")).firstMatch.tap()
+        app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Work", "plan.children.work")).firstMatch.tap()
         let preview = app.staticTexts["30% → 55%"]
         reveal(preview, in: app); XCTAssertTrue(preview.exists)
         recordScreen("BulkGroupingPreview", in: app)
         let move = app.buttons["categories.apply-move"]; XCTAssertTrue(move.isEnabled); move.tap()
         let undo = app.buttons["categories.undo-move"]; reveal(undo, in: app)
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
-        app.buttons["groups.done"].tap()
+        XCTAssertFalse(app.buttons["plan.group-selected"].exists)
         let music = app.textFields["categories.target.music"]; reveal(music, in: app)
         XCTAssertEqual(music.value as? String, "15")
         let workTarget = app.textFields["categories.target.work"]; reveal(workTarget, in: app)
@@ -951,14 +954,14 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testBulkGroupingCreatesParentAndPersistsWithoutLosingLogs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["plan.organize"].tap()
-        XCTAssertTrue(app.buttons["categories.select.admin"].waitForExistence(timeout: 5))
-        app.buttons["categories.select.admin"].tap(); app.buttons["categories.select.music"].tap()
-        recordScreen("BulkCategorySelection", in: app)
-        app.buttons["categories.group-selected"].tap()
+        app.tabBars.buttons["Commitments"].tap()
+        selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
+        recordScreen("DirectCategorySelection", in: app)
+        app.buttons["plan.group-selected"].tap()
         let name = app.textFields["categories.new-parent-name"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap(); name.typeText("Personal projects"); app.buttons["keyboard.done"].tap()
-        app.buttons["categories.apply-move"].tap(); app.buttons["groups.done"].tap()
+        app.buttons["categories.apply-move"].tap()
+        XCTAssertFalse(app.buttons["plan.group-selected"].exists)
         let goal = app.textFields["Personal projects goal percent"]; reveal(goal, in: app)
         XCTAssertEqual(goal.value as? String, "25")
         recordScreen("GroupedLifeAreas", in: app)
@@ -969,17 +972,76 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Guitar practice"].waitForExistence(timeout: 5))
     }
 
-    func testCreatingLifeAreaAndGroupingStandaloneCategoriesAreAccessible() {
+    func testCommitmentsShowsAllRootCategoriesAndExpandsWithoutChangingSelection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
-        let loose = element(app, "plan.loose-categories"); reveal(loose, in: app); loose.tap()
-        XCTAssertTrue(app.staticTexts["German"].waitForExistence(timeout: 5))
-        let add = app.buttons["plan.add-area"]; reveal(add, in: app); add.tap()
-        recordScreen("NewLifeAreaAlert", in: app)
-        let alert = app.alerts["New life area"]; XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.textFields.firstMatch.tap(); alert.textFields.firstMatch.typeText("Relationships"); alert.buttons["Create"].tap()
-        let field = app.textFields["Relationships goal percent"]; reveal(field, in: app)
-        XCTAssertTrue(field.exists)
+        XCTAssertTrue(element(app, "plan.total").waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["plan.add-area"].exists)
+        XCTAssertFalse(element(app, "plan.loose-categories").exists)
+        XCTAssertFalse(app.buttons["plan.group-selected"].exists)
+        let german = app.textFields["categories.target.german"]; reveal(german, in: app)
+        XCTAssertTrue(german.exists)
+        selectPlanCategory("german", in: app)
+        let group = app.buttons["plan.group-selected"]
+        XCTAssertEqual(group.label, "Group 1 selected")
+        let work = app.buttons["plan.children.work"]; reveal(work, in: app); work.tap()
+        let teaching = app.staticTexts["Teaching"]; reveal(teaching, in: app)
+        XCTAssertTrue(teaching.exists)
+        XCTAssertFalse(app.buttons["plan.select.teaching"].exists)
+        XCTAssertEqual(group.label, "Group 1 selected")
+        XCTAssertTrue(app.textFields["categories.target.work"].exists)
+        recordScreen("CategoryTreeExpanded", in: app)
+        app.buttons["plan.clear-selection"].tap()
+        XCTAssertFalse(group.exists)
+    }
+
+    func testGroupingProtectsUnsavedGoalsAndCancelKeepsSelection() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        setPlanNumber("categories.target.work", to: "35", in: app)
+        selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
+        app.buttons["plan.group-selected"].tap()
+        let dialog = app.sheets["Save your goal changes before grouping?"]
+        XCTAssertTrue(dialog.waitForExistence(timeout: 5))
+        XCTAssertFalse(dialog.buttons["Save and group"].exists)
+        dialog.buttons["Keep editing"].tap()
+        XCTAssertEqual(app.buttons["plan.group-selected"].label, "Group 2 selected")
+        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
+        XCTAssertEqual(work.value as? String, "35")
+        app.buttons["plan.group-selected"].tap()
+        app.sheets.buttons["Discard changes and group"].tap()
+        XCTAssertTrue(element(app, "categories.destination").waitForExistence(timeout: 5))
+        app.navigationBars["Group categories"].buttons["Cancel"].tap()
+        XCTAssertEqual(app.buttons["plan.group-selected"].label, "Group 2 selected")
+        reveal(work, in: app); XCTAssertEqual(work.value as? String, "30")
+        recordScreen("DirectGroupingCancelled", in: app)
+    }
+
+    func testGroupingCanSaveACompleteDraftBeforePreviewingMove() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        setPlanNumber("categories.target.work", to: "35", in: app)
+        setPlanNumber("categories.target.music", to: "10", in: app)
+        selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
+        app.buttons["plan.group-selected"].tap()
+        let saveAndGroup = app.sheets.buttons["Save and group"]
+        XCTAssertTrue(saveAndGroup.waitForExistence(timeout: 5)); saveAndGroup.tap()
+        let name = app.textFields["categories.new-parent-name"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap(); name.typeText("Personal projects"); app.buttons["keyboard.done"].tap()
+        XCTAssertTrue(app.staticTexts["0% → 20%"].exists)
+        app.buttons["categories.apply-move"].tap()
+        let goal = app.textFields["Personal projects goal percent"]; reveal(goal, in: app)
+        XCTAssertEqual(goal.value as? String, "20")
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
+        XCTAssertEqual(work.value as? String, "35")
+        reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "20")
+    }
+
+    private func selectPlanCategory(_ id: String, in app: XCUIApplication) {
+        let button = app.buttons["plan.select.\(id)"]; reveal(button, in: app)
+        XCTAssertTrue(button.isHittable); button.tap()
+        XCTAssertEqual(button.value as? String, "Selected")
     }
 
     private func setPlanNumber(_ id: String, to value: String, in app: XCUIApplication) {
