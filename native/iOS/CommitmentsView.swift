@@ -2,13 +2,18 @@ import SwiftUI
 import UIKit
 import LedgerCore
 
+private struct CategoryGroupingRequest: Identifiable {
+    let id = UUID()
+    let categoryIDs: [String]
+}
+
 struct CommitmentsView: View {
     @EnvironmentObject private var store: LedgerStore
     @State private var plan = AllocationPlanDraft([:])
     @State private var loaded = false
     @State private var selected = Set<String>()
     @State private var expanded = Set<String>()
-    @State private var moving = false
+    @State private var groupingRequest: CategoryGroupingRequest?
     @State private var moveSelection: [String] = []
     @State private var confirmGrouping = false
     @State private var managingCategories = false
@@ -91,11 +96,13 @@ struct CommitmentsView: View {
                 UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
             }
         }
-        .sheet(isPresented: $moving) { CategoryMoveView(ids: moveSelection) { selected = [] } }
+        .sheet(item: $groupingRequest) { request in
+            CategoryMoveView(ids: request.categoryIDs) { selected = [] }
+        }
         .sheet(isPresented: $managingCategories) { GroupManagerView() }
         .confirmationDialog("Save your goal changes before grouping?", isPresented: $confirmGrouping, titleVisibility: .visible) {
-            if canSave { Button("Save and group") { if save() { moving = true } } }
-            Button("Discard changes and group", role: .destructive) { load(); moving = true }
+            if canSave { Button("Save and group") { if save() { groupingRequest = CategoryGroupingRequest(categoryIDs: moveSelection) } } }
+            Button("Discard changes and group", role: .destructive) { load(); groupingRequest = CategoryGroupingRequest(categoryIDs: moveSelection) }
             Button("Keep editing", role: .cancel) {}
         }
     }
@@ -163,6 +170,7 @@ struct CommitmentsView: View {
         // a sync can change the root list before the sheet finishes dismissing.
         moveSelection = roots.filter { selected.contains($0.id) }.map(\.id)
         guard !moveSelection.isEmpty else { return }
-        if plan.isDirty { confirmGrouping = true } else { moving = true }
+        if plan.isDirty { confirmGrouping = true }
+        else { groupingRequest = CategoryGroupingRequest(categoryIDs: moveSelection) }
     }
 }

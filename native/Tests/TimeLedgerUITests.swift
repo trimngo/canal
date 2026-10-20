@@ -893,12 +893,15 @@ final class TimeLedgerUITests: XCTestCase {
         let save = app.buttons["categories.save-targets"]
         XCTAssertFalse(save.isEnabled)
         setPlanNumber("categories.target.work", to: "90", in: app)
+        showPlanSummary(in: app)
         reveal(save, in: app); XCTAssertFalse(save.isEnabled)
         XCTAssertTrue(element(app, "plan.balance").label.contains("5% over"))
         setPlanNumber("categories.target.work", to: "80", in: app)
+        showPlanSummary(in: app)
         reveal(save, in: app); XCTAssertFalse(save.isEnabled)
         XCTAssertTrue(element(app, "plan.balance").label.contains("5% left"))
         setPlanNumber("categories.target.work", to: "85", in: app)
+        showPlanSummary(in: app)
         reveal(save, in: app); XCTAssertTrue(save.isEnabled); save.tap()
         XCTAssertEqual(element(app, "plan.balance").label, "100% assigned")
         XCTAssertFalse(save.isEnabled)
@@ -971,14 +974,15 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["plan.group-selected"].tap()
         let name = app.textFields["categories.new-parent-name"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap(); name.typeText("Personal projects"); app.buttons["keyboard.done"].tap()
+        XCTAssertTrue(app.buttons["categories.apply-move"].isEnabled)
         app.buttons["categories.apply-move"].tap()
-        XCTAssertFalse(app.buttons["plan.group-selected"].exists)
+        waitForGroupingToFinish(in: app)
         let goal = app.textFields["Personal projects goal percent"]; reveal(goal, in: app)
         XCTAssertEqual(goal.value as? String, "25")
         recordScreen("GroupedLifeAreas", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
         reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "25")
-        reveal(element(app, "plan.total"), in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% assigned")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% assigned")
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Guitar practice"].waitForExistence(timeout: 5))
     }
@@ -1047,6 +1051,20 @@ final class TimeLedgerUITests: XCTestCase {
         let work = app.textFields["categories.target.work"]; reveal(work, in: app)
         XCTAssertEqual(work.value as? String, "35")
         reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "20")
+    }
+
+    private func showPlanSummary(in app: XCUIApplication) {
+        let total = element(app, "plan.total")
+        for _ in 0..<12 {
+            if total.exists && total.isHittable { break }
+            app.swipeDown()
+        }
+        reveal(total, in: app)
+    }
+
+    private func waitForGroupingToFinish(in app: XCUIApplication) {
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["plan.group-selected"])
+        XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 5), .completed)
     }
 
     private func selectPlanCategory(_ id: String, in app: XCUIApplication) {
