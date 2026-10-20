@@ -55,19 +55,22 @@ struct GroupEntriesView: View {
                 if entries.isEmpty { Text("There are no logs in this group for this view.").foregroundStyle(.secondary) }
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 10) {
-                        Button { editing = entry } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(entry.activity).foregroundStyle(.primary)
-                                Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }.buttonStyle(.plain)
+                        HStack(alignment: .top, spacing: 8) {
+                            Button { editing = entry } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.activity).foregroundStyle(.primary)
+                                    Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                            DeleteLogButton(entry: entry, identifierPrefix: "group.delete-log")
+                        }
                         Text("Group: \(store.categoryNames(for: entry))")
                             .font(.caption).foregroundStyle(.secondary)
                         suggestion(for: entry)
                         Button { categorizing = entry } label: {
                             Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
-                        }.accessibilityIdentifier("group.choose.\(entry.id)")
+                        }.buttonStyle(.borderless).accessibilityIdentifier("group.choose.\(entry.id)")
                     }.padding(.vertical, 5)
                         .swipeActions {
                             Button("Delete", role: .destructive) {

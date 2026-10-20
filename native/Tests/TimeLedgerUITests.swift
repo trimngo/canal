@@ -640,6 +640,12 @@ final class TimeLedgerUITests: XCTestCase {
         let undo = app.buttons["logs.undo-delete"]
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
         XCTAssertTrue(app.buttons["logs.entry.recent"].waitForExistence(timeout: 5))
+        let trash = app.buttons["logs.delete.recent"]; reveal(trash, in: app)
+        recordScreen("VisibleLogDelete", in: app); trash.tap()
+        XCTAssertFalse(app.buttons["logs.entry.recent"].exists)
+        XCTAssertFalse(app.navigationBars["Edit log"].exists)
+        XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
+        XCTAssertTrue(app.buttons["logs.entry.recent"].waitForExistence(timeout: 5))
         app.buttons["logs.entry.recent"].tap()
         let remove = app.buttons["edit.delete"]; reveal(remove, in: app); remove.tap()
         XCTAssertTrue(app.buttons["logs.undo-delete"].waitForExistence(timeout: 5))
@@ -652,6 +658,25 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["View all logs (1)"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
+    }
+
+    func testCategoryLogDeleteButtonUpdatesDashboardAndCanUndo() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
+        dashboardGroup("work", in: app).tap()
+        let trash = app.buttons["group.delete-log.recent"]
+        XCTAssertTrue(trash.waitForExistence(timeout: 5))
+        recordScreen("CategoryLogDelete", in: app); trash.tap()
+        XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
+        XCTAssertFalse(app.navigationBars["Edit sample"].exists)
+        let undo = app.buttons["logs.undo-delete"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
+        XCTAssertTrue(app.staticTexts["Recent work observation"].waitForExistence(timeout: 5))
+        trash.tap(); app.buttons["group.done"].tap()
+        XCTAssertFalse(app.buttons["dashboard.group.work"].exists)
+        app.terminate(); app.launchArguments = []; app.launch()
+        XCTAssertFalse(app.buttons["dashboard.group.work"].exists)
+        openLogs(app)
+        XCTAssertFalse(app.buttons["logs.entry.recent"].exists)
     }
 
     func testRankingCanDeleteEitherIdeaUndoAndContinue() {

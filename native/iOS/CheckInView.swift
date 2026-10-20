@@ -25,13 +25,16 @@ struct CheckInView: View {
                 let samples = store.ledger.history(range: range, start: start, end: end).samples.sorted { $0.end > $1.end }
                 DisclosureGroup {
                     ForEach(samples) { entry in
-                        Button { editing = entry } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(entry.activity).foregroundStyle(.primary)
-                                Text("\(store.dayLabel(entry.end)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }.accessibilityIdentifier("logs.entry.\(entry.id)")
+                        HStack(alignment: .top, spacing: 8) {
+                            Button { editing = entry } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.activity).foregroundStyle(.primary)
+                                    Text("\(store.dayLabel(entry.end)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                            }.buttonStyle(.plain).accessibilityIdentifier("logs.entry.\(entry.id)")
+                            DeleteLogButton(entry: entry)
+                        }
                             .swipeActions {
                                 Button("Delete", role: .destructive) {
                                     do { try store.deleteLog(entry) } catch { store.report(error) }

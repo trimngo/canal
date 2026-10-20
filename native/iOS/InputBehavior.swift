@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import LedgerCore
 
 extension UIApplication {
     func dismissLedgerKeyboard() {
@@ -69,5 +70,23 @@ struct LogDeletionUndoBar: View {
             }.font(.subheadline).padding(12).background(.regularMaterial)
                 .accessibilityElement(children: .contain)
         }
+    }
+}
+
+struct DeleteLogButton: View {
+    @EnvironmentObject private var store: LedgerStore
+    let entry: CheckIn
+    var identifierPrefix = "logs.delete"
+    var body: some View {
+        Button(role: .destructive) {
+            do { try store.deleteLog(entry) } catch { store.report(error) }
+        } label: {
+            Label("Delete log", systemImage: "trash")
+                .labelStyle(.iconOnly).frame(width: 44, height: 44)
+        }.buttonStyle(.borderless)
+            .disabled(!store.storageAvailable)
+            .accessibilityLabel("Delete log: \(entry.activity)")
+            .accessibilityHint("Undo is available for 15 seconds.")
+            .accessibilityIdentifier("\(identifierPrefix).\(entry.id)")
     }
 }

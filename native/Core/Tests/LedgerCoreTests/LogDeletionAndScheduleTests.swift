@@ -10,6 +10,29 @@ final class LogDeletionAndScheduleTests: XCTestCase {
         try ledger.saveSample(id: "c", at: now, activity: "Rest", categoryID: "rest", writer: "phone", now: now)
         return ledger
     }
+    func testDeletingNightObservationStartsEstimatesAtFirstRemainingMorningLog() throws {
+        let formatter = ISO8601DateFormatter()
+        let morning = formatter.date(from: "2026-10-20T08:00:00Z")!
+        let now = morning.addingTimeInterval(2 * 3600)
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        for method in InferenceMethod.allCases {
+            var ledger = Ledger(); ledger.settings.inferenceMethod = method
+            try ledger.saveSample(id: "night", at: morning.addingTimeInterval(-5 * 3600), activity: "Awake briefly", categoryID: "rest", writer: "phone", now: now)
+            try ledger.saveSample(id: "breakfast", at: morning, activity: "Breakfast", categoryID: "personal", writer: "phone", now: now)
+            try ledger.saveSample(id: "work", at: morning.addingTimeInterval(3600), activity: "Work", categoryID: "work", writer: "phone", now: now)
+            let raw = ledger.entries
+            XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).trackedMinutes, 420, accuracy: 0.001)
+            ledger.setLogDeleted("night", deleted: true, writer: "phone")
+            let report = ledger.history(range: .today, now: now, calendar: calendar)
+            XCTAssertEqual(report.trackedMinutes, 120, accuracy: 0.001)
+            XCTAssertEqual(report.samples.map(\.end).min(), morning)
+            XCTAssertFalse(report.rows.contains { $0.id == "rest" })
+            XCTAssertEqual(report.rows.reduce(0) { $0 + $1.percent }, 100, accuracy: 0.001)
+            XCTAssertEqual(ledger.entries, raw)
+            ledger.setLogDeleted("night", deleted: false, writer: "phone")
+            XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).trackedMinutes, 420, accuracy: 0.001)
+        }
+    }
     func testDeletingSampleRecalculatesEstimatesAndAllTimeCountsWithoutLosingRawData() throws {
         var ledger = try fixture()
         let raw = ledger.entries
