@@ -179,7 +179,7 @@ struct CategoryEditView: View {
                         Button("View all logs (\(store.ledger.groupEntryCounts()[category.id, default: 0]))") { viewingLogs = true }
                         Button("Delete category", role: .destructive) { deleting = true }.accessibilityIdentifier("group.delete")
                     } footer: {
-                        Text("Logs and timestamps are kept. Deleted category shares become Uncategorized, and children move up one level. Moving a category under a parent removes its top-level target; earlier budget versions are retained.")
+                        Text("Logs and ideas are kept. Deleted category shares become Uncategorized, and the label is removed from ideas. Children move up one level. Moving a category under a parent removes its top-level target; earlier budget versions are retained.")
                     }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
@@ -196,7 +196,7 @@ struct CategoryEditView: View {
                     Button("Delete category", role: .destructive) {
                         do { if let category { try store.deleteCategory(id: category.id) }; dismiss() } catch { self.error = error.localizedDescription }
                     }
-                } message: { Text("Historical logs will be kept. This category’s shares become Uncategorized. Children are promoted, and its target is removed from the current budget.") }
+                } message: { Text("Logs and ideas will be kept. This category’s shares become Uncategorized, and its label is removed from ideas. Children are promoted, and its target is removed from the current budget.") }
                 .sheet(isPresented: $viewingLogs) {
                     if let category { GroupEntriesView(day: Date(), groupID: category.id, initialName: category.name, allTime: true) }
                 }
