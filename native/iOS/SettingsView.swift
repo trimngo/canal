@@ -37,6 +37,9 @@ struct SettingsView: View {
                 if settings.notificationDelivery == .watch {
                     Text("Open Dash on your Watch and enable Watch alerts once. Check-ins are scheduled on the Watch even while you use your iPhone. Focus and Watch notification settings still apply.")
                         .font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Text("Your iPhone schedules check-ins. Apple chooses whether your phone or Watch alerts you. Automatic usually alerts one device, rather than both.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Picker("Timing", selection: $settings.notificationTiming) {
                     ForEach(NotificationTiming.allCases) { Text($0.name).tag($0) }
