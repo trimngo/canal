@@ -668,8 +668,14 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("CategoryLogDelete", in: app); trash.tap()
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
         XCTAssertFalse(app.navigationBars["Edit sample"].exists)
-        let undo = app.buttons["logs.undo-delete"]
-        XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
+        // The app-wide Undo bar can remain in the accessibility tree behind
+        // this sheet. Target the Undo control the user can actually tap.
+        let undos = app.buttons.matching(identifier: "logs.undo-delete")
+        XCTAssertTrue(undos.firstMatch.waitForExistence(timeout: 5))
+        guard let undo = undos.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+            XCTFail("No visible Undo button after deleting a category log"); return
+        }
+        undo.tap()
         XCTAssertTrue(app.staticTexts["Recent work observation"].waitForExistence(timeout: 5))
         trash.tap(); app.buttons["group.done"].tap()
         XCTAssertFalse(app.buttons["dashboard.group.work"].exists)
