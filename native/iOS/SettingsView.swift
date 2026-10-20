@@ -91,12 +91,16 @@ struct SettingsView: View {
                 Text("Use all day, or a window of up to 15 hours. Use Sleep Focus to silence Dash and mirror Focus on your Watch. Silenced alerts may remain in Notification Center. You can log manually anytime. Your response records what you are doing at that moment.")
             }
             Section("Test delivery") {
-                Button("Notify me in 15 seconds") {
+                Button("Notify this iPhone in 15 seconds") {
                     Task {
                         do { try await notifications.sendTest(); testSent = true } catch { store.report(error) }
                     }
                 }
                 if testSent { Text("Lock your phone now. Check your phone or Watch in 15 seconds.").font(.footnote) }
+                if settings.notificationDelivery == .watch {
+                    Text("For a Watch-only test, open Dash on your Watch → Watch alerts → Test in 15 seconds.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
             }
             Section("Display") {
                 Toggle("Use 24-hour time", isOn: Binding(get: { store.ledger.settings.use24HourTime }, set: { value in
