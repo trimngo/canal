@@ -16,7 +16,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-watch-inspect-ledger", "--ui-watch-quick-log", "--ui-watch-dictation"]
         app.launch()
         let done = app.buttons["watch.fixture.done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        waitForInputButton(done)
         record("WatchDirectDictation", app)
         done.tap()
         assertCount("1", app)
@@ -27,7 +27,7 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertFalse(done.exists)
         app.terminate()
         app.launchArguments = ["--ui-watch-inspect-ledger", "--ui-watch-quick-log", "--ui-watch-dictation"]
-        app.launch(); XCTAssertTrue(done.waitForExistence(timeout: 15)); done.tap()
+        app.launch(); waitForInputButton(done); done.tap()
         assertCount("2", app)
     }
 
@@ -36,7 +36,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-watch-inspect-ledger", "--ui-watch-quick-log", "--ui-watch-dictation"]
         app.launch()
         let cancel = app.buttons["watch.fixture.cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: 15)); cancel.tap()
+        waitForInputButton(cancel); cancel.tap()
         assertCount("0", app)
         app.terminate(); app.launchArguments = ["--ui-watch-inspect-ledger"]; app.launch()
         assertCount("0", app)
@@ -67,6 +67,14 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(off.exists); off.tap()
         let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
+    }
+
+    private func waitForInputButton(_ button: XCUIElement) {
+        XCTAssertTrue(button.waitForExistence(timeout: 15))
+        // A cold simulator can publish the button before its window accepts
+        // taps; XCTest then computes {-1, -1} and never presses the control.
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
     }
 
     private func assertCount(_ expected: String, _ app: XCUIApplication) {
