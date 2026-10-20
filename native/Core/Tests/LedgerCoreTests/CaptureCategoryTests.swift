@@ -102,4 +102,23 @@ final class CaptureCategoryTests: XCTestCase {
         XCTAssertTrue(ledger.needsTopTenReplenishment)
         XCTAssertEqual(try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger.rankedCaptureIDs, old)
     }
+
+    func testPausedLegacyTenScreenBecomesInsertionWhilePreservingAnsweredOrder() throws {
+        var ledger = Ledger(), ranking = InboxRanking()
+        let ids = (0..<10).map { String(format: "%02d", $0) }
+        for id in ids + ["new"] { try ledger.addCapture(text: id, id: id, writer: "old") }
+        ranking.ordered = ids
+        ranking.screeningReview = ScreeningReview()
+        ranking.topTen = TopTenRanking(candidate: TopTenInsertion(item: "new", base: ids, high: ids.count, screening: true))
+        ledger.inboxRanking = ranking
+        ledger.normalizeInboxRanking(writer: "phone")
+        var answers = 0
+        while let pair = ledger.rankingPair {
+            answers += 1; XCTAssertLessThanOrEqual(answers, 4)
+            ledger.chooseCapture(pair.second, from: pair, writer: "phone")
+        }
+        XCTAssertEqual(ledger.rankedCaptureIDs, ids + ["new"])
+        XCTAssertTrue(ledger.backlogCaptures.isEmpty)
+        XCTAssertEqual(try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger.rankedCaptureIDs, ids + ["new"])
+    }
 }

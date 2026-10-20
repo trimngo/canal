@@ -232,6 +232,10 @@ public struct InboxRanking: Codable, Equatable, Sendable {
             // completed/deleted on either device while a question was visible.
             topTen?.candidate = nil
         }
+        // A paused screen from the previous ten-item capacity must become an
+        // insertion when there is now room, rather than rejecting a candidate
+        // against the former tenth priority despite available positions.
+        if ordered.count < Self.priorityLimit { topTen?.candidate?.screening = false }
     }
 
     func backlogIDs(ids: [String]) -> [String] {

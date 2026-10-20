@@ -44,7 +44,7 @@ struct GroupEntriesView: View {
                         }.accessibilityIdentifier("group.rename")
                         Button("Delete group", role: .destructive) { confirmingDeletion = true }
                             .accessibilityIdentifier("group.delete")
-                    } footer: { Text("Deleting this group moves its logs to Uncategorized. Your activity text and timestamps are kept.") }
+                    } footer: { Text("Deleting this group keeps its logs and ideas. Its logged time becomes Uncategorized, and its label is removed from ideas.") }
                 }
                 if groupID == "uncategorized", !management {
                     Picker("Review", selection: $allDays) {
@@ -102,7 +102,7 @@ struct GroupEntriesView: View {
                         do { try store.deleteCategory(id: groupID); dismiss() } catch { self.error = error.localizedDescription }
                     }
                     Button("Cancel", role: .cancel) {}
-                } message: { Text("Logs are kept. This category’s shares become Uncategorized; children are promoted.") }
+                } message: { Text("Logs and ideas are kept. This category’s shares become Uncategorized, its label is removed from ideas, and children are promoted.") }
                 .sheet(item: $categorizing) { entry in
                     GroupAssignmentView(entry: entry, selection: store.ledger.confirmedCategoryIDs(for: entry))
                 }
