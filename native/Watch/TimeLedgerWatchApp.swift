@@ -26,6 +26,7 @@ struct TimeLedgerWatchApp: App {
                     LedgerShortcuts.updateAppShortcutParameters()
                     #endif
                     NotificationScheduler.shared.configureActions()
+                    do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) }
                     #if DEBUG
                     if !testedLaunchRoute, ProcessInfo.processInfo.arguments.contains("--ui-watch-quick-log") {
                         testedLaunchRoute = true; openQuickLog(WatchLogShortcut.url)
@@ -33,7 +34,15 @@ struct TimeLedgerWatchApp: App {
                     #endif
                 }
                 .onOpenURL(perform: openQuickLog)
-                .onChange(of: scenePhase) { _, phase in if phase == .active { store.refresh() } }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        store.refresh()
+                        Task { do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) } }
+                    }
+                }
+                .onChange(of: store.ledger.settings) { _, settings in
+                    Task { do { try await NotificationScheduler.shared.apply(settings) } catch { store.report(error) } }
+                }
                 .alert("Couldn’t complete that", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
                     Button("OK") { store.error = nil }
                 } message: { Text(store.error ?? "") }

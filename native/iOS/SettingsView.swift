@@ -31,6 +31,13 @@ struct SettingsView: View {
             Section {
                 Toggle("Check-in notifications", isOn: $settings.notificationsEnabled)
                     .accessibilityIdentifier("settings.notifications-enabled")
+                Picker("Delivery", selection: $settings.notificationDelivery) {
+                    ForEach(NotificationDelivery.allCases) { Text($0.name).tag($0) }
+                }.accessibilityIdentifier("settings.notification-delivery")
+                if settings.notificationDelivery == .watch {
+                    Text("Open Dash on your Watch and enable Watch alerts once. Check-ins are scheduled on the Watch even while you use your iPhone. Focus and Watch notification settings still apply.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Picker("Timing", selection: $settings.notificationTiming) {
                     ForEach(NotificationTiming.allCases) { Text($0.name).tag($0) }
                 }.accessibilityIdentifier("settings.notification-timing")
@@ -58,10 +65,12 @@ struct SettingsView: View {
                             proposed.notificationsEnabled = settings.notificationsEnabled
                             proposed.notificationsAllDay = settings.notificationsAllDay
                             proposed.notificationTiming = settings.notificationTiming
+                            proposed.notificationDelivery = settings.notificationDelivery
                             proposed.regularNotificationInterval = settings.regularNotificationInterval
                             proposed.randomizedNotificationInterval = settings.randomizedNotificationInterval
                             _ = try proposed.notificationMinutes()
-                            if proposed.notificationsEnabled, !(try await notifications.permission()) { throw NotificationError.denied }
+                            if proposed.notificationsEnabled, proposed.notificationDelivery == .automatic,
+                               !(try await notifications.permission()) { throw NotificationError.denied }
                             try await notifications.apply(proposed, force: true)
                             try store.saveSettings(proposed)
                             settings = store.ledger.settings
@@ -71,7 +80,9 @@ struct SettingsView: View {
                         }
                     }
                 }.disabled(saving || !store.storageAvailable).accessibilityIdentifier("settings.save-notifications")
-                Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
+                if settings.notificationDelivery == .automatic {
+                    Text(notifications.status).font(.footnote).foregroundStyle(.secondary)
+                }
                 if !notifications.scheduleStatus.isEmpty {
                     Text(notifications.scheduleStatus).font(.footnote).foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.notification-schedule-status")
@@ -185,7 +196,8 @@ struct SettingsView: View {
             let average = Double(settings.randomizedNotificationInterval)
             let lower = (average * 2 / 3).formatted(.number.precision(.fractionLength(0...1)))
             let upper = (average * 4 / 3).formatted(.number.precision(.fractionLength(0...1)))
-            return "Random gaps of about \(lower)–\(upper) minutes during your chosen hours. The average is approximate. iOS queues up to 60 alerts; open Dash or save a log to keep them coming. Background refresh can also refill them, but iOS controls when it runs."
+            let device = settings.notificationDelivery == .watch ? "Watch" : "iPhone"
+            return "Random gaps of about \(lower)–\(upper) minutes during your chosen hours. The average is approximate. Up to 60 alerts are queued. Open Dash or save a log on your \(device) to refill them. Background refresh is best effort; alerts pause if the queue runs out."
         }
         if settings.usesQueuedNotifications {
             return "Regular gaps during your chosen hours. This frequent window uses a queue of up to 60 alerts. Open Dash or save a log to refill it; background refresh is best effort."

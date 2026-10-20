@@ -8,6 +8,7 @@ struct WatchHomeView: View {
     @State private var capture = ""
     @State private var saved = false
     @State private var tab = 2
+    @State private var notificationSettings = false
     var body: some View {
         TabView(selection: $tab) {
             ScrollView {
@@ -49,6 +50,8 @@ struct WatchHomeView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Estimated today").font(.headline)
                         Button("Log now") { store.beginSample() }
+                        Button("Watch alerts") { notificationSettings = true }
+                            .accessibilityIdentifier("watch.notifications")
                         ForEach(store.ledger.history(range: .today, now: now).rows) { row in
                             VStack(alignment: .leading) {
                                 Text(row.name)
@@ -71,6 +74,7 @@ struct WatchHomeView: View {
                 }
             }.tag(2)
         }.tabViewStyle(.verticalPage)
+            .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
                 if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
