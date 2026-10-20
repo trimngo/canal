@@ -79,15 +79,24 @@ struct WatchPromptView: View {
                     .accessibilityIdentifier("watch.reply.saved")
             } else {
                 Text("What are you doing now?").font(.headline)
-                Button(action: dictate) {
-                    Label(reply.pendingText == nil ? "Dictate log" : "Retry saving", systemImage: reply.pendingText == nil ? "mic.fill" : "arrow.clockwise")
-                        .frame(maxWidth: .infinity).padding(.vertical, 6)
-                }.buttonStyle(.borderedProminent).disabled(reply.inputOpen)
-                    .accessibilityIdentifier("watch.reply.dictate")
+                dictateButton
                 if let error = reply.error {
                     Text("Not saved. \(error)").font(.caption).foregroundStyle(.red)
                 }
             }
         }.padding(.vertical, 6)
+    }
+
+    @ViewBuilder private var dictateButton: some View {
+        let button = Button(action: dictate) {
+            Label(reply.pendingText == nil ? "Dictate log" : "Retry saving", systemImage: reply.pendingText == nil ? "mic.fill" : "arrow.clockwise")
+                .frame(maxWidth: .infinity).padding(.vertical, 6)
+        }.buttonStyle(.borderedProminent).disabled(reply.inputOpen)
+            .accessibilityIdentifier("watch.reply.dictate")
+        if #available(watchOS 11.0, *) {
+            // The system dictation screen owns subsequent gestures, including
+            // Done/Send. Only our visible input button is a Dash primary action.
+            button.handGestureShortcut(.primaryAction, isEnabled: !reply.inputOpen && !reply.saved)
+        } else { button }
     }
 }

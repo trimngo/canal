@@ -8,6 +8,7 @@ struct CategoryTrendView: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
     let isVisible: Bool
+    var chartHeight: CGFloat = 220
     @AppStorage("history.trend.categories.v1") private var savedCategories = ""
     @AppStorage("history.trend.percent") private var percent = false
     @AppStorage("history.trend.layout") private var layout = "compare"
@@ -109,7 +110,7 @@ struct CategoryTrendView: View {
                     }
                 }.scrollIndicators(.hidden)
                 chart(points: report.trendPoints(categoryIDs: compared.map(\.id)), sharedScale: false)
-                    .frame(height: 220).accessibilityIdentifier("report.trend.chart")
+                    .frame(height: chartHeight).accessibilityIdentifier("report.trend.chart")
                 Text("Tap a category to highlight it. Touch and drag the chart to inspect a day.")
                     .font(.caption).foregroundStyle(.secondary)
                 dayValues(rows: compared)

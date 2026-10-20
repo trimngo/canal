@@ -32,6 +32,9 @@ struct AllocationHistoryView: View {
             .navigationTitle(range == .today ? "Today" : "Your time").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink(value: LedgerScreen.calendar) {
+                        Label("Calendar", systemImage: "calendar")
+                    }.accessibilityIdentifier("dashboard.calendar")
                     Button("Categories") { managingGroups = true }.accessibilityIdentifier("dashboard.groups")
                 }
             }
@@ -48,43 +51,32 @@ struct AllocationHistoryView: View {
             $0.end >= report.start && $0.end <= report.end &&
             (store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized"))
         }.count
-        return List {
-            Section {
-                Picker("Period", selection: $range) {
-                    ForEach(HistoryRange.allCases) { Text($0.name).tag($0) }
-                }.pickerStyle(.menu).accessibilityIdentifier("report.range")
+        return VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Picker("Period", selection: $range) {
+                        ForEach(HistoryRange.allCases) { Text($0.name).tag($0) }
+                    }.pickerStyle(.menu).labelsHidden().accessibilityIdentifier("report.range")
+                    Spacer(minLength: 8)
+                    Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if range == .custom {
                     DatePicker("From", selection: $start, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.from")
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
-                HistoryPanel(report: report, expandsBreakdown: true) { row in
-                    selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
-                }.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            } header: {
-                Text("Where your time went").font(.headline).textCase(nil).accessibilityIdentifier("dashboard.breakdown-title")
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(store.duration(report.trackedMinutes)) tracked · \(report.samples.count) logs")
-                    Text("Percentages start at each day’s first log and end at now today, or midnight for completed days. Days without logs are excluded.")
-                    Text("Swipe the chart for breakdown, pie, and trend.")
+                if ungrouped > 0 {
+                    Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized", start: report.start, end: report.end) } label: {
+                        Label("\(ungrouped) logs to group", systemImage: "tray")
+                            .font(.subheadline).frame(minHeight: 32)
+                    }.accessibilityIdentifier("dashboard.review.uncategorized")
                 }
-            }
-            if ungrouped > 0 || store.canUndoGrouping {
-                Section {
-                    if ungrouped > 0 {
-                        Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized", start: report.start, end: report.end) } label: {
-                            Label("\(ungrouped) logs to group", systemImage: "tray")
-                        }.accessibilityIdentifier("dashboard.review.uncategorized")
-                    }
-                    if store.canUndoGrouping {
-                        Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("dashboard.undo")
-                    }
-                }
-            }
-            Section {
-                NavigationLink("Calendar", value: LedgerScreen.calendar).accessibilityIdentifier("dashboard.calendar")
-            }
-        }.listStyle(.insetGrouped).listSectionSpacing(12).scrollDismissesKeyboard(.immediately)
+            }.padding(.horizontal, 20).padding(.vertical, 8)
+            Divider()
+            HistoryPanel(report: report) { row in
+                selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
+            }.padding(.top, 12)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

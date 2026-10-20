@@ -96,6 +96,19 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Inbox"].exists)
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
+        let pages = element(app, "report.pages")
+        XCTAssertGreaterThan(pages.frame.height, app.frame.height * 0.55)
+        XCTAssertEqual(pages.frame.width, app.frame.width, accuracy: 2)
+        let calendar = app.buttons["dashboard.calendar"]
+        XCTAssertTrue(calendar.isHittable)
+        XCTAssertLessThan(calendar.frame.maxY, header.frame.minY)
+        XCTAssertFalse(app.buttons["dashboard.undo"].exists)
+        let initialHeight = pages.frame.height
+        app.buttons["Show pie chart"].tap()
+        XCTAssertTrue(element(app, "report.pie.chart").waitForExistence(timeout: 5))
+        XCTAssertEqual(pages.frame.height, initialHeight, accuracy: 2)
+        XCTAssertTrue(app.tabBars.buttons["Log"].isHittable)
+        app.buttons["Show breakdown"].tap()
         recordScreen("Dashboard", in: app)
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -410,6 +423,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Choose group"].tap()
         app.buttons["category-select.work"].tap(); app.buttons["category-select.social"].tap()
         app.buttons["group-selection.done"].tap(); app.buttons["group.done"].tap()
+        XCTAssertFalse(app.buttons["dashboard.undo"].exists)
         let social = dashboardGroup("social", in: app)
         XCTAssertTrue(social.waitForExistence(timeout: 2))
         XCTAssertFalse(app.buttons["dashboard.group.uncategorized"].exists)
@@ -540,7 +554,7 @@ final class TimeLedgerUITests: XCTestCase {
         let chart = element(app, "report.pie.chart")
         XCTAssertTrue(chart.waitForExistence(timeout: 5))
         // The fixture is 75% Uncategorized, starting clockwise from twelve.
-        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 70, dy: 0)).tap()
+        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         let selection = element(app, "report.pie.selection")
         let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Uncategorized"), object: selection)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
@@ -548,8 +562,39 @@ final class TimeLedgerUITests: XCTestCase {
         let work = app.buttons["report.pie.group.work"]; reveal(work, in: app); work.tap()
         XCTAssertTrue(selection.label.contains("Work"))
         XCTAssertTrue(selection.label.contains("%"))
-        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 70, dy: 0)).tap()
+        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         XCTAssertTrue(selection.label.contains("Uncategorized"))
+    }
+
+    func testHeatmapShowsAllCategoriesMissingDaysUnitsAndDetails() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-many-trends-fixture"]; app.launch()
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        app.buttons["Show heatmap"].tap()
+        let units = app.segmentedControls["report.heatmap.units"]
+        XCTAssertTrue(units.waitForExistence(timeout: 5))
+        units.buttons["Percentages"].tap()
+        let work = app.buttons["report.heatmap.category.work"]
+        XCTAssertTrue(work.exists)
+        let names = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.heatmap.category."))
+        XCTAssertGreaterThan(names.count, 3) // Includes categories hidden in the trend comparison.
+        let cells = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.heatmap.cell.work."))
+        XCTAssertEqual(cells.count, 7)
+        let missing = cells.matching(NSPredicate(format: "value == %@", "No data")).firstMatch
+        XCTAssertTrue(missing.exists); missing.tap()
+        let selection = element(app, "report.heatmap.selection")
+        XCTAssertTrue(selection.waitForExistence(timeout: 5)); XCTAssertTrue(selection.label.contains("No data"))
+        let populated = cells.matching(NSPredicate(format: "value CONTAINS %@", "percent")).firstMatch
+        populated.tap()
+        XCTAssertTrue(selection.label.contains("Work")); XCTAssertTrue(selection.label.contains("%"))
+        recordScreen("FullScreenHeatmapPercentages", in: app)
+        units.buttons["Hours"].tap()
+        XCTAssertTrue(selection.label.contains("%")) // Details always retain both measures.
+        XCTAssertTrue(app.buttons["dashboard.calendar"].isHittable)
+        recordScreen("FullScreenHeatmapHours", in: app)
+        work.tap()
+        XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5)); app.buttons["group.done"].tap()
+        app.buttons["dashboard.calendar"].tap()
+        XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
     }
 
     func testGroupCountsAndDeletionPreserveAllTimeLogsAfterRelaunch() {
