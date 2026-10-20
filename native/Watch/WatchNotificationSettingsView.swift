@@ -11,8 +11,12 @@ struct WatchNotificationSettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Get check-ins on this Watch, including while you use your iPhone.").font(.caption)
-                    Button("Enable Watch alerts") {
+                    Text("Delivery: \(store.ledger.settings.notificationDelivery.name)").font(.caption.bold())
+                        .accessibilityIdentifier("watch.notifications.delivery-mode")
+                    Text(store.ledger.settings.notificationDelivery == .automatic
+                         ? "Your iPhone schedules check-ins. Apple chooses whether the phone or Watch alerts you. Switching below also changes delivery on your iPhone."
+                         : "This Watch schedules check-ins, including while you use your iPhone.").font(.caption)
+                    Button(store.ledger.settings.notificationDelivery == .automatic ? "Switch to Watch delivery" : "Enable Watch notifications") {
                         Task {
                             saving = true; defer { saving = false }
                             do {
