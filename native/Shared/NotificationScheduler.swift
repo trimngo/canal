@@ -19,6 +19,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     private let configurationKey = "notifications.schedule-configuration.v2"
     #if os(iOS)
     static let backgroundIdentifier = "com.trimngo.TimeLedger.checkins-refresh"
+    private var lastConfiguration: Data?
+    private var lastChecked = Date.distantPast
+    private var lastUsedQueue = false
     #endif
     private let promptBody = "Tap to type or dictate what you’re doing now."
     private override init() { super.init(); center.delegate = self }
@@ -47,28 +50,32 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
     }
 
-    func apply(_ settings: Settings) async throws {
+    func apply(_ settings: Settings, force: Bool = false) async throws {
         // Save, foreground, and Watch sync can all request a refill at once.
         // Serialize changes so they cannot delete or duplicate each other's queue.
         let previous = applyTask
         let task = Task { @MainActor in
             _ = try? await previous?.value
-            try await self.applySerially(settings)
+            try await self.applySerially(settings, force: force)
         }
         applyTask = task
         try await task.value
     }
 
-    private func applySerially(_ settings: Settings) async throws {
-        configureActions(); await refreshStatus()
+    private func applySerially(_ settings: Settings, force: Bool) async throws {
         #if os(iOS)
         try settings.validateNotificationSettings()
-        let pending = await center.pendingNotificationRequests()
-        let checkIns = pending.filter { $0.identifier.hasPrefix("checkin-") }
         let calendar = Calendar.current
         let configuration = Configuration(settings: settings, timeZone: calendar.timeZone.identifier)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let encoded = try encoder.encode(configuration)
+        // Ranking and log edits invoke save observers too. Most saves need no
+        // notification I/O; queued schedules need at most one refill per minute.
+        if !force, lastConfiguration == encoded,
+           !lastUsedQueue || Date().timeIntervalSince(lastChecked) < 60 { return }
+        configureActions(); await refreshStatus()
+        let pending = await center.pendingNotificationRequests()
+        let checkIns = pending.filter { $0.identifier.hasPrefix("checkin-") }
         let changed = UserDefaults.standard.data(forKey: configurationKey) != encoded
         let permission = await center.notificationSettings().authorizationStatus
         guard settings.notificationsEnabled, permission == .authorized || permission == .provisional else {
@@ -76,6 +83,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             UserDefaults.standard.removeObject(forKey: configurationKey)
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
             scheduleStatus = settings.notificationsEnabled ? "No check-ins scheduled. Allow notifications to start." : "Check-ins are off."
+            lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = false
             return
         }
         // Reserve a slot for the existing delivery-test notification, and respect
@@ -119,12 +127,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                 BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
             }
             UserDefaults.standard.set(encoded, forKey: configurationKey)
+            lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = queued
         } catch {
             // Keep successfully queued alerts. A later refill reconciles them;
             // losing network/background time must never erase saved log entries.
             scheduleStatus = "Could not finish scheduling. Open Dash to retry."
             throw error
         }
+        #else
+        configureActions(); await refreshStatus()
         #endif
     }
 
@@ -158,7 +169,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             guard let refresh = task as? BGAppRefreshTask else { task.setTaskCompleted(success: false); return }
             let operation = Task { @MainActor in
                 do {
-                    try await self.apply(LedgerStore.shared.ledger.settings)
+                    try await self.apply(LedgerStore.shared.ledger.settings, force: true)
                     refresh.setTaskCompleted(success: !Task.isCancelled)
                 } catch { refresh.setTaskCompleted(success: false) }
             }
