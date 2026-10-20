@@ -36,6 +36,12 @@ private struct CaptureCategoryView: View {
             CategorySelectionList(selection: $selection, activity: capture.text, timestamp: capture.createdAt,
                                   selectionHelp: "Use the same categories as your journal. Categorizing an idea does not add logged time. A parent and its subcategory cannot both be selected.")
                 .navigationTitle("Idea categories").navigationBarTitleDisplayMode(.inline)
+                .safeAreaInset(edge: .bottom) {
+                    if let error {
+                        Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial)
+                            .accessibilityIdentifier("idea-categories.error")
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
@@ -45,9 +51,6 @@ private struct CaptureCategoryView: View {
                         }.disabled(!store.storageAvailable).accessibilityIdentifier("idea-categories.done")
                     }
                 }
-                .alert("Couldn’t save categories", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                    Button("OK") { error = nil }
-                } message: { Text(error ?? "") }
         }
     }
 }
