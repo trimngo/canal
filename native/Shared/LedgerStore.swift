@@ -361,6 +361,12 @@ final class LedgerStore: ObservableObject {
         try draft.saveSample(id: id, at: timestamp, activity: activity, categoryIDs: categoryIDs, writer: writer)
         try commit(draft)
     }
+
+    func updateLogActivity(id: String, activity: String) throws {
+        var draft = ledger
+        try draft.updateLogActivity(id: id, activity: activity, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
     func saveTargets(_ values: [String: Double]) throws {
         var draft = ledger; try draft.saveTargets(values, writer: writer); try commit(draft)
     }

@@ -187,9 +187,12 @@ struct GroupAssignmentView: View {
     @State var selection: [String]
     @State private var mood: Int?
     @State private var error: String?
+    @State private var editingText = false
+    @State private var loaded = false
+    private var currentEntry: CheckIn { store.ledger.activeEntries.first { $0.id == entry.id } ?? entry }
     var body: some View {
         NavigationStack {
-            CategorySelectionList(selection: $selection, activity: entry.activity, timestamp: entry.end, mood: $mood)
+            CategorySelectionList(selection: $selection, activity: currentEntry.activity, timestamp: entry.end, mood: $mood, editActivity: { editingText = true })
                 .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }
@@ -203,7 +206,8 @@ struct GroupAssignmentView: View {
                         }.accessibilityIdentifier("group-selection.done")
                     }
                 }
-        }.onAppear { mood = entry.mood }
+        }.sheet(isPresented: $editingText) { LogTextEditView(entry: currentEntry) }
+            .onAppear { if !loaded { mood = entry.mood; loaded = true } }
     }
 }
 
