@@ -28,5 +28,6 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSelectingCategoriesAtAnyDepthOffersOnlyMoveForMultiple \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testBulkGroupingIntoExistingParentPreviewsGoalsAndCanUndo \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testLongEntryStaysVisibleAboveTheCategoryChecklist \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTargetsAreAccessibleAndPersist
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTargetsAreAccessibleAndPersist \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryRenameAndDeleteKeepLogsAndPromoteChildren
 fi
