@@ -23,7 +23,8 @@ struct CategoryNameView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
                             do {
-                                try store.editCategory(id: category?.id, name: name, parent: parentID)
+                                if let category { try store.saveCategory(id: category.id, name: name) }
+                                else { try store.editCategory(id: nil, name: name, parent: parentID) }
                                 didSave(); dismiss()
                             } catch { self.error = error.localizedDescription }
                         }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
