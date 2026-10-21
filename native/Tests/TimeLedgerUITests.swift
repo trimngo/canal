@@ -1160,6 +1160,26 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["plan.group-selected"].exists)
     }
 
+    func testCategoryRenameAndDeleteKeepLogsAndPromoteChildren() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap(); selectPlanCategory("work", in: app)
+        app.buttons["plan.rename"].tap()
+        let name = app.textFields["category-name.field"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap(); name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 20)); name.typeText("Responsibilities")
+        app.buttons["category-name.save"].tap()
+        let renamed = element(app, "plan.name.work"); reveal(renamed, in: app)
+        XCTAssertEqual(renamed.label, "Responsibilities")
+        selectPlanCategory("work", in: app); app.buttons["plan.delete"].tap()
+        app.sheets.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["plan.selection-done"].exists)
+        app.buttons["plan.delete"].tap(); app.sheets.buttons["Delete category"].tap()
+        XCTAssertFalse(app.buttons["plan.selection-done"].exists)
+        XCTAssertFalse(renamed.exists)
+        let promoted = app.textFields["categories.target.teaching"]; reveal(promoted, in: app)
+        XCTAssertTrue(promoted.exists)
+        openLogs(app); XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
+    }
+
     private func waitForGroupingToFinish(in app: XCUIApplication) {
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["plan.group-selected"])
         XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 5), .completed)
