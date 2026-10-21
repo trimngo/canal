@@ -32,6 +32,7 @@ struct CommitmentsView: View {
     @State private var moveSelection: [String] = []
     @State private var confirmGrouping = false
     @State private var deleting: LedgerCategory?
+    @State private var confirmingDeletion = false
     @State private var error: String?
     @FocusState private var focusedTarget: String?
 
@@ -125,14 +126,13 @@ struct CommitmentsView: View {
                     .onAppear { finishSelection() }
             }
         }
-        .confirmationDialog("Delete category?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+        .confirmationDialog("Delete category?", isPresented: $confirmingDeletion, titleVisibility: .visible, presenting: deleting) { category in
             Button("Delete category", role: .destructive) {
-                guard let category = deleting else { return }
                 do { try store.deleteCategory(id: category.id); deleting = nil; finishSelection() }
                 catch { self.error = error.localizedDescription }
             }
             Button("Cancel", role: .cancel) { deleting = nil }
-        } message: { Text("Logs are kept. This category’s shares become Uncategorized, its label is removed from ideas, and children move up one level.") }
+        } message: { _ in Text("Logs are kept. This category’s shares become Uncategorized, its label is removed from ideas, and children move up one level.") }
         .confirmationDialog("Save your goal changes before grouping?", isPresented: $confirmGrouping, titleVisibility: .visible) {
             if canSave { Button("Save and group") { if save() { actionRequest = .move(moveSelection) } } }
             Button("Discard changes and group", role: .destructive) { load(); actionRequest = .move(moveSelection) }
@@ -198,7 +198,7 @@ struct CommitmentsView: View {
             }
         }.accessibilityElement(children: .contain)
             .accessibilityAddTraits(selected.contains(category.id) && !item.direct ? .isSelected : [])
-            .simultaneousGesture(LongPressGesture().onEnded { _ in
+            .highPriorityGesture(LongPressGesture().onEnded { _ in
                 guard !item.direct else { return }
                 UIApplication.shared.dismissLedgerKeyboard()
                 selecting = true; selected.insert(category.id)
@@ -289,7 +289,7 @@ struct CommitmentsView: View {
                 if let category = singleSelection {
                     actionButton("Delete", icon: "trash", id: "plan.delete") {
                         if plan.isDirty { error = "Save or reload your goal changes before deleting a category." }
-                        else { deleting = category }
+                        else { deleting = category; confirmingDeletion = true }
                     }.tint(.red)
                 }
             }.disabled(!store.storageAvailable)
