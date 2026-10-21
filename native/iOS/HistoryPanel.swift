@@ -77,7 +77,7 @@ struct HistoryPanel: View {
                         }.padding(.vertical, 6).contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityIdentifier("dashboard.group.\(row.id)")
                 }
-                Text("Percentages start at each day’s first log and end at now today, or midnight for completed days. Days without logs are excluded.")
+                Text("Percentages use the estimated period from half a notification interval before the first log to half an interval after the last. Random mode uses your configured average interval. Estimates stop at now and calendar-day boundaries. Days without logs are excluded.")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }.padding(.bottom, 8)
         }.accessibilityIdentifier("report.view.breakdown")

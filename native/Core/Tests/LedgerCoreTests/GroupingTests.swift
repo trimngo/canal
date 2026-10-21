@@ -132,6 +132,7 @@ final class GroupingTests: XCTestCase {
 
     func testZeroDurationSampleProducesFinitePercentagesWithoutUnestimatedRow() throws {
         var ledger = Ledger()
+        let now = Calendar(identifier: .gregorian).startOfDay(for: self.now)
         try ledger.saveSample(at: now, activity: "Work", categoryID: nil, writer: "phone", now: now)
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let rows = ledger.breakdown(on: now, now: now, calendar: calendar)

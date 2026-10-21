@@ -17,6 +17,9 @@ struct GroupEntriesView: View {
     @State private var error: String?
     @State private var renaming = false
     @State private var confirmingDeletion = false
+    @State private var selecting = false
+    @State private var selected = Set<String>()
+    @State private var moving: LogMoveRequest?
     init(day: Date, groupID: String, initialName: String, rangeStart: Date? = nil, rangeEnd: Date? = nil, allTime: Bool = false, management: Bool = false) {
         self.day = day; self.groupID = groupID; self.initialName = initialName
         self.rangeStart = rangeStart; self.rangeEnd = rangeEnd
@@ -62,19 +65,29 @@ struct GroupEntriesView: View {
                                     Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                            }.buttonStyle(.plain)
-                            DeleteLogButton(entry: entry, identifierPrefix: "group.delete-log")
+                            }.buttonStyle(.plain).disabled(selecting)
+                            if !selecting { DeleteLogButton(entry: entry, identifierPrefix: "group.delete-log") }
                         }
                         Text("Group: \(store.categoryNames(for: entry))")
                             .font(.caption).foregroundStyle(.secondary)
-                        suggestion(for: entry)
-                        Button { categorizing = entry } label: {
-                            Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
-                        }.buttonStyle(.borderless).accessibilityIdentifier("group.choose.\(entry.id)")
+                        if let mood = entry.mood { Text("Mood: \(mood)/5").font(.caption).foregroundStyle(.secondary) }
+                        if !selecting {
+                            suggestion(for: entry)
+                            Button { categorizing = entry } label: {
+                                Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
+                            }.buttonStyle(.borderless).accessibilityIdentifier("group.choose.\(entry.id)")
+                        }
                     }.padding(.vertical, 5)
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        .onTapGesture { if selecting { toggleSelected(entry.id) } }
+                        .listRowBackground(selected.contains(entry.id) ? Color.accentColor.opacity(0.2) : Color.clear)
+                        .accessibilityIdentifier("group.log.\(entry.id)")
+                        .accessibilityValue(selected.contains(entry.id) ? "Selected" : "Not selected")
                         .swipeActions {
-                            Button("Delete", role: .destructive) {
-                                do { try store.deleteLog(entry) } catch { self.error = error.localizedDescription }
+                            if !selecting {
+                                Button("Delete", role: .destructive) {
+                                    do { try store.deleteLog(entry) } catch { self.error = error.localizedDescription }
+                                }
                             }
                         }
                 }
@@ -86,10 +99,26 @@ struct GroupEntriesView: View {
                     Text("Suggestions work offline and learn from confirmed choices. Every log stays Uncategorized until you confirm its group.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-            }.safeAreaInset(edge: .bottom, spacing: 0) { LogDeletionUndoBar() }
+            }.safeAreaInset(edge: .bottom, spacing: 0) {
+                if selecting {
+                    Button("Move \(selected.count) logs to category") { moving = LogMoveRequest(ids: selected) }
+                        .buttonStyle(.borderedProminent).disabled(selected.isEmpty || !store.storageAvailable)
+                        .padding().frame(maxWidth: .infinity).background(.bar).accessibilityIdentifier("group.move-logs")
+                } else { LogDeletionUndoBar() }
+            }
                 .navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("group.done") } }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("group.done") }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(selecting ? "Cancel selection" : "Select") { selecting.toggle(); selected = [] }
+                            .accessibilityIdentifier("group.select")
+                    }
+                }
+                .onChange(of: entries.map(\.id)) { _, ids in selected.formIntersection(ids) }
+                .sheet(item: $moving) { request in
+                    LogCategoryMoveView(ids: request.ids, source: groupID) { selecting = false; selected = [] }
+                }
                 .alert("Rename group", isPresented: $renaming) {
                     TextField("Group name", text: $groupName)
                     Button("Save") {
@@ -115,6 +144,8 @@ struct GroupEntriesView: View {
                 }
         }
     }
+
+    private func toggleSelected(_ id: String) { if !selected.insert(id).inserted { selected.remove(id) } }
 
     @ViewBuilder
     private func suggestion(for entry: CheckIn) -> some View {
@@ -146,15 +177,16 @@ struct GroupManagerView: View {
 }
 
 
-private struct GroupAssignmentView: View {
+struct GroupAssignmentView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     let entry: CheckIn
     @State var selection: [String]
+    @State private var mood: Int?
     @State private var error: String?
     var body: some View {
         NavigationStack {
-            CategorySelectionList(selection: $selection, activity: entry.activity, timestamp: entry.end)
+            CategorySelectionList(selection: $selection, activity: entry.activity, timestamp: entry.end, mood: $mood)
                 .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }
@@ -163,11 +195,45 @@ private struct GroupAssignmentView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
-                            do { try store.categorize(entry, categoryIDs: selection); dismiss() }
+                            do { try store.categorize(entry, categoryIDs: selection, mood: mood); dismiss() }
                             catch { self.error = error.localizedDescription }
                         }.accessibilityIdentifier("group-selection.done")
                     }
                 }
+        }.onAppear { mood = entry.mood }
+    }
+}
+
+private struct LogMoveRequest: Identifiable {
+    let id = UUID()
+    let ids: Set<String>
+}
+
+private struct LogCategoryMoveView: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Environment(\.dismiss) private var dismiss
+    let ids: Set<String>
+    let source: String
+    let didMove: () -> Void
+    @State private var error: String?
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Move \(ids.count) logs from \(store.categoryName(source)). Other labels are kept.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Section("Choose an existing category") {
+                    ForEach(store.ledger.orderedCategories) { category in
+                        Button(store.ledger.categoryPath(category.id)) {
+                            do { try store.moveLogs(ids, from: source, to: category.id); didMove(); dismiss() }
+                            catch { self.error = error.localizedDescription }
+                        }.accessibilityIdentifier("log-move.\(category.id)")
+                    }
+                }
+                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("log-move.error") }
+            }.navigationTitle("Move logs").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
     }
 }

@@ -66,11 +66,9 @@ private enum AppTab: Hashable { case today, commitments, log, inbox, settings }
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
-    @Environment(\.scenePhase) private var scenePhase
     @State private var path: [LedgerScreen] = []
     @State private var tab: AppTab = .today
     @State private var capturing = false
-    @State private var wasBackgrounded = false
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack(path: $path) {
@@ -87,13 +85,6 @@ struct RootView: View {
         .onChange(of: tab) { _, _ in UIApplication.shared.dismissLedgerKeyboard() }
         .onAppear { showRequestedCapture() }
         .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { wasBackgrounded = true }
-            if phase == .active, wasBackgrounded {
-                wasBackgrounded = false
-                if !capturing { tab = .today; path.removeAll() }
-            }
-        }
         .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
     }
     @ViewBuilder private func destination(_ screen: LedgerScreen) -> some View {

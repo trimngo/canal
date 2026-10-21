@@ -17,13 +17,13 @@ final class CalendarAccountingTests: XCTestCase {
             let report = ledger.history(range: .today, now: now, calendar: utc)
             XCTAssertEqual(ledger.daySamples(on: now, now: now, calendar: utc).count, 3)
             XCTAssertEqual(report.samples.count, 3)
-            XCTAssertEqual(period.trackedMinutes, 1350)
-            XCTAssertEqual(report.trackedMinutes, 1350)
-            XCTAssertEqual(period.directMinutes["work"], method == .midpoint ? 60 : 120)
+            XCTAssertEqual(period.trackedMinutes, 1335)
+            XCTAssertEqual(report.trackedMinutes, 1335)
+            XCTAssertEqual(period.directMinutes["work"], method == .midpoint ? 67.5 : 127.5)
             XCTAssertEqual(period.directMinutes["social"], method == .midpoint ? 660 : 1200)
-            XCTAssertEqual(period.directMinutes["leisure"], method == .midpoint ? 630 : 30)
+            XCTAssertEqual(period.directMinutes["leisure"], method == .midpoint ? 607.5 : 7.5)
             XCTAssertEqual(report.rows.reduce(0) { $0 + $1.percent }, 100, accuracy: 0.00001)
-            XCTAssertEqual(report.dailyTotals.reduce(0) { $0 + $1.minutes }, 1350)
+            XCTAssertEqual(report.dailyTotals.reduce(0) { $0 + $1.minutes }, 1335)
         }
     }
 
@@ -39,7 +39,7 @@ final class CalendarAccountingTests: XCTestCase {
         let today = ledger.history(range: .today, now: now, calendar: utc)
         XCTAssertEqual(today.samples.count, 1)
         XCTAssertEqual(today.rows.first?.id, "social")
-        XCTAssertEqual(today.trackedMinutes, 15)
+        XCTAssertEqual(today.trackedMinutes, 7.5)
         let custom = ledger.history(range: .custom, start: previous, end: previous, now: now, calendar: utc)
         XCTAssertEqual(custom.samples.count, 2)
         XCTAssertEqual(custom.end, date("2026-10-19T00:00:00Z"))
@@ -53,7 +53,7 @@ final class CalendarAccountingTests: XCTestCase {
         }
         let period = ledger.rollingAllocation(now: now, calendar: utc)
         XCTAssertEqual(period.representedDays, 2)
-        XCTAssertEqual(period.trackedMinutes, 120)
+        XCTAssertEqual(period.trackedMinutes, 30)
         XCTAssertEqual(period.percent(period.directMinutes["work", default: 0]), 50)
         let report = ledger.history(range: .week, now: now, calendar: utc)
         XCTAssertEqual(report.trackedMinutes, period.trackedMinutes)
@@ -79,7 +79,7 @@ final class CalendarAccountingTests: XCTestCase {
         XCTAssertEqual(restored.settings.reportingTimeZoneIdentifier, "Europe/Berlin")
         let report = restored.history(range: .today, now: now, calendar: utc)
         XCTAssertEqual(report.samples, ledger.entries)
-        XCTAssertEqual(report.trackedMinutes, 60)
+        XCTAssertEqual(report.trackedMinutes, 15)
         XCTAssertTrue(report.rows.allSatisfy { abs($0.percent - 50) < 0.00001 })
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(restored)) as! [String: Any]
         let savedSettings = encoded["settings"] as! [String: Any]
@@ -100,7 +100,7 @@ final class CalendarAccountingTests: XCTestCase {
         var settings = ledger.settings; settings.startMinute = 420; settings.endMinute = 1320
         try ledger.saveSettings(settings, writer: "phone")
         try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Night log", categoryID: nil, writer: "watch", now: now)
-        XCTAssertEqual(ledger.allocation(on: now, now: now, calendar: utc).directMinutes["uncategorized"], 60)
+        XCTAssertEqual(ledger.allocation(on: now, now: now, calendar: utc).directMinutes["uncategorized"], 15)
         XCTAssertEqual(ledger.history(range: .today, now: now, calendar: utc).rows.first?.percent, 100)
     }
 }

@@ -32,6 +32,7 @@ struct CategorySelectionList: View {
     @Binding var selection: [String]
     var activity: String? = nil
     var timestamp: Date? = nil
+    var mood: Binding<Int?>? = nil
     var selectionHelp = "Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected."
     @State private var replacing: String?
     @State private var creating = false
@@ -39,6 +40,9 @@ struct CategorySelectionList: View {
     @State private var error: String?
     var body: some View {
         List {
+            if let mood {
+                Section("Mood (optional)") { MoodSelectionView(selection: mood) }
+            }
             Button("Uncategorized") { selection = [] }
             ForEach(store.ledger.orderedCategories) { category in
                 Button {
@@ -92,6 +96,33 @@ struct CategorySelectionList: View {
                     Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
                 }
             }
+    }
+}
+
+/// Phone post-processing only; capture and Apple's Watch dictation stay intact.
+struct MoodSelectionView: View {
+    @Binding var selection: Int?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                ForEach(1...5, id: \.self) { value in
+                    Button { selection = value } label: {
+                        Text("\(value)").font(.headline).frame(maxWidth: .infinity, minHeight: 44)
+                            .background(selection == value ? Color.accentColor.opacity(0.25) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    }.buttonStyle(.borderless)
+                        .accessibilityLabel("Mood \(value) of 5")
+                        .accessibilityValue(selection == value ? "Selected" : "Not selected")
+                        .accessibilityIdentifier("mood.\(value)")
+                }
+            }
+            HStack {
+                Text("1 Low · 5 High").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if selection != nil {
+                    Button("Clear") { selection = nil }.font(.caption).buttonStyle(.borderless).accessibilityIdentifier("mood.clear")
+                }
+            }
+        }
     }
 }
 

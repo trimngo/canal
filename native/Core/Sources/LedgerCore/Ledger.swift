@@ -65,6 +65,8 @@ public struct ReminderTime: Equatable, Sendable {
 public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
 
 public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
+    /// Optional instantaneous self-report: 1 (low) through 5 (high).
+    public var mood: Int?
     /// Nil in legacy files. categoryID remains a compatibility mirror of the first selection.
     public var categoryIDs: [String]?
     public var categoryAssignment: CategoryAssignment?

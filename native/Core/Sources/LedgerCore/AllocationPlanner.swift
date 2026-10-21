@@ -114,6 +114,7 @@ extension Ledger {
         try validateCategories(ids)
         let revision = nextRevision(writer: writer), sampleID = id ?? UUID().uuidString
         var entry = CheckIn(end: timestamp, activity: text, categoryID: ids.first, revision: revision, sampleID: sampleID, categoryAssignment: ids.isEmpty ? .automatic : .manual)
+        entry.mood = entries.first(where: { $0.id == sampleID })?.mood
         entry.categoryIDs = ids
         entries.removeAll { $0.id == sampleID }; entries.append(entry)
     }
@@ -194,8 +195,11 @@ extension Ledger {
         func midpoint(_ a: Date, _ b: Date) -> Date { a.addingTimeInterval(b.timeIntervalSince(a) / 2) }
         return distinct.indices.compactMap { index in
             let sample = distinct[index]
-            let start = index == 0 ? sample.end : (rule == .carryForward ? sample.end : midpoint(distinct[index - 1].end, sample.end))
-            let end = index == distinct.count - 1 ? cutoff : (rule == .carryForward ? distinct[index + 1].end : midpoint(sample.end, distinct[index + 1].end))
+            // Extrapolate half the configured mean notification interval at
+            // either edge; missed/random prompts never stretch the tail.
+            let padding = settings.sampleBoundaryPadding
+            let start = index == 0 ? max(bounds.start, sample.end.addingTimeInterval(-padding)) : (rule == .carryForward ? sample.end : midpoint(distinct[index - 1].end, sample.end))
+            let end = index == distinct.count - 1 ? min(cutoff, sample.end.addingTimeInterval(padding)) : (rule == .carryForward ? distinct[index + 1].end : midpoint(sample.end, distinct[index + 1].end))
             guard end > start else { return nil }
             return InferredSegment(sampleID: sample.id, start: start, end: end, categoryID: confirmedCategoryID(for: sample))
         }

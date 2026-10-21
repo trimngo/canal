@@ -15,6 +15,13 @@ public enum NotificationDelivery: String, Codable, CaseIterable, Identifiable, S
 }
 
 extension Settings {
+    /// Both regular and randomized sampling use their configured mean interval,
+    /// independent of missed alerts, manual logs, and individual random draws.
+    public var sampleBoundaryPadding: TimeInterval {
+        let minutes = notificationTiming == .randomized ? randomizedNotificationInterval : regularNotificationInterval
+        return Double(NotificationTiming.intervals.contains(minutes) ? minutes : 15) * 30
+    }
+
     /// A finite queue is needed for fresh random times, or a frequent window
     /// whose repeating requests would exceed Apple's pending-notification limit.
     public var usesQueuedNotifications: Bool {

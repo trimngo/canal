@@ -127,7 +127,7 @@ struct SettingsView: View {
                     ForEach(InferenceMethod.allCases) { Text($0.name).tag($0) }
                 }
             } header: { Text("Estimate time") } footer: {
-                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates start at each day’s first log and extend to now today, or midnight for completed days. Every log counts, regardless of its time. Days without logs are excluded. Percentages use time since the first log. Changing methods keeps your original samples.")
+                Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates extend half your notification interval before the first log and after the last. Random mode uses your configured average interval. Estimates are capped at now and calendar-day boundaries; unsampled time outside that period is excluded. Every log counts, regardless of its time. Days without logs are excluded. Changing methods keeps your original samples.")
             }
             Section {
                 Button("Categories & targets") { managingGroups = true }

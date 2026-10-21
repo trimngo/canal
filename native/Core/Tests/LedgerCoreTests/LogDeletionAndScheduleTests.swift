@@ -21,16 +21,16 @@ final class LogDeletionAndScheduleTests: XCTestCase {
             try ledger.saveSample(id: "breakfast", at: morning, activity: "Breakfast", categoryID: "personal", writer: "phone", now: now)
             try ledger.saveSample(id: "work", at: morning.addingTimeInterval(3600), activity: "Work", categoryID: "work", writer: "phone", now: now)
             let raw = ledger.entries
-            XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).trackedMinutes, 420, accuracy: 0.001)
+            XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).trackedMinutes, 375, accuracy: 0.001)
             ledger.setLogDeleted("night", deleted: true, writer: "phone")
             let report = ledger.history(range: .today, now: now, calendar: calendar)
-            XCTAssertEqual(report.trackedMinutes, 120, accuracy: 0.001)
+            XCTAssertEqual(report.trackedMinutes, 75, accuracy: 0.001)
             XCTAssertEqual(report.samples.map(\.end).min(), morning)
             XCTAssertFalse(report.rows.contains { $0.id == "rest" })
             XCTAssertEqual(report.rows.reduce(0) { $0 + $1.percent }, 100, accuracy: 0.001)
             XCTAssertEqual(ledger.entries, raw)
             ledger.setLogDeleted("night", deleted: false, writer: "phone")
-            XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).trackedMinutes, 420, accuracy: 0.001)
+            XCTAssertEqual(ledger.history(range: .today, now: now, calendar: calendar).trackedMinutes, 375, accuracy: 0.001)
         }
     }
     func testDeletingSampleRecalculatesEstimatesAndAllTimeCountsWithoutLosingRawData() throws {
@@ -40,7 +40,7 @@ final class LogDeletionAndScheduleTests: XCTestCase {
         ledger.setLogDeleted("b", deleted: true, writer: "phone")
         let report = ledger.history(range: .allTime, now: now)
         XCTAssertEqual(Set(report.samples.map(\.id)), Set(["a", "c"]))
-        XCTAssertEqual(report.trackedMinutes, 60, accuracy: 0.001)
+        XCTAssertEqual(report.trackedMinutes, 67.5, accuracy: 0.001)
         XCTAssertFalse(report.rows.contains { $0.id == "personal" })
         XCTAssertEqual(ledger.groupEntryCounts(now: now), ["work": 1, "rest": 1])
         XCTAssertEqual(ledger.entries, raw)

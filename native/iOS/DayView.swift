@@ -19,6 +19,7 @@ struct AllocationHistoryView: View {
     @State private var now = Date()
     @State private var selectedGroup: SelectedGroup?
     @State private var managingGroups = false
+    @State private var reviewing: LogReviewRequest?
     @State private var range: HistoryRange = .today
     @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
     @State private var end = Date()
@@ -42,6 +43,7 @@ struct AllocationHistoryView: View {
             .sheet(item: $selectedGroup, onDismiss: { now = Date() }) { group in
                 GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end)
             }
+            .sheet(item: $reviewing, onDismiss: { now = Date() }) { request in LogReviewView(entryIDs: request.entryIDs) }
 
     }
 
@@ -66,8 +68,12 @@ struct AllocationHistoryView: View {
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
                 if ungrouped > 0 {
-                    Button { selectedGroup = SelectedGroup(id: "uncategorized", name: "Uncategorized", start: report.start, end: report.end) } label: {
-                        Label("\(ungrouped) logs to group", systemImage: "tray")
+                    Button {
+                        reviewing = LogReviewRequest(entryIDs: report.samples.filter {
+                            store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")
+                        }.sorted { $0.end == $1.end ? $0.id < $1.id : $0.end > $1.end }.map(\.id))
+                    } label: {
+                        Label("Review logs (\(ungrouped))", systemImage: "tray")
                             .font(.subheadline).frame(minHeight: 32)
                     }.accessibilityIdentifier("dashboard.review.uncategorized")
                 }

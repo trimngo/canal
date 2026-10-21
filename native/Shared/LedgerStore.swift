@@ -557,10 +557,23 @@ final class LedgerStore: ObservableObject {
         try commitCategorization(draft)
     }
 
+    func categorize(_ entry: CheckIn, categoryIDs: [String], mood: Int?) throws {
+        var draft = ledger
+        try draft.confirmCategories(for: entry.id, categoryIDs: categoryIDs, writer: writer)
+        try draft.setMood(for: entry.id, value: mood, writer: writer)
+        try commitCategorization(draft)
+    }
+
+    func moveLogs(_ ids: Set<String>, from source: String, to destination: String) throws {
+        var draft = ledger
+        try draft.moveLogs(ids, from: source, to: destination, writer: writer)
+        try commitCategorization(draft)
+    }
+
     private func commitCategorization(_ draft: Ledger) throws {
         let changed = draft.entries.compactMap { updated -> (before: CheckIn, after: CheckIn)? in
             guard let original = ledger.entries.first(where: { $0.id == updated.id }),
-                  original.categoryIDs != updated.categoryIDs || original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment else { return nil }
+                  original.categoryIDs != updated.categoryIDs || original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment || original.mood != updated.mood else { return nil }
             return (original, updated)
         }
         try commit(draft)
@@ -577,6 +590,7 @@ final class LedgerStore: ObservableObject {
                 draft.entries[index].categoryIDs = change.before.categoryIDs
                 draft.entries[index].categoryID = change.before.categoryID
                 draft.entries[index].categoryAssignment = change.before.categoryAssignment
+                draft.entries[index].mood = change.before.mood
                 draft.entries[index].revision = revision
             }
             draft.prepareGroupSuggestions(writer: writer)

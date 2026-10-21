@@ -28,14 +28,14 @@ final class WeeklyCommitmentTests: XCTestCase {
         }
         let report = ledger.commitmentWeek(now: now, calendar: utc)
         let rows = Dictionary(uniqueKeysWithValues: report.rows.map { ($0.id, $0) })
-        XCTAssertEqual(report.loggedMinutes, 240) // Parent and child commitments never inflate total activity time.
-        XCTAssertEqual(rows["work"]?.minutes, 150)
+        XCTAssertEqual(report.loggedMinutes, 195) // Parent and child commitments never inflate total activity time.
+        XCTAssertEqual(rows["work"]?.minutes, 157.5)
         XCTAssertEqual(rows["work"]?.remainingMinutes, 0)
         XCTAssertEqual(rows["work"]?.isMet, true)
-        XCTAssertEqual(rows["company"]?.minutes, 90)
-        XCTAssertEqual(rows["company"]?.remainingMinutes, 30)
-        XCTAssertEqual(rows["music"]?.minutes, 90)
-        XCTAssertEqual(rows["music"]?.remainingMinutes, 90)
+        XCTAssertEqual(rows["company"]?.minutes, 97.5)
+        XCTAssertEqual(rows["company"]?.remainingMinutes, 22.5)
+        XCTAssertEqual(rows["music"]?.minutes, 37.5)
+        XCTAssertEqual(rows["music"]?.remainingMinutes, 142.5)
         let before = ledger.entries
         _ = ledger.commitmentWeek(now: now, calendar: utc)
         XCTAssertEqual(ledger.entries, before)
@@ -76,7 +76,7 @@ final class WeeklyCommitmentTests: XCTestCase {
         let report = ledger.commitmentWeek(now: wednesday, calendar: sundayFirst)
         XCTAssertEqual(report.interval.start, date("2026-10-12T00:00:00Z"))
         XCTAssertEqual(report.interval.end, date("2026-10-19T00:00:00Z"))
-        XCTAssertEqual(report.rows.first?.minutes, 18 * 60) // Monday to midnight, Wednesday to now; no invented Tuesday.
+        XCTAssertEqual(report.rows.first?.minutes, 30) // Two isolated observations; no invented Tuesday or unsampled evenings.
         let nextWeek = ledger.commitmentWeek(now: date("2026-10-19T09:00:00Z"), calendar: utc)
         XCTAssertEqual(nextWeek.loggedMinutes, 0)
         XCTAssertEqual(nextWeek.rows.first?.remainingMinutes, 60)
@@ -92,16 +92,16 @@ final class WeeklyCommitmentTests: XCTestCase {
         for method in InferenceMethod.allCases {
             ledger.settings.inferenceMethod = method
             let report = ledger.commitmentWeek(now: monday, calendar: utc)
-            XCTAssertEqual(report.loggedMinutes, 300)
+            XCTAssertEqual(report.loggedMinutes, 15)
             XCTAssertEqual(report.rows.first { $0.id == "work" }?.minutes, 0)
-            XCTAssertEqual(report.rows.first { $0.id == "music" }?.minutes, 300)
+            XCTAssertEqual(report.rows.first { $0.id == "music" }?.minutes, 15)
         }
         let midnight = ledger.commitmentWeek(now: date("2026-10-12T00:00:00Z"), calendar: utc)
         XCTAssertEqual(midnight.loggedMinutes, 0)
     }
 
     func testReportingTimeZoneAndDaylightSavingWeeksUseElapsedTime() throws {
-        for (stamp, first, weekHours, elapsed) in [
+        for (stamp, first, weekHours, _) in [
             ("2026-10-25T02:00:00Z", "2026-10-24T22:00:00Z", 169.0, 240.0),
             ("2026-03-29T02:00:00Z", "2026-03-28T23:00:00Z", 167.0, 180.0)
         ] {
@@ -111,7 +111,7 @@ final class WeeklyCommitmentTests: XCTestCase {
             try ledger.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 600, writer: "test")
             let report = ledger.commitmentWeek(now: current, calendar: utc)
             XCTAssertEqual(report.interval.duration / 3600, weekHours)
-            XCTAssertEqual(report.rows.first?.minutes, elapsed)
+            XCTAssertEqual(report.rows.first?.minutes, 7.5)
             XCTAssertEqual(ledger.entries.first?.end, date(first))
         }
     }
@@ -122,7 +122,7 @@ final class WeeklyCommitmentTests: XCTestCase {
         XCTAssertEqual(ledger.commitmentWeek(now: now, calendar: utc).loggedMinutes, 0)
         try add(&ledger, "2026-10-12T07:00:00Z", [])
         let report = ledger.commitmentWeek(now: now, calendar: utc)
-        XCTAssertEqual(report.loggedMinutes, 240)
+        XCTAssertEqual(report.loggedMinutes, 15)
         XCTAssertEqual(report.rows.first?.minutes, 0)
         XCTAssertEqual(report.rows.first?.remainingMinutes, 60)
         XCTAssertEqual(report.rows.first?.isMet, false)
@@ -137,13 +137,13 @@ final class WeeklyCommitmentTests: XCTestCase {
         try ledger.saveCategory(id: "company", name: "My business", writer: "test")
         try ledger.moveCategory("company", to: "music", writer: "test")
         let row = try XCTUnwrap(ledger.commitmentWeek(now: now, calendar: utc).rows.first)
-        XCTAssertEqual(row.id, "company"); XCTAssertEqual(row.name, "Music › My business"); XCTAssertEqual(row.minutes, 60)
+        XCTAssertEqual(row.id, "company"); XCTAssertEqual(row.name, "Music › My business"); XCTAssertEqual(row.minutes, 15)
         let raw = ledger.entries[0]
         try ledger.deleteCategory(id: "company", writer: "test")
         XCTAssertTrue(ledger.activeWeeklyCommitments.isEmpty)
         XCTAssertEqual(ledger.weeklyCommitments?.count, 1)
         XCTAssertEqual(ledger.entries[0].end, raw.end); XCTAssertEqual(ledger.entries[0].activity, raw.activity)
-        XCTAssertEqual(ledger.allocation(on: now, now: now, calendar: utc).directMinutes["uncategorized"], 60)
+        XCTAssertEqual(ledger.allocation(on: now, now: now, calendar: utc).directMinutes["uncategorized"], 15)
     }
 
     func testBackupWatchAndPartialCloudMergePreserveCommitmentsAndDeletion() throws {
