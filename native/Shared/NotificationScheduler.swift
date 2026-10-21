@@ -48,9 +48,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
 
     func refreshStatus() async {
         let value = await center.notificationSettings()
-        permissionGranted = [.authorized, .provisional, .ephemeral].contains(value.authorizationStatus)
+        permissionGranted = false
         switch value.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
+            permissionGranted = true
             #if os(iOS)
             status = "Notifications allowed on iPhone"
             #else
