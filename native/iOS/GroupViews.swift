@@ -56,41 +56,7 @@ struct GroupEntriesView: View {
                     }.pickerStyle(.segmented)
                 }
                 if entries.isEmpty { Text("There are no logs in this group for this view.").foregroundStyle(.secondary) }
-                ForEach(entries) { entry in
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Button { editing = entry } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(entry.activity).foregroundStyle(.primary)
-                                    Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                            }.buttonStyle(.plain).disabled(selecting)
-                            if !selecting { DeleteLogButton(entry: entry, identifierPrefix: "group.delete-log") }
-                        }
-                        Text("Group: \(store.categoryNames(for: entry))")
-                            .font(.caption).foregroundStyle(.secondary)
-                        if let mood = entry.mood { Text("Mood: \(mood)/5").font(.caption).foregroundStyle(.secondary) }
-                        if !selecting {
-                            suggestion(for: entry)
-                            Button { categorizing = entry } label: {
-                                Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
-                            }.buttonStyle(.borderless).accessibilityIdentifier("group.choose.\(entry.id)")
-                        }
-                    }.padding(.vertical, 5)
-                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                        .onTapGesture { if selecting { toggleSelected(entry.id) } }
-                        .listRowBackground(selected.contains(entry.id) ? Color.accentColor.opacity(0.2) : Color.clear)
-                        .accessibilityIdentifier("group.log.\(entry.id)")
-                        .accessibilityValue(selected.contains(entry.id) ? "Selected" : "Not selected")
-                        .swipeActions {
-                            if !selecting {
-                                Button("Delete", role: .destructive) {
-                                    do { try store.deleteLog(entry) } catch { self.error = error.localizedDescription }
-                                }
-                            }
-                        }
-                }
+                ForEach(entries) { entry in entryRow(entry) }
                 if store.canUndoGrouping {
                     Section { Button("Undo last categorization") { store.undoCategorization() }.accessibilityIdentifier("group.undo") }
                 }
@@ -143,6 +109,42 @@ struct GroupEntriesView: View {
                     }
                 }
         }
+    }
+
+    private func entryRow(_ entry: CheckIn) -> some View {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Button { editing = entry } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.activity).foregroundStyle(.primary)
+                                    Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                            }.buttonStyle(.plain).disabled(selecting)
+                            if !selecting { DeleteLogButton(entry: entry, identifierPrefix: "group.delete-log") }
+                        }
+                        Text("Group: \(store.categoryNames(for: entry))")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if let mood = entry.mood { Text("Mood: \(mood)/5").font(.caption).foregroundStyle(.secondary) }
+                        if !selecting {
+                            suggestion(for: entry)
+                            Button { categorizing = entry } label: {
+                                Label(groupID == "uncategorized" ? "Choose group" : "Change group", systemImage: "folder")
+                            }.buttonStyle(.borderless).accessibilityIdentifier("group.choose.\(entry.id)")
+                        }
+                    }.padding(.vertical, 5)
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        .onTapGesture { if selecting { toggleSelected(entry.id) } }
+                        .listRowBackground(selected.contains(entry.id) ? Color.accentColor.opacity(0.2) : Color.clear)
+                        .accessibilityIdentifier("group.log.\(entry.id)")
+                        .accessibilityValue(selected.contains(entry.id) ? "Selected" : "Not selected")
+                        .swipeActions {
+                            if !selecting {
+                                Button("Delete", role: .destructive) {
+                                    do { try store.deleteLog(entry) } catch { self.error = error.localizedDescription }
+                                }
+                            }
+                        }
     }
 
     private func toggleSelected(_ id: String) { if !selected.insert(id).inserted { selected.remove(id) } }
