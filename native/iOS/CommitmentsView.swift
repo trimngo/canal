@@ -129,7 +129,7 @@ struct CommitmentsView: View {
             Button("Delete category", role: .destructive) {
                 guard let category = deleting else { return }
                 do { try store.deleteCategory(id: category.id); deleting = nil; finishSelection() }
-                catch { error = error.localizedDescription }
+                catch { self.error = error.localizedDescription }
             }
             Button("Cancel", role: .cancel) { deleting = nil }
         } message: { Text("Logs are kept. This category’s shares become Uncategorized, its label is removed from ideas, and children move up one level.") }
