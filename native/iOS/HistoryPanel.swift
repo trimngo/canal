@@ -8,6 +8,7 @@ struct HistoryPanel: View {
     let select: (BreakdownRow) -> Void
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
+    @State private var expandedCategories = Set<String>()
     private let pages = ["Breakdown", "Pie chart", "Daily trend", "Heatmap"]
     private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
     private func color(_ id: String) -> Color {
@@ -64,23 +65,52 @@ struct HistoryPanel: View {
         ScrollView {
             VStack(spacing: 14) {
                 if report.rows.isEmpty { empty }
-                ForEach(report.rows) { row in
-                    Button { select(row) } label: {
-                        VStack(spacing: 7) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(row.name).foregroundStyle(.primary)
-                                Spacer(minLength: 4)
-                                Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))").font(.subheadline).foregroundStyle(.secondary)
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-                            }
-                            ProgressView(value: min(1, row.percent / 100)).tint(color(row.id))
-                        }.padding(.vertical, 6).contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityIdentifier("dashboard.group.\(row.id)")
+                ForEach(report.categoryOutline(in: store.ledger, expanded: expandedCategories)) { item in
+                    breakdownRow(item)
+                }
+                if report.rows.contains(where: { !store.ledger.children(of: $0.id).isEmpty }) {
+                    Text("Parent totals include their subcategories. Percentages use the same total throughout.")
+                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Text("Percentages use the estimated period from half a notification interval before the first log to half an interval after the last. Random mode uses your configured average interval. Estimates stop at now and calendar-day boundaries. Days without logs are excluded.")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }.padding(.bottom, 8)
         }.accessibilityIdentifier("report.view.breakdown")
+    }
+    private func breakdownRow(_ item: HistoryCategoryRow) -> some View {
+        HStack(spacing: 4) {
+            if item.hasChildren {
+                Button {
+                    if expandedCategories.contains(item.row.id) { expandedCategories.remove(item.row.id) }
+                    else { expandedCategories.insert(item.row.id) }
+                } label: {
+                    Image(systemName: expandedCategories.contains(item.row.id) ? "chevron.down" : "chevron.right")
+                        .font(.caption).frame(width: 28, height: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                    .accessibilityLabel("\(expandedCategories.contains(item.row.id) ? "Collapse" : "Expand") \(item.row.name)")
+                    .accessibilityValue(expandedCategories.contains(item.row.id) ? "Expanded" : "Collapsed")
+                    .accessibilityIdentifier("dashboard.children.\(item.row.id)")
+            } else { Color.clear.frame(width: 28, height: 1).accessibilityHidden(true) }
+            if item.direct {
+                breakdownValue(item).accessibilityIdentifier("dashboard.direct.\(item.row.id)")
+            } else {
+                Button { select(item.row) } label: { breakdownValue(item) }
+                    .buttonStyle(.plain).accessibilityIdentifier("dashboard.group.\(item.row.id)")
+            }
+        }.padding(.leading, CGFloat(item.depth) * 16)
+            .accessibilityElement(children: .contain)
+    }
+    private func breakdownValue(_ item: HistoryCategoryRow) -> some View {
+        VStack(spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(item.row.name).fontWeight(item.hasChildren ? .semibold : .regular)
+                    .foregroundStyle(item.direct ? Color.secondary : Color.primary)
+                Spacer(minLength: 4)
+                Text("\(item.row.percent, specifier: "%.1f")% · \(store.duration(item.row.minutes))").font(.subheadline).foregroundStyle(.secondary)
+                if !item.direct { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
+            }
+            ProgressView(value: min(1, item.row.percent / 100)).tint(color(item.row.id))
+        }.padding(.vertical, 6).contentShape(Rectangle())
     }
     private func pie(diameter: CGFloat) -> some View {
         ScrollView {

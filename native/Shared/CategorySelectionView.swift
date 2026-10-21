@@ -51,11 +51,19 @@ struct CategorySelectionList: View {
                     else { replacing = category.id }
                 } label: {
                     HStack {
+                        #if os(watchOS)
                         Text(store.ledger.categoryPath(category.id))
+                        #else
+                        Text(category.name).fontWeight(store.ledger.children(of: category.id).isEmpty ? .regular : .semibold)
+                        #endif
                         Spacer()
                         if selection.contains(category.id) { Image(systemName: "checkmark").foregroundStyle(.tint) }
                     }
+                    #if os(iOS)
+                    .padding(.leading, CGFloat(depth(of: category.id)) * 18)
+                    #endif
                 }.accessibilityIdentifier("category-select.\(category.id)")
+                    .accessibilityLabel(store.ledger.categoryPath(category.id))
                     .accessibilityValue(selection.contains(category.id) ? "Selected" : "Not selected")
                     .accessibilityAddTraits(selection.contains(category.id) ? .isSelected : [])
             }
@@ -96,6 +104,12 @@ struct CategorySelectionList: View {
                     Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
                 }
             }
+    }
+    private func depth(of id: String) -> Int {
+        let parents = store.ledger.categoryParents
+        var depth = 0, current = id
+        while let parent = parents[current] { depth += 1; current = parent }
+        return depth
     }
 }
 

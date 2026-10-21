@@ -48,12 +48,35 @@ final class CompanionSync: NSObject, WCSessionDelegate {
     }
 
     func refresh() {
+        if let context = session?.receivedApplicationContext { receiveSettings(context) }
         retryTask?.cancel(); retryTask = nil; retry.reset()
         quickRetryTask?.cancel(); quickRetryTask = nil; quickRetry.reset()
         send()
     }
 
     func hasReceivedSample(_ entry: CheckIn) -> Bool { quick.hasReceived(entry) }
+
+    private func sendSettings() {
+        guard let session, let settings = store?.ledger.settings, settings.revision > Revision() else { return }
+        // Application context keeps only the newest small settings snapshot,
+        // independently of queued history files, even when the peer is asleep.
+        do {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(settings)
+            if session.applicationContext["settings"] as? Data != data {
+                try session.updateApplicationContext(["settings": data])
+            }
+        } catch { /* The acknowledged fast lane and full-file queue also retry. */ }
+    }
+
+    private func receiveSettings(_ context: [String: Any]) {
+        guard let data = context["settings"] as? Data else { return }
+        do {
+            var partial = Ledger(); partial.categories = []
+            partial.settings = try JSONDecoder().decode(Settings.self, from: data)
+            try store?.merge(partial)
+        } catch { /* Keep the saved local copy; the other sync paths retry. */ }
+    }
 
     private var queuedStatus: String {
         guard let store else { return "Sync queued" }
@@ -158,6 +181,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         #endif
         // Unlike file transfers, a reachable Watch can wake its paired iPhone
         // for an interactive message. Never wait behind an older history file.
+        sendSettings()
         sendQuickly()
         guard retryTask == nil else { return }
         // WatchConnectivity already queues delivery while the other device is
@@ -195,6 +219,17 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         }
     }
 
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        // Read the payload before leaving the delegate callback, as with files.
+        guard let data = applicationContext["settings"] as? Data else { return }
+        incomingWrites.begin()
+        let writes = incomingWrites
+        Task { @MainActor [weak self] in
+            defer { writes.end(); self?.completeBackgroundTasksIfReady() }
+            self?.receiveSettings(["settings": data])
+        }
+    }
+
     nonisolated func session(_ session: WCSession, didReceiveMessageData data: Data, replyHandler: @escaping (Data) -> Void) {
         incomingWrites.begin()
         let result = Result { try JSONDecoder().decode(CompanionQuickPacket.self, from: data) }
@@ -217,7 +252,10 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             guard let self else { return }
             self.activationRequested = false
             if let error { self.connectionFailed(error) }
-            else if activationState == .activated { self.send() }
+            else if activationState == .activated {
+                self.receiveSettings(session.receivedApplicationContext)
+                self.send()
+            }
             else { self.connectionFailed(WCError(.sessionNotActivated)) }
             self.completeBackgroundTasksIfReady(activationFailed: error != nil || activationState != .activated)
         }

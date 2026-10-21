@@ -27,6 +27,35 @@ public struct HistoryReport: Sendable {
     public var start: Date
     public var end: Date
     public var trackedMinutes: Double
+    /// Direct shares, before rolling descendants into their parents. Kept in
+    /// the report so expanding a row never re-estimates or double counts logs.
+    public var directMinutes: [String: Double] = [:]
+
+    public func categoryOutline(in ledger: Ledger, expanded: Set<String>) -> [HistoryCategoryRow] {
+        let period = AllocationPeriod(trackedMinutes: trackedMinutes, directMinutes: directMinutes)
+        var result: [HistoryCategoryRow] = []
+        func append(_ row: BreakdownRow, depth: Int) {
+            let children = ledger.children(of: row.id)
+            result.append(HistoryCategoryRow(row: row, depth: depth, direct: false, hasChildren: !children.isEmpty))
+            guard expanded.contains(row.id), !children.isEmpty else { return }
+            if directMinutes[row.id, default: 0] > 0 {
+                result.append(HistoryCategoryRow(row: BreakdownRow(id: row.id, name: "Directly in \(row.name)", minutes: directMinutes[row.id, default: 0], dayMinutes: trackedMinutes), depth: depth + 1, direct: true, hasChildren: false))
+            }
+            for child in children {
+                append(BreakdownRow(id: child.id, name: child.name, minutes: period.total(for: child.id, ledger: ledger), dayMinutes: trackedMinutes), depth: depth + 1)
+            }
+        }
+        for row in rows { append(row, depth: 0) }
+        return result
+    }
+}
+
+public struct HistoryCategoryRow: Identifiable, Sendable {
+    public var row: BreakdownRow
+    public var depth: Int
+    public var direct: Bool
+    public var hasChildren: Bool
+    public var id: String { direct ? "direct:\(row.id)" : row.id }
 }
 
 extension Ledger {
@@ -53,13 +82,14 @@ extension Ledger {
         }
         let days = Set(samples.map { reportingDay(containing: $0.end, calendar: cal) }).sorted()
         var totals: [String: Double] = [:], daily: [DailyTotal] = []
-        var tracked = 0.0
+        var tracked = 0.0, directMinutes: [String: Double] = [:]
         var periods: [(day: Date, period: AllocationPeriod)] = []
         for day in days {
             let period = allocation(on: day, now: now, calendar: cal)
             guard period.trackedMinutes > 0 else { continue }
             periods.append((day, period))
             tracked += period.trackedMinutes
+            for (id, minutes) in period.directMinutes { directMinutes[id, default: 0] += minutes }
             for category in children(of: nil) {
                 let minutes = period.total(for: category.id, ledger: self)
                 if minutes > 0 {
@@ -92,6 +122,6 @@ extension Ledger {
             }
             previous = day
         }
-        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked)
+        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked, directMinutes: directMinutes)
     }
 }

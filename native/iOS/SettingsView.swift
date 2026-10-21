@@ -35,7 +35,7 @@ struct SettingsView: View {
                     ForEach(NotificationDelivery.allCases) { Text($0.name).tag($0) }
                 }.accessibilityIdentifier("settings.notification-delivery")
                 if settings.notificationDelivery == .watch {
-                    Text("Open Dash on your Watch and enable Watch alerts once. Check-ins are scheduled on the Watch even while you use your iPhone. Focus and Watch notification settings still apply.")
+                    Text("Open Dash on your Watch and allow Watch notifications once if prompted. Check-ins are scheduled on the Watch even while you use your iPhone. Focus and Watch notification settings still apply.")
                         .font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Text("Your iPhone schedules check-ins. Apple chooses whether your phone or Watch alerts you. Automatic usually alerts one device, rather than both.")
@@ -182,6 +182,11 @@ struct SettingsView: View {
                 siriStatus = INPreferences.siriAuthorizationStatus()
                 #endif
                 await notifications.refreshStatus()
+            }
+            .onChange(of: store.ledger.settings) { previous, updated in
+                // Follow incoming settings while preserving an unsaved draft.
+                var previousDraft = previous; previousDraft.revision = settings.revision
+                if settings == previousDraft { settings = updated }
             }
             .sheet(isPresented: $managingGroups) { GroupManagerView() }
     }

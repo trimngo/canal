@@ -1,7 +1,7 @@
 import Foundation
 
-/// A bounded fast lane for recent logs and ideas. Full history and all other
-/// settings still travel through the existing durable file-transfer queue.
+/// A bounded fast lane for recent logs, ideas, and revised settings. Full
+/// history still travels through the existing durable file-transfer queue.
 public struct CompanionQuickPacket: Codable, Sendable {
     public var id: String
     public var ledger: Ledger
@@ -20,13 +20,15 @@ public struct CompanionQuickDelivery {
 
     private func recent(_ source: Ledger) -> Ledger {
         var result = Ledger(); result.categories = []
+        result.settings = source.settings
         result.entries = Array(source.entries.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
         result.captures = Array(source.captures.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
         result.logDeletions = Array((source.logDeletions ?? []).sorted { $0.revision > $1.revision }.prefix(20))
         return result
     }
-    private func revisions(_ ledger: Ledger) -> [String: Revision] {
+    private func revisions(_ ledger: Ledger, includingSettings: Bool = true) -> [String: Revision] {
         var result: [String: Revision] = [:]
+        if includingSettings, ledger.settings.revision > Revision() { result["settings"] = ledger.settings.revision }
         for entry in ledger.entries { result["log:" + entry.id] = entry.revision }
         for capture in ledger.captures { result["idea:" + capture.id] = capture.revision }
         for deletion in ledger.logDeletions ?? [] { result["deletion:" + deletion.id] = deletion.revision }
@@ -34,7 +36,7 @@ public struct CompanionQuickDelivery {
     }
     public func hasReceived(_ entry: CheckIn) -> Bool { acknowledged["log:" + entry.id] == entry.revision }
     public func recentLogsReceived(in ledger: Ledger) -> Bool {
-        let wanted = revisions(recent(ledger))
+        let wanted = revisions(recent(ledger), includingSettings: false)
         return !wanted.isEmpty && wanted.allSatisfy { acknowledged[$0.key] == $0.value }
     }
 
@@ -44,6 +46,13 @@ public struct CompanionQuickDelivery {
         var partial = Ledger(); partial.categories = []
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         func fits(_ value: Ledger) throws -> Bool { try encoder.encode(CompanionQuickPacket(id: id, ledger: value)).count <= byteLimit }
+        // Small settings changes must not wait behind a large history transfer.
+        // Seed settings are omitted so legacy/default partial packets cannot
+        // overwrite a peer's saved preference or create an endless empty send.
+        if latest.settings.revision > Revision(), acknowledged["settings"] != latest.settings.revision {
+            partial.settings = latest.settings
+            if try !fits(partial) { partial.settings = Settings() }
+        }
         // Send individual changes, never the full history ahead of a new reply.
         for entry in latest.entries where !hasReceived(entry) {
             partial.entries.append(entry)

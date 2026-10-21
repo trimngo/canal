@@ -23,17 +23,18 @@ struct LogReviewView: View {
                 if let entry = current {
                     LogReviewEntryView(entry: entry, position: index + 1, count: entryIDs.count) { advance() }.id(entry.id)
                 } else {
-                    ContentUnavailableView("Review complete", systemImage: "checkmark.circle", description: Text("Your saved choices are kept."))
-                        .onAppear { advancePastMissing() }
+                    Color.clear
                 }
             }.navigationTitle("Review logs").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.accessibilityIdentifier("log-review.close") } }
+                .task(id: current?.id) { advancePastMissing() }
         }
     }
     private func advance() { index += 1; advancePastMissing() }
     private func advancePastMissing() {
         let active = Set(store.ledger.activeEntries.map(\.id))
         while index < entryIDs.count, !active.contains(entryIDs[index]) { index += 1 }
+        if index >= entryIDs.count { dismiss() }
     }
 }
 

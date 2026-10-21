@@ -50,13 +50,15 @@ final class WatchQuickLogUITests: XCTestCase {
         let alerts = app.buttons["watch.notifications"]
         XCTAssertTrue(alerts.waitForExistence(timeout: 15)); alerts.tap()
         let enable = app.buttons["watch.notifications.enable"]
-        XCTAssertTrue(enable.waitForExistence(timeout: 10)); enable.tap()
+        if enable.waitForExistence(timeout: 3) { enable.tap() }
         if app.alerts.buttons["Allow"].waitForExistence(timeout: 3) { app.alerts.buttons["Allow"].tap() }
         let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
         if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 3) { carousel.alerts.buttons["Allow"].tap() }
         let status = app.staticTexts["watch.notifications.status"]
         let queued = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Scheduled through"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [queued], timeout: 20), .completed)
+        XCTAssertFalse(enable.exists)
+        XCTAssertEqual(app.staticTexts["watch.notifications.delivery-mode"].label, "Delivery: Apple Watch")
         record("WatchLocalNotificationsQueued", app)
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertTrue(alerts.waitForExistence(timeout: 15)); alerts.tap()
@@ -67,6 +69,29 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(off.exists); off.tap()
         let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
+    }
+
+    func testAutomaticDeliveryHasNoModeSwitchAndWatchTestKeepsItAutomatic() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-watch-automatic-notification-ledger"]
+        app.launch()
+        let alerts = app.buttons["watch.notifications"]
+        XCTAssertTrue(alerts.waitForExistence(timeout: 15)); alerts.tap()
+        let mode = app.staticTexts["watch.notifications.delivery-mode"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 10)); XCTAssertEqual(mode.label, "Delivery: Automatic")
+        XCTAssertFalse(app.buttons["watch.notifications.enable"].exists)
+        XCTAssertFalse(app.buttons["Switch to Watch delivery"].exists)
+        let test = app.buttons["watch.notifications.test"]
+        for _ in 0..<6 { if test.isHittable { break }; app.swipeUp() }
+        test.tap()
+        if app.alerts.buttons["Allow"].waitForExistence(timeout: 3) { app.alerts.buttons["Allow"].tap() }
+        let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
+        if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 3) { carousel.alerts.buttons["Allow"].tap() }
+        XCTAssertTrue(app.staticTexts["Test sent. Lower your wrist and check this Watch in 15 seconds."].waitForExistence(timeout: 10))
+        for _ in 0..<6 { if mode.isHittable { break }; app.swipeDown() }
+        XCTAssertEqual(mode.label, "Delivery: Automatic")
+        XCTAssertFalse(app.buttons["watch.notifications.enable"].exists)
+        record("WatchAutomaticDeliverySettings", app)
     }
 
     private func waitForInputButton(_ button: XCUIElement) {

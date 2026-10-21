@@ -107,4 +107,61 @@ final class CompanionQuickDeliveryTests: XCTestCase {
         XCTAssertEqual(phone.activeCaptures.map(\.id), ["idea"])
         XCTAssertEqual(phone.settings, preserved)
     }
+
+    func testSettingsOnlyChangeBypassesHistoryAndDoesNotRepeatAfterAcknowledgment() throws {
+        var phone = Ledger(), watch = Ledger(), quick = CompanionQuickDelivery()
+        XCTAssertNil(try quick.prepare(phone, id: "seed"))
+        var settings = phone.settings
+        settings.notificationsEnabled = true; settings.notificationDelivery = .automatic
+        settings.notificationTiming = .randomized; settings.randomizedNotificationInterval = 30
+        try phone.saveSettings(settings, writer: "phone")
+        let update = try packet(&quick, ledger: phone)
+        XCTAssertTrue(update.ledger.entries.isEmpty); XCTAssertTrue(update.ledger.captures.isEmpty)
+        XCTAssertEqual(update.ledger.settings, phone.settings)
+        watch.merge(update.ledger)
+        XCTAssertEqual(watch.settings, phone.settings)
+        XCTAssertTrue(quick.finish(id: update.id, saved: true))
+        XCTAssertNil(try quick.prepare(phone, id: "duplicate"))
+        XCTAssertEqual(try LedgerBackup.decode(LedgerBackup(ledger: watch).encoded()).ledger.settings, phone.settings)
+    }
+
+    func testSettingsRetryTakesLatestPreferenceAndOlderBackgroundFilesCannotRevertIt() throws {
+        var phone = Ledger(), quick = CompanionQuickDelivery()
+        var settings = phone.settings; settings.notificationsEnabled = true; settings.notificationDelivery = .watch
+        try phone.saveSettings(settings, writer: "phone")
+        let oldFile = try JSONEncoder().encode(phone)
+        let old = try packet(&quick, ledger: phone, id: "old")
+        settings.notificationDelivery = .automatic
+        try phone.saveSettings(settings, writer: "phone")
+        XCTAssertFalse(quick.finish(id: old.id, saved: false))
+        let latest = try packet(&quick, ledger: phone, id: "latest")
+        var watch = Ledger(); watch.merge(latest.ledger)
+        watch.merge(try JSONDecoder().decode(Ledger.self, from: oldFile))
+        XCTAssertEqual(watch.settings.notificationDelivery, .automatic)
+        XCTAssertEqual(watch.settings.revision, phone.settings.revision)
+        quick.finish(id: latest.id, saved: true)
+        var returned = watch.settings; returned.notificationsEnabled = false
+        try watch.saveSettings(returned, writer: "watch")
+        var watchQuick = CompanionQuickDelivery()
+        phone.merge(try packet(&watchQuick, ledger: watch).ledger)
+        XCTAssertFalse(phone.settings.notificationsEnabled)
+        XCTAssertEqual(phone.settings.notificationDelivery, .automatic)
+    }
+
+    func testSettingsSavedWhilePacketIsInFlightAreSentNextWithoutLosingLogs() throws {
+        var phone = Ledger(), quick = CompanionQuickDelivery()
+        var settings = phone.settings; settings.notificationsEnabled = true
+        try phone.saveSettings(settings, writer: "phone")
+        try sample(&phone, id: "reply")
+        let first = try packet(&quick, ledger: phone, id: "first")
+        settings.notificationDelivery = .watch; try phone.saveSettings(settings, writer: "phone")
+        quick.finish(id: first.id, saved: true)
+        XCTAssertTrue(quick.recentLogsReceived(in: phone))
+        let next = try packet(&quick, ledger: phone, id: "next")
+        XCTAssertEqual(next.ledger.settings.notificationDelivery, .watch)
+        XCTAssertTrue(next.ledger.entries.isEmpty)
+        var oldPeer = Ledger(); oldPeer.merge(first.ledger); oldPeer.merge(next.ledger)
+        XCTAssertEqual(oldPeer.entries.map(\.id), ["reply"])
+        XCTAssertEqual(oldPeer.settings, phone.settings)
+    }
 }

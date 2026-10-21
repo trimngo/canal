@@ -53,9 +53,12 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-watch-notification-ledger") {
+            if ProcessInfo.processInfo.arguments.contains("--ui-watch-notification-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-watch-automatic-notification-ledger") {
                 var fixture = Ledger()
-                fixture.settings.notificationTiming = .randomized; fixture.settings.notificationsAllDay = true
+                var settings = fixture.settings
+                settings.notificationTiming = .randomized; settings.notificationsAllDay = true; settings.notificationsEnabled = true
+                settings.notificationDelivery = ProcessInfo.processInfo.arguments.contains("--ui-watch-automatic-notification-ledger") ? .automatic : .watch
+                try fixture.saveSettings(settings, writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-legacy-ledger") {

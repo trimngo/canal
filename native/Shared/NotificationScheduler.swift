@@ -13,6 +13,7 @@ import BackgroundTasks
 final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, ObservableObject {
     static let shared = NotificationScheduler()
     @Published var status = "Not enabled"
+    @Published private(set) var permissionGranted = false
     private let center = UNUserNotificationCenter.current()
     @Published private(set) var scheduleStatus = ""
     private var applyTask: Task<Void, Error>?
@@ -40,11 +41,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     }
 
     func permission() async throws -> Bool {
-        try await center.requestAuthorization(options: [.alert, .sound, .badge])
+        let allowed = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+        await refreshStatus()
+        return allowed
     }
 
     func refreshStatus() async {
         let value = await center.notificationSettings()
+        permissionGranted = [.authorized, .provisional, .ephemeral].contains(value.authorizationStatus)
         switch value.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             #if os(iOS)
@@ -91,8 +95,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             cancelBackgroundRefresh()
             if !settings.notificationsEnabled { scheduleStatus = "Check-ins are off." }
             else if !runsHere {
-                scheduleStatus = Self.isWatch ? "Automatic delivery uses iPhone notification routing. Choose Watch alerts to schedule here."
-                    : "Check-ins are assigned to Apple Watch. Open Dash on your Watch and enable Watch alerts there."
+                scheduleStatus = Self.isWatch ? "Automatic: iPhone schedules check-ins. Apple routes each alert to your phone or Watch."
+                    : "Check-ins are assigned to Apple Watch. Open Dash on your Watch to check notification permission."
             } else { scheduleStatus = "No check-ins scheduled. Allow notifications on this device to start." }
             lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = false
             return
