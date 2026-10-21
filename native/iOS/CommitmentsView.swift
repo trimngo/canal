@@ -44,55 +44,7 @@ struct CommitmentsView: View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
             let today = store.ledger.allocation(on: context.date, now: context.date)
             let week = store.ledger.rollingAllocation(now: context.date)
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Your allocation").bold(); Spacer()
-                            Text(plan.total.map { "\(percent($0))% / 100%" } ?? "Check percentages")
-                                .bold().monospacedDigit().accessibilityIdentifier("plan.total")
-                        }
-                        if let total = plan.total {
-                            Text(abs(total - 100) < 0.0000001 ? "100% assigned" : total > 100 ? "\(percent(total - 100))% over — reduce a goal" : "\(percent(100 - total))% left to assign")
-                                .font(.subheadline).foregroundStyle(total > 100 ? Color.red : Color.secondary)
-                                .accessibilityIdentifier("plan.balance")
-                        } else {
-                            Text("Enter percentages between 0 and 100.").font(.subheadline).foregroundStyle(.red)
-                        }
-                    }.padding(.vertical, 4)
-                    if stale {
-                        Text("Categories changed while you were editing. Reload the saved plan to continue.").font(.caption).foregroundStyle(.red)
-                        Button("Reload saved plan") { load() }.accessibilityIdentifier("plan.reload")
-                    }
-                    Button("Save plan") { save() }.disabled(!canSave).accessibilityIdentifier("categories.save-targets")
-                } footer: {
-                    Text("Set top-level category goals totaling 100%. Editing one share leaves the others unchanged.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Section {
-                    ForEach(outline(today: today, week: week)) { item in
-                        categoryRow(item, today: today, week: week)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                            .listRowBackground(!item.direct && selected.contains(item.category.id) ? Color.accentColor.opacity(0.2) : Color.clear)
-                    }
-                } header: {
-                    if typeSize.isAccessibilitySize { Text("Categories") }
-                    else { columnHeadings }
-                } footer: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Hold a category for actions. Tap the arrow to expand its children. Moving a parent carries its children.")
-                        Text("Actual time: estimated sample periods today, and \(week.representedDays) of the last 7 days. Estimates extend half your notification interval around the first and last logs, capped at now and calendar-day boundaries. pp shows percentage points above or below your goal.")
-                            .accessibilityIdentifier("plan.coverage")
-                    }.font(.caption).foregroundStyle(.secondary)
-                }
-                if !selecting {
-                    Button("New top-level category", systemImage: "plus") { actionRequest = .name(nil, parent: nil) }
-                        .accessibilityIdentifier("plan.create-category")
-                }
-                CategoryMoveUndoSection()
-                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
-            }.listStyle(.plain).listSectionSpacing(0)
-                .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
+            planList(today: today, week: week)
         }
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -138,6 +90,66 @@ struct CommitmentsView: View {
             Button("Discard changes and group", role: .destructive) { load(); actionRequest = .move(moveSelection) }
             Button("Keep editing", role: .cancel) {}
         }
+    }
+
+    private func planList(today: AllocationPeriod, week: AllocationPeriod) -> some View {
+        List {
+            allocationSummary
+            categoryOutline(today: today, week: week)
+                if !selecting {
+                    Button("New top-level category", systemImage: "plus") { actionRequest = .name(nil, parent: nil) }
+                        .accessibilityIdentifier("plan.create-category")
+                }
+                CategoryMoveUndoSection()
+                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
+            }.listStyle(.plain).listSectionSpacing(0)
+                .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
+    }
+
+    private var allocationSummary: some View {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Your allocation").bold(); Spacer()
+                            Text(plan.total.map { "\(percent($0))% / 100%" } ?? "Check percentages")
+                                .bold().monospacedDigit().accessibilityIdentifier("plan.total")
+                        }
+                        if let total = plan.total {
+                            Text(abs(total - 100) < 0.0000001 ? "100% assigned" : total > 100 ? "\(percent(total - 100))% over — reduce a goal" : "\(percent(100 - total))% left to assign")
+                                .font(.subheadline).foregroundStyle(total > 100 ? Color.red : Color.secondary)
+                                .accessibilityIdentifier("plan.balance")
+                        } else {
+                            Text("Enter percentages between 0 and 100.").font(.subheadline).foregroundStyle(.red)
+                        }
+                    }.padding(.vertical, 4)
+                    if stale {
+                        Text("Categories changed while you were editing. Reload the saved plan to continue.").font(.caption).foregroundStyle(.red)
+                        Button("Reload saved plan") { load() }.accessibilityIdentifier("plan.reload")
+                    }
+                    Button("Save plan") { save() }.disabled(!canSave).accessibilityIdentifier("categories.save-targets")
+                } footer: {
+                    Text("Set top-level category goals totaling 100%. Editing one share leaves the others unchanged.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+    }
+
+    private func categoryOutline(today: AllocationPeriod, week: AllocationPeriod) -> some View {
+                Section {
+                    ForEach(outline(today: today, week: week)) { item in
+                        categoryRow(item, today: today, week: week)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                            .listRowBackground(!item.direct && selected.contains(item.category.id) ? Color.accentColor.opacity(0.2) : Color.clear)
+                    }
+                } header: {
+                    if typeSize.isAccessibilitySize { Text("Categories") }
+                    else { columnHeadings }
+                } footer: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Hold a category for actions. Tap the arrow to expand its children. Moving a parent carries its children.")
+                        Text("Actual time: estimated sample periods today, and \(week.representedDays) of the last 7 days. Estimates extend half your notification interval around the first and last logs, capped at now and calendar-day boundaries. pp shows percentage points above or below your goal.")
+                            .accessibilityIdentifier("plan.coverage")
+                    }.font(.caption).foregroundStyle(.secondary)
+                }
     }
 
     private var columnHeadings: some View {
