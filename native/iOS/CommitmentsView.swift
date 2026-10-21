@@ -138,7 +138,7 @@ struct CommitmentsView: View {
             ForEach(outline(today: today, week: week)) { item in
                 categoryRow(item, today: today, week: week)
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                    .listRowBackground(!item.direct && selected.contains(item.category.id) ? Color.accentColor.opacity(0.2) : Color.clear)
+                    .listRowBackground(SelectionRowBackground(selected: !item.direct && selected.contains(item.category.id)))
             }
         } header: {
             if typeSize.isAccessibilitySize { Text("Categories") }

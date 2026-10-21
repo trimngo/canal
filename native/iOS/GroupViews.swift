@@ -135,7 +135,7 @@ struct GroupEntriesView: View {
         }.padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             .onTapGesture { if selecting { toggleSelected(entry.id) } }
-            .listRowBackground(selected.contains(entry.id) ? Color.accentColor.opacity(0.2) : Color.clear)
+            .listRowBackground(SelectionRowBackground(selected: selected.contains(entry.id)))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("group.log.\(entry.id)")
             .accessibilityValue(selected.contains(entry.id) ? "Selected" : "Not selected")
