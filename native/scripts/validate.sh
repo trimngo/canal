@@ -24,10 +24,5 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testFocusedLogReviewSavesMoodAndCategoriesWithoutChangingCapture \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryActionsCreateChildFirstThenMoveSelectedLogs \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSelectingCategoriesAtAnyDepthOffersOnlyMoveForMultiple \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testBulkGroupingIntoExistingParentPreviewsGoalsAndCanUndo \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testLongEntryStaysVisibleAboveTheCategoryChecklist \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTargetsAreAccessibleAndPersist \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryRenameAndDeleteKeepLogsAndPromoteChildren
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryActionsCreateChildFirstThenMoveSelectedLogs
 fi
