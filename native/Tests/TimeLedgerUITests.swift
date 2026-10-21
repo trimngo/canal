@@ -1,6 +1,14 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    override func setUpWithError() throws { continueAfterFailure = false }
+    override func tearDownWithError() throws {
+        if let testRun, testRun.failureCount > 0 {
+            let app = XCUIApplication(); recordScreen("Failure", in: app)
+            let tree = XCTAttachment(string: app.debugDescription); tree.lifetime = .keepAlways; add(tree)
+        }
+    }
+
     private func recordScreen(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Review-\(name).png"; attachment.lifetime = .keepAlways
