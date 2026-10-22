@@ -28,12 +28,6 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testOptionalGoalsAndOtherActivitiesShowCapacityWithoutAllocating100 \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimeModeWithoutCompletedDataPreservesExistingPercentageGoals \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInvalidHoursStayEditableAndUnitSwitchDoesNotDiscardThem \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHistoricalAverageUsesCompletedDaysWhileTodayStaysLive \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalsAutosaveNestedValuesAndUnfinishedTotalsAcrossRestart \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCopyMeasuredWeekMakesFixedGoalsAndContextualHelpStaysHidden \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testNestedCalculatedGoalsAndDirectRowsHaveNoEditableTarget \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testBulkGroupingIntoExistingParentPreviewsGoalsAndCanUndo \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSingleTapCategoryActionsAndExplicitMultipleSelection \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test
 fi
