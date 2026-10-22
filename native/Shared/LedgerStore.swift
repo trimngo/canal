@@ -71,7 +71,7 @@ final class LedgerStore: ObservableObject {
                 let now = Date(), day = fixture.reportingDay(containing: now)
                 try fixture.saveSample(at: max(day, now.addingTimeInterval(-300)), activity: "Teaching now", categoryIDs: ["teaching"], writer: "fixture", now: now)
                 try fixture.saveSample(at: day.addingTimeInterval(-43200), activity: "Eating yesterday", categoryIDs: ["food"], writer: "fixture", now: now)
-                try fixture.saveAllocationGoals(["guitar": 25], writer: "fixture")
+                try fixture.saveAllocationGoals(["guitar": 25, "unused-0": 0], writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-goal-hours-fixture") {

@@ -26,7 +26,8 @@ struct CommitmentsView: View {
     @State private var plan = AllocationPlanDraft([:])
     @State private var reference = AllocationReference()
     @AppStorage("goals.display-unit") private var displayUnit = AllocationDisplayUnit.percent
-    @AppStorage("commitments.hide-zero-time") private var hideZeroTime = true
+    // Keep the existing preference key so upgrades preserve the filter choice.
+    @AppStorage("commitments.hide-zero-time") private var hideBlankGoals = true
     @State private var loaded = false
     @State private var selected = Set<String>()
     @State private var multiSelecting = false
@@ -108,7 +109,7 @@ struct CommitmentsView: View {
                 CategoryNameView(category: category, parentID: parent) {
                     finishSelection()
                     if category == nil {
-                        hideZeroTime = false
+                        hideBlankGoals = false
                         if let parent { expanded.insert(parent) }
                     }
                 }
@@ -143,14 +144,14 @@ struct CommitmentsView: View {
                     ForEach(AllocationDisplayUnit.allCases, id: \.self) { unit in Text(unit.label).tag(unit) }
                 }.pickerStyle(.segmented).frame(width: 144).accessibilityIdentifier("plan.unit")
                 Spacer(minLength: 0)
-                Button { endGoalEditing(); hideZeroTime.toggle() } label: {
-                    Label("Hide zero", systemImage: "line.3.horizontal.decrease")
+                Button { endGoalEditing(); finishSelection(); hideBlankGoals.toggle() } label: {
+                    Label("Hide blank", systemImage: "line.3.horizontal.decrease")
                         .font(.subheadline).lineLimit(1).minimumScaleFactor(0.8)
-                }.buttonStyle(.bordered).tint(hideZeroTime ? Color.accentColor : Color.secondary)
-                    .accessibilityLabel("Hide zero-time categories")
-                    .accessibilityValue(hideZeroTime ? "On" : "Off")
-                    .accessibilityAddTraits(hideZeroTime ? .isSelected : [])
-                    .accessibilityIdentifier("plan.hide-zero-time")
+                }.buttonStyle(.bordered).tint(hideBlankGoals ? Color.accentColor : Color.secondary)
+                    .accessibilityLabel("Hide categories with blank goals")
+                    .accessibilityValue(hideBlankGoals ? "On" : "Off")
+                    .accessibilityAddTraits(hideBlankGoals ? .isSelected : [])
+                    .accessibilityIdentifier("plan.hide-blank-goals")
                 Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 36) }
                     .accessibilityLabel("About goals and category actions").accessibilityIdentifier("plan.help")
                     .popover(isPresented: $showingHelp) { goalHelp }
@@ -170,7 +171,7 @@ struct CommitmentsView: View {
                     Text("A completed date with logs is needed to convert goals into hours. You can still edit percentages and see today’s time.")
                 }
                 Text("A goal stays a fixed percentage. Editing its hours equivalent converts it into that percentage; switching units never changes the saved goal. Hours equivalents can change as your recent recorded-day average changes.")
-                Text("Hide zero removes categories with no time today or in the previous seven completed dates. Categories with goals stay visible, including zero goals. Parents stay visible with their children. Turn the filter off to see every category; nothing is deleted.")
+                Text("Hide blank removes only categories without a goal, regardless of time logged. A goal of 0% stays visible, as do parents with child goals. Direct rows have no separate goal and are hidden by this filter. Turn the filter off to see every category; nothing is deleted.")
                 Text("Leave goals blank for activities you only want to observe. Goals save individually when you finish editing.")
                 Text("Edit goals on categories without children. Each parent adds up its children’s goals. Direct time counts toward the parent’s actual time without a separate goal.")
                 Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children. Use 7 days copies measured shares into fixed goals.")
@@ -223,15 +224,15 @@ struct CommitmentsView: View {
 
     private func outline(today: AllocationPeriod, week: AllocationPeriod) -> [CategoryOutlineItem] {
         var retainedGoals = displayedGoals
-        for id in selected.union(dirtyGoals) { retainedGoals[id] = 0 }
-        let visible = store.ledger.activeCategoryIDs(in: [today, week], includingGoals: retainedGoals)
+        for id in dirtyGoals { retainedGoals[id] = 0 }
+        let visible = store.ledger.activeCategoryIDs(in: [], includingGoals: retainedGoals)
         var result: [CategoryOutlineItem] = []
         func append(_ category: LedgerCategory, depth: Int) {
-            guard !hideZeroTime || visible.contains(category.id) else { return }
+            guard !hideBlankGoals || visible.contains(category.id) else { return }
             result.append(CategoryOutlineItem(category: category, depth: depth))
             let children = store.ledger.children(of: category.id)
             guard expanded.contains(category.id), !children.isEmpty else { return }
-            if today.directMinutes[category.id, default: 0] > 0 || week.directMinutes[category.id, default: 0] > 0 {
+            if !hideBlankGoals && (today.directMinutes[category.id, default: 0] > 0 || week.directMinutes[category.id, default: 0] > 0) {
                 result.append(CategoryOutlineItem(category: category, depth: depth + 1, direct: true))
             }
             for child in children { append(child, depth: depth + 1) }
