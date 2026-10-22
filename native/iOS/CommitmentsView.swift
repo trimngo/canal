@@ -28,6 +28,8 @@ struct CommitmentsView: View {
     @AppStorage("goals.display-unit") private var displayUnit = AllocationDisplayUnit.percent
     // Keep the existing preference key so upgrades preserve the filter choice.
     @AppStorage("commitments.hide-zero-time") private var hideBlankGoals = true
+    @AppStorage("commitments.sort-column") private var sortColumn = AllocationSortColumn.category
+    @AppStorage("commitments.sort-descending") private var sortDescending = false
     @State private var loaded = false
     @State private var selected = Set<String>()
     @State private var multiSelecting = false
@@ -207,25 +209,78 @@ struct CommitmentsView: View {
                 .accessibilityIdentifier("plan.create-category")
                 .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
         } header: {
-            if typeSize.isAccessibilitySize { Text("Categories") }
+            if typeSize.isAccessibilitySize {
+                HStack {
+                    Text("Categories")
+                    Spacer()
+                    Menu("Sort", systemImage: "arrow.up.arrow.down") {
+                        ForEach(AllocationSortColumn.allCases) { column in
+                            Button(sortTitle(column)) { sort(by: column) }
+                                .accessibilityIdentifier("plan.sort.\(column.rawValue)")
+                        }
+                    }.accessibilityIdentifier("plan.sort-menu")
+                }
+            }
             else { columnHeadings(week: week) }
         }
     }
 
     private func columnHeadings(week: AllocationPeriod) -> some View {
         HStack(spacing: 4) {
-            Text("Category").frame(maxWidth: .infinity, alignment: .leading)
-            Text(displayUnit == .time ? "Goal/day" : "Goal").frame(width: 52, alignment: .trailing)
-            Text("Today").frame(width: 60, alignment: .trailing)
-            VStack(alignment: .trailing, spacing: 1) { Text(displayUnit == .time ? "7d avg" : "7 days"); Text("\(week.representedDays) of 7").accessibilityIdentifier("plan.coverage") }.frame(width: 60, alignment: .trailing)
+            sortHeading(.category)
+            sortHeading(.goal, width: 52)
+            sortHeading(.today, width: 60)
+            VStack(alignment: .trailing, spacing: 0) {
+                sortHeading(.week, width: 60)
+                Text("\(week.representedDays) of 7").accessibilityIdentifier("plan.coverage")
+            }.frame(width: 60, alignment: .trailing)
         }.font(.caption2).foregroundStyle(.secondary).textCase(nil)
             .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+    }
+
+    private func sortTitle(_ column: AllocationSortColumn) -> String {
+        switch column {
+        case .category: return "Category"
+        case .goal: return displayUnit == .time ? "Goal/day" : "Goal"
+        case .today: return "Today"
+        case .week: return displayUnit == .time ? "7d avg" : "7 days"
+        }
+    }
+
+    private func sortHeading(_ column: AllocationSortColumn, width: CGFloat? = nil) -> some View {
+        Button { sort(by: column) } label: {
+            HStack(spacing: 2) {
+                Text(sortTitle(column)).lineLimit(1).minimumScaleFactor(0.8)
+                if sortColumn == column {
+                    Image(systemName: sortDescending ? "chevron.down" : "chevron.up").font(.system(size: 8, weight: .semibold))
+                }
+            }.frame(width: width, alignment: column == .category ? .leading : .trailing)
+                .frame(maxWidth: column == .category ? .infinity : nil, minHeight: column == .week ? 30 : 44, alignment: column == .category ? .leading : .trailing)
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).foregroundStyle(sortColumn == column ? Color.accentColor : Color.secondary)
+            .accessibilityLabel("Sort by \(column == .week ? "previous seven days" : sortTitle(column).lowercased())")
+            .accessibilityValue(sortColumn == column ? (sortDescending ? "Descending" : "Ascending") : "Not sorted")
+            .accessibilityHint("Tap again to reverse. Children stay under their parents.")
+            .accessibilityAddTraits(sortColumn == column ? .isSelected : [])
+            .accessibilityIdentifier("plan.sort.\(column.rawValue)")
+    }
+
+    private func sort(by column: AllocationSortColumn) {
+        endGoalEditing()
+        guard dirtyGoals.isEmpty else { return }
+        if sortColumn == column { sortDescending.toggle() }
+        else { sortColumn = column; sortDescending = column != .category }
     }
 
     private func outline(today: AllocationPeriod, week: AllocationPeriod) -> [CategoryOutlineItem] {
         var retainedGoals = displayedGoals
         for id in dirtyGoals { retainedGoals[id] = 0 }
         let visible = store.ledger.activeCategoryIDs(in: [], includingGoals: retainedGoals)
+        let savedGoals = store.ledger.currentGoals()
+        func sorted(_ categories: [LedgerCategory]) -> [LedgerCategory] {
+            store.ledger.sortedAllocationCategories(categories, by: sortColumn, descending: sortDescending,
+                                                    goals: savedGoals, today: today, week: week)
+        }
         var result: [CategoryOutlineItem] = []
         func append(_ category: LedgerCategory, depth: Int) {
             guard !hideBlankGoals || visible.contains(category.id) else { return }
@@ -235,9 +290,9 @@ struct CommitmentsView: View {
             if !hideBlankGoals && (today.directMinutes[category.id, default: 0] > 0 || week.directMinutes[category.id, default: 0] > 0) {
                 result.append(CategoryOutlineItem(category: category, depth: depth + 1, direct: true))
             }
-            for child in children { append(child, depth: depth + 1) }
+            for child in sorted(children) { append(child, depth: depth + 1) }
         }
-        for category in roots { append(category, depth: 0) }
+        for category in sorted(roots) { append(category, depth: 0) }
         return result
     }
 

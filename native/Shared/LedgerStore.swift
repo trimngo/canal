@@ -53,8 +53,10 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
                 defaults.removeObject(forKey: "dashboard.hide-zero-time")
                 defaults.removeObject(forKey: "commitments.hide-zero-time")
+                defaults.removeObject(forKey: "commitments.sort-column")
+                defaults.removeObject(forKey: "commitments.sort-descending")
             }
-            if ProcessInfo.processInfo.arguments.contains(where: { ["--ui-empty-ledger", "--ui-allocation-fixture", "--ui-life-area-fixture", "--ui-commitments-fixture", "--ui-goal-hours-fixture"].contains($0) }) {
+            if ProcessInfo.processInfo.arguments.contains(where: { ["--ui-empty-ledger", "--ui-allocation-fixture", "--ui-life-area-fixture", "--ui-commitments-fixture", "--ui-goal-hours-fixture", "--ui-allocation-sort-fixture"].contains($0) }) {
                 defaults.removeObject(forKey: "goals.display-unit")
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-zero-category-fixture") {
@@ -74,7 +76,7 @@ final class LedgerStore: ObservableObject {
                 try fixture.saveAllocationGoals(["guitar": 25, "unused-0": 0], writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-goal-hours-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--ui-goal-hours-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-allocation-sort-fixture") {
                 var fixture = Ledger()
                 fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "food", name: "Eating")]
                 try fixture.moveCategory("teaching", to: "work", writer: "fixture")
@@ -90,7 +92,13 @@ final class LedgerStore: ObservableObject {
                 }
                 try fixture.saveSample(at: max(today, now.addingTimeInterval(-3600)), activity: "Today teaching", categoryIDs: ["teaching"], writer: "fixture", now: now)
                 try fixture.saveSample(at: now, activity: "Today music", categoryIDs: ["music"], writer: "fixture", now: now)
-                try fixture.saveAllocationGoals(["teaching": 20, "music": 10], writer: "fixture")
+                if ProcessInfo.processInfo.arguments.contains("--ui-allocation-sort-fixture") {
+                    fixture.categories.append(LedgerCategory(id: "admin", name: "Administration"))
+                    try fixture.moveCategory("admin", to: "work", writer: "fixture")
+                    try fixture.saveAllocationGoals(["teaching": 20, "admin": 5, "music": 10], writer: "fixture")
+                } else {
+                    try fixture.saveAllocationGoals(["teaching": 20, "music": 10], writer: "fixture")
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
