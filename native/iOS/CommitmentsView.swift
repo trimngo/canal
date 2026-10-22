@@ -41,6 +41,7 @@ struct CommitmentsView: View {
 
     private var roots: [LedgerCategory] { store.ledger.children(of: nil) }
     private var selecting: Bool { multiSelecting || !selected.isEmpty }
+    private var displayedGoals: [String: Double] { plan.values.map { store.ledger.calculatedAllocationGoals($0) } ?? store.ledger.currentGoals() }
     private var balance: AllocationGoalBalance? { plan.values.map { store.ledger.allocationGoalBalance($0) } }
 
     var body: some View {
@@ -86,7 +87,7 @@ struct CommitmentsView: View {
         .confirmationDialog("Use the last seven days as your goals?", isPresented: $copyingWeek, titleVisibility: .visible) {
             Button("Use last seven days") { copyAllGoals() }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("Replace the current goals with measured percentages, including subcategories. Uncategorized time stays unallocated. Goals stay fixed until you edit them.") }
+        } message: { Text("Copy measured percentages to categories without children. Parent goals are their children’s total. Direct and Uncategorized time stay unallocated. Goals stay fixed until you edit them.") }
 
         .sheet(item: $actionRequest) { request in
             switch request {
@@ -129,8 +130,10 @@ struct CommitmentsView: View {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("Goals & categories").font(.headline)
                                     Text("Tap a goal to edit. Changes save automatically. Use 7 days copies measured time into a fixed goal. Other goals stay unchanged.")
-                                    Text("Top-level goals total 100%. A child goal is a share of all your time, included within its parent. Leave child goals blank if you prefer.")
+                                    Text("Edit goals on categories without children. Each parent goal automatically adds up its children’s goals. All percentages are shares of your total time; aim for 100% overall.")
                                     Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children.")
+                                    Text("Direct time counts toward the parent’s actual time, without a separate goal. A parent can meet its goal while an individual child is below its goal.")
+                                    Text("Use 7 days copies measured leaf-category percentages. Direct and Uncategorized time stay unallocated; other goals are not redistributed.")
                                     Text("Actuals use estimated sample periods. 7 days includes today and the six preceding dates; days with no logs are excluded. Uncategorized still counts toward the measured total.")
                                     Text("Red is below goal, green is at goal at displayed precision, amber is above goal. pp means percentage points. These colors describe alignment, not whether an activity is good or bad.")
                                 }.font(.subheadline).padding()
@@ -144,13 +147,7 @@ struct CommitmentsView: View {
                     Text(abs(balance.total - 100) < 0.0000001 ? "100% allocated" : balance.total > 100 ? "\(percent(balance.total - 100))% over allocated" : "\(percent(100 - balance.total))% left to allocate")
                         .font(.caption).foregroundStyle(balance.total > 100 ? Color.red : Color.secondary)
                         .accessibilityIdentifier("plan.balance")
-                    if let id = balance.overages.keys.sorted().first {
-                        Text("Child goals exceed \(store.categoryName(id)) by \(percent(balance.overages[id]!))%. Saved · allocation unfinished.")
-                            .font(.caption).foregroundStyle(.red).accessibilityIdentifier("plan.branch-balance")
-                    } else if let id = balance.missingRootGoals.first {
-                        Text("Set a parent goal for \(store.categoryName(id)). Saved · allocation unfinished.")
-                            .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("plan.branch-balance")
-                    }
+
                 }
                 Button("Use last 7 days as goals", systemImage: "arrow.uturn.backward") { endGoalEditing(); copyingWeek = true }
                     .font(.subheadline).buttonStyle(.borderless)
@@ -203,7 +200,7 @@ struct CommitmentsView: View {
 
     private func categoryRow(_ item: CategoryOutlineItem, today: AllocationPeriod, week: AllocationPeriod) -> some View {
         let category = item.category
-        let target = item.direct ? nil : store.ledger.currentGoals()[category.id]
+        let target = item.direct ? nil : displayedGoals[category.id]
         let todayMinutes = item.direct ? today.directMinutes[category.id, default: 0] : today.total(for: category.id, ledger: store.ledger)
         let weekMinutes = item.direct ? week.directMinutes[category.id, default: 0] : week.total(for: category.id, ledger: store.ledger)
         return Group {
@@ -266,7 +263,16 @@ struct CommitmentsView: View {
     }
 
     @ViewBuilder private func goal(_ item: CategoryOutlineItem) -> some View {
-        if !item.direct {
+        if !item.direct && !store.ledger.children(of: item.category.id).isEmpty {
+            Text(displayedGoals[item.category.id].map { "\(percent($0))%" } ?? "—")
+                .font(.subheadline.weight(.semibold)).monospacedDigit()
+                .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
+                .frame(minHeight: 44)
+                .accessibilityLabel("\(item.category.name) calculated goal percent")
+                .accessibilityValue(displayedGoals[item.category.id].map(percent) ?? "No goal")
+                .accessibilityHint("Sum of child goals. Expand to edit the children.")
+                .accessibilityIdentifier("categories.calculated-goal.\(item.category.id)")
+        } else if !item.direct {
             HStack(spacing: 0) {
                 TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) }))
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
@@ -279,14 +285,15 @@ struct CommitmentsView: View {
         } else {
             Text("—").font(.caption).foregroundStyle(.secondary)
                 .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
-                .accessibilityLabel("Direct time is included in the category goal")
+                .accessibilityLabel("Direct time has no separate goal")
+                .accessibilityIdentifier("categories.direct-goal.\(item.category.id)")
         }
     }
     private func percent(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
     private func load() {
-        let known = Set(store.ledger.categories.map(\.id))
+        let known = Set(store.ledger.categories.filter { store.ledger.children(of: $0.id).isEmpty }.map(\.id))
         dirtyGoals.formIntersection(known)
-        var refreshed = AllocationPlanDraft(store.ledger.currentGoals())
+        var refreshed = AllocationPlanDraft(store.ledger.editableAllocationGoals())
         for id in dirtyGoals { refreshed.text[id] = plan.text[id] }
         plan = refreshed
     }
@@ -336,7 +343,7 @@ struct CommitmentsView: View {
             HStack {
                 Text(selected.isEmpty ? "Tap categories to select" : "\(selected.count) selected").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                if let category = singleSelection {
+                if let category = singleSelection, store.ledger.children(of: category.id).isEmpty {
                     Button("Use 7-day goal") { copyGoal(category.id); finishSelection() }
                         .font(.caption).disabled(!store.ledger.rollingAllocation().sufficient)
                         .accessibilityIdentifier("plan.copy-selected-week")

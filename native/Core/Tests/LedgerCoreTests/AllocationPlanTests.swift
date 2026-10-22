@@ -74,19 +74,19 @@ final class AllocationPlanTests: XCTestCase {
         let period = ledger.allocation(on: Date())
         XCTAssertEqual(period.total(for: parent, ledger: ledger), period.trackedMinutes, accuracy: 0.0001)
     }
-    func testBulkMoveCombinesOnlyMovedRootTargetsAndVersionsBudgetOnce() throws {
+    func testBulkMoveCalculatesDestinationFromChildrenAndVersionsBudgetOnce() throws {
         var ledger = try fixture()
         try ledger.saveAllocationPlan(["work": 30, "admin": 10, "music": 25, "health": 35], writer: "test")
         let earlier = ledger.currentBudget()
         let undo = try ledger.groupCategories(["work", "admin"], under: "music", writer: "test")
-        XCTAssertEqual(undo.previousTargets["work"], 30)
-        XCTAssertEqual(undo.resultingTargets, ["music": 65, "health": 35])
-        XCTAssertEqual(ledger.currentTargets(), undo.resultingTargets)
+        XCTAssertNil(undo.previousTargets["work"]) // Legacy parent-only goal stays in its original snapshot.
+        XCTAssertEqual(undo.resultingTargets, ["music": 10, "admin": 10, "health": 35])
+        XCTAssertEqual(ledger.currentGoals(), undo.resultingTargets)
         XCTAssertEqual(ledger.targetBudgets?.count, 2)
         XCTAssertEqual(ledger.targetBudgets?.first, earlier)
         XCTAssertTrue(ledger.canUndoCategoryMove(undo))
         try ledger.undoCategoryMove(undo, writer: "test")
-        XCTAssertEqual(ledger.currentTargets(), undo.previousTargets)
+        XCTAssertEqual(ledger.currentGoals(), undo.previousTargets)
         XCTAssertEqual(ledger.targetBudgets?.count, 3)
         XCTAssertNil(ledger.categoryParents["work"])
         XCTAssertEqual(ledger.categoryParents["teaching"], "work")
@@ -95,8 +95,9 @@ final class AllocationPlanTests: XCTestCase {
         var ledger = try fixture()
         try ledger.saveTargets(["work": 30, "admin": 10, "music": 15], writer: "old")
         let undo = try ledger.groupCategories(["work", "admin"], under: nil, newParentName: "Career", writer: "new")
-        XCTAssertEqual(ledger.currentTargets()[try XCTUnwrap(undo.createdParentID)], 40)
-        XCTAssertEqual(ledger.currentBudget()?.allocated, 55)
+        XCTAssertEqual(ledger.currentTargets()[try XCTUnwrap(undo.createdParentID)], 10)
+        XCTAssertEqual(ledger.currentBudget()?.allocated, 25)
+        XCTAssertEqual(ledger.targetBudgets?.first?.percentages, ["work": 30, "admin": 10, "music": 15])
         XCTAssertEqual(ledger.currentTargets()["music"], 15)
     }
     func testInvalidBulkMoveIsAtomicIncludingNewParentCreation() throws {

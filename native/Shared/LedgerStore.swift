@@ -133,10 +133,10 @@ final class LedgerStore: ObservableObject {
                 if let yesterday = cal.date(byAdding: .day, value: -1, to: first) {
                     try fixture.saveSample(at: yesterday, activity: "Yesterday work", categoryIDs: ["work"], writer: "fixture", now: now)
                 }
-                try fixture.saveTargets(["work": 30, "music": 15], effectiveAt: now.addingTimeInterval(-60), writer: "fixture")
+                try fixture.saveAllocationGoals(["teaching": 30, "music": 15], effectiveAt: now.addingTimeInterval(-60), writer: "fixture")
                 if ProcessInfo.processInfo.arguments.contains("--ui-life-area-fixture") {
                     fixture.categories += [LedgerCategory(id: "admin", name: "Administration"), LedgerCategory(id: "health", name: "Health"), LedgerCategory(id: "german", name: "German")]
-                    try fixture.saveAllocationPlan(["work": 30, "music": 15, "admin": 10, "health": 45], writer: "fixture")
+                    try fixture.saveAllocationGoals(["teaching": 30, "music": 15, "admin": 10, "health": 45], writer: "fixture")
                 }
                 if ProcessInfo.processInfo.arguments.contains("--ui-commitments-fixture") {
                     try fixture.saveWeeklyCommitment(categoryID: "work", minimumMinutes: 60, writer: "fixture")

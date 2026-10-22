@@ -1,13 +1,14 @@
 import Foundation
 
 public enum PlannerError: LocalizedError {
-    case invalidHierarchy, conflictingCategories, invalidBudget, invalidTimeZone
+    case invalidHierarchy, conflictingCategories, invalidBudget, invalidTimeZone, calculatedGoal
     public var errorDescription: String? {
         switch self {
         case .invalidHierarchy: return "A category cannot be inside itself or one of its descendants."
         case .conflictingCategories: return "Choose either a parent or its subcategory, not both. Update the affected log or idea labels before making this move."
         case .invalidBudget: return "Enter percentages from 0 to 100, with a total no higher than 100%. Other targets are unchanged."
         case .invalidTimeZone: return "Choose a valid reporting time zone."
+        case .calculatedGoal: return "This goal is calculated from its children. Edit a child goal instead."
         }
     }
 }
@@ -21,6 +22,10 @@ public struct TargetBudget: Codable, Identifiable, Equatable, Sendable {
     /// Nil identifies the original, root-only budget format. New snapshots also
     /// contain nested goals; only these saved roots count toward the total.
     public var topLevelCategoryIDs: [String]? = nil
+    /// Editable goals, without calculated parent totals. Keeping these separate
+    /// prevents a former parent total becoming a new goal when its last child
+    /// moves away. Nil identifies budgets saved before calculated goals.
+    public var leafGoalPercentages: [String: Double]? = nil
     public var allocated: Double {
         guard let topLevelCategoryIDs else { return percentages.values.reduce(0, +) }
         return topLevelCategoryIDs.reduce(0) { $0 + percentages[$1, default: 0] }
