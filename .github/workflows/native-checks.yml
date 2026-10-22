@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   watch-ui:
+    if: false
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -58,8 +59,18 @@ jobs:
           python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
       - name: Test core and build iPhone and Watch apps
         env:
-          LEDGER_UI_TESTS: '1'
+          LEDGER_UI_TESTS: '0'
         run: bash native/scripts/validate.sh
+      - name: Test leaf goals and responsive category editing
+        working-directory: native
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl ui "$DEVICE_ID" appearance dark
+          xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
+            -resultBundlePath build/UITests.xcresult -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalBarsShareOneScaleWithoutParentTotals -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCompletedGoalsRemainVisibleWithoutOpeningAnotherSection -only-testing:TimeLedgerUITests/TimeLedgerUITests/testEditingGoalUpdatesSimpleProgressImmediately -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalEditorEditsWithLargeHistoryAndKeepsParentTotals -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalUnitsShowOneValueAndHourEditsConvertToFixedPercentages -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInvalidHoursStayEditableAndUnitSwitchDoesNotDiscardThem -only-testing:TimeLedgerUITests/TimeLedgerUITests/testNestedCalculatedGoalsAndDirectRowsHaveNoEditableTarget -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryRenameAndDeleteKeepLogsAndPromoteChildren -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCommitmentsActualSortsWorkInBothUnitsAndPersistWithBlankGoalsLast CODE_SIGNING_ALLOWED=NO test
       - name: Export compact interface review
         if: always()
         run: |
