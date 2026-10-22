@@ -373,6 +373,14 @@ final class LedgerStore: ObservableObject {
     func saveAllocationPlan(_ values: [String: Double]) throws {
         var draft = ledger; try draft.saveAllocationPlan(values, writer: writer); try commit(draft)
     }
+    func updateAllocationGoal(categoryID: String, percentage: Double?) throws {
+        var draft = ledger; try draft.updateAllocationGoal(categoryID: categoryID, percentage: percentage, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
+    func saveAllocationGoals(_ values: [String: Double]) throws {
+        var draft = ledger; try draft.saveAllocationGoals(values, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
     func groupCategories(_ ids: [String], under parent: String?, newParentName: String? = nil) throws {
         var draft = ledger
         let undo = try draft.groupCategories(ids, under: parent, newParentName: newParentName, writer: writer)

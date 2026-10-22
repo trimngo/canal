@@ -20,12 +20,20 @@ struct AllocationOutlineValue: View {
         guard let delta else { return "" }
         return "\(delta >= 0 ? "+" : "")\(delta.formatted(.number.precision(.fractionLength(1)))) pp"
     }
+    private var feedbackColor: Color {
+        guard let target, period.sufficient else { return .primary }
+        switch AllocationGoalFeedback(actual: period.percent(minutes), goal: target) {
+        case .below: return .red
+        case .aligned: return .green
+        case .above: return .orange
+        }
+    }
     var body: some View {
         VStack(alignment: .trailing, spacing: 1) {
-            Text(period.sufficient ? "\(percentage)%" : "—").font(.subheadline.weight(.semibold)).monospacedDigit()
+            Text(period.sufficient ? "\(percentage)%" : "—").font(.subheadline.weight(.semibold)).monospacedDigit().foregroundStyle(feedbackColor)
             Text(period.sufficient ? store.duration(minutes) : "No data").font(.caption2).foregroundStyle(.secondary)
             if delta != nil, period.sufficient {
-                Text(difference).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                Text(difference).font(.caption2).foregroundStyle(feedbackColor).monospacedDigit()
             }
         }.frame(width: compact ? 60 : nil, alignment: .trailing)
             .accessibilityElement(children: .ignore)

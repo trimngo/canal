@@ -28,12 +28,14 @@ private struct CaptureCategoryView: View {
     let capture: Capture
     @State private var selection: [String]
     @State private var error: String?
+    private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
     init(capture: Capture, initialSelection: [String]) {
         self.capture = capture; _selection = State(initialValue: initialSelection)
     }
     var body: some View {
         NavigationStack {
-            CategorySelectionList(selection: $selection, activity: capture.text, timestamp: capture.createdAt,
+            CategorySelectionList(selection: $selection, activity: current.text, timestamp: capture.createdAt,
+                                  saveActivity: { try store.updateCaptureText(capture, text: $0) },
                                   selectionHelp: "Use the same categories as your journal. Categorizing an idea does not add logged time. A parent and its subcategory cannot both be selected.")
                 .navigationTitle("Idea categories").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {

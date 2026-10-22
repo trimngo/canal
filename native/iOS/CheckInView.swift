@@ -26,13 +26,15 @@ struct CheckInView: View {
                 DisclosureGroup {
                     ForEach(samples) { entry in
                         HStack(alignment: .top, spacing: 8) {
-                            Button { editing = entry } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(entry.activity).foregroundStyle(.primary)
+                            VStack(alignment: .leading, spacing: 3) {
+                                InlineEntryText(text: entry.activity, identifier: "logs.entry.\(entry.id)", maxLength: 500) {
+                                    try store.updateLogActivity(id: entry.id, activity: $0)
+                                }
+                                Button { editing = entry } label: {
                                     Text("\(store.dayLabel(entry.end)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
                                         .font(.caption).foregroundStyle(.secondary)
-                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                            }.buttonStyle(.plain).accessibilityIdentifier("logs.entry.\(entry.id)")
+                                }.buttonStyle(.borderless).accessibilityLabel("Edit time and categories")
+                            }.frame(maxWidth: .infinity, alignment: .leading)
                             DeleteLogButton(entry: entry)
                         }
                             .swipeActions {

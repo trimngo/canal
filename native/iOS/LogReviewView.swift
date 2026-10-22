@@ -47,10 +47,10 @@ private struct LogReviewEntryView: View {
     @State private var categories: [String] = []
     @State private var mood: Int?
     @State private var error: String?
-    @State private var editingText = false
     @State private var loaded = false
     var body: some View {
-        CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood, editActivity: { editingText = true })
+        CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood,
+                              saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) })
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 6) {
                     if let error { Text(error).font(.caption).foregroundStyle(.red) }
@@ -65,7 +65,6 @@ private struct LogReviewEntryView: View {
                     }
                 }.padding().background(.bar)
             }
-            .sheet(isPresented: $editingText) { LogTextEditView(entry: entry) }
             .onAppear {
                 guard !loaded else { return }
                 categories = store.ledger.confirmedCategoryIDs(for: entry); mood = entry.mood; loaded = true

@@ -28,7 +28,8 @@ extension Ledger {
         if let parent {
             guard !moving.contains(where: { $0 == parent || descendants(of: $0).contains { $0.id == parent } }) else { throw PlannerError.invalidHierarchy }
         }
-        let before = categories, oldTargets = currentTargets()
+        let hierarchical = currentBudget()?.topLevelCategoryIDs != nil
+        let before = categories, oldTargets = hierarchical ? currentGoals() : currentTargets()
         var draft = self, destination = parent, created: String?
         if let name = newParentName {
             try draft.saveCategory(id: nil, name: name, writer: writer)
@@ -46,13 +47,14 @@ extension Ledger {
         // A structural merge combines the selected root goals under the
         // destination root. It never changes unrelated goals or old snapshots.
         var targets = oldTargets
-        if var root = destination {
+        if !hierarchical, var root = destination {
             while let ancestor = draft.categoryParents[root] { root = ancestor }
             for id in moving where categoryParents[id] == nil && id != root {
                 if let share = targets.removeValue(forKey: id) { targets[root, default: 0] += share }
             }
         }
-        if targets != oldTargets { try draft.saveTargets(targets, writer: writer) }
+        if hierarchical { try draft.saveAllocationGoals(targets, writer: writer) }
+        else if targets != oldTargets { try draft.saveTargets(targets, writer: writer) }
         let undo = CategoryMoveUndo(before: before, after: draft.categories, previousTargets: oldTargets,
                                     resultingTargets: targets, resultingBudgetID: draft.currentBudget()?.id,
                                     createdParentID: created, movedIDs: moving)
@@ -119,7 +121,8 @@ extension Ledger {
             draft.groupDeletions = (draft.groupDeletions ?? []) + [deletion]
         }
         try validateNewCategoryConflicts(in: draft)
-        if undo.previousTargets != undo.resultingTargets { try draft.saveTargets(undo.previousTargets, writer: writer) }
+        if currentBudget()?.topLevelCategoryIDs != nil { try draft.saveAllocationGoals(undo.previousTargets, writer: writer) }
+        else if undo.previousTargets != undo.resultingTargets { try draft.saveTargets(undo.previousTargets, writer: writer) }
         self = draft
     }
 }

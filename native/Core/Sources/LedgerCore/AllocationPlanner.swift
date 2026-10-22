@@ -18,7 +18,13 @@ public struct TargetBudget: Codable, Identifiable, Equatable, Sendable {
     public var effectiveAt: Date
     public var percentages: [String: Double]
     public var revision: Revision
-    public var allocated: Double { percentages.values.reduce(0, +) }
+    /// Nil identifies the original, root-only budget format. New snapshots also
+    /// contain nested goals; only these saved roots count toward the total.
+    public var topLevelCategoryIDs: [String]? = nil
+    public var allocated: Double {
+        guard let topLevelCategoryIDs else { return percentages.values.reduce(0, +) }
+        return topLevelCategoryIDs.reduce(0) { $0 + percentages[$1, default: 0] }
+    }
     public var unallocated: Double { 100 - allocated }
 }
 
@@ -165,6 +171,10 @@ extension Ledger {
     mutating func removeIneligibleTargets(writer: String) throws {
         let now = Date()
         guard let current = currentBudget(at: now) else { return }
+        if current.topLevelCategoryIDs != nil {
+            try saveAllocationGoals(currentGoals(at: now), effectiveAt: now, writer: writer)
+            return
+        }
         let next = currentTargets(at: now)
         if next != current.percentages { try saveTargets(next, effectiveAt: now, writer: writer) }
     }

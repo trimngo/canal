@@ -26,19 +26,22 @@ struct CommitmentsView: View {
     @State private var plan = AllocationPlanDraft([:])
     @State private var loaded = false
     @State private var selected = Set<String>()
-    @State private var selecting = false
+    @State private var multiSelecting = false
+    @State private var dirtyGoals = Set<String>()
+    @State private var showingHelp = false
+    @State private var copyingWeek = false
+    @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = Set<String>()
     @State private var actionRequest: CategoryActionRequest?
     @State private var moveSelection: [String] = []
-    @State private var confirmGrouping = false
     @State private var deleting: LedgerCategory?
     @State private var confirmingDeletion = false
     @State private var error: String?
     @FocusState private var focusedTarget: String?
 
     private var roots: [LedgerCategory] { store.ledger.children(of: nil) }
-    private var stale: Bool { !(plan.values?.keys.allSatisfy { id in roots.contains { $0.id == id } } ?? true) }
-    private var canSave: Bool { plan.isComplete && plan.isDirty && !stale && store.storageAvailable }
+    private var selecting: Bool { multiSelecting || !selected.isEmpty }
+    private var balance: AllocationGoalBalance? { plan.values.map { store.ledger.allocationGoalBalance($0) } }
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
@@ -48,27 +51,43 @@ struct CommitmentsView: View {
         }
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if selecting {
-                    Button("Done") { finishSelection() }.accessibilityIdentifier("plan.selection-done")
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if selecting { Button("Done") { finishSelection() }.accessibilityIdentifier("plan.selection-done") }
+                if !multiSelecting {
+                    Button("Select") { endGoalEditing(); multiSelecting = true }.accessibilityIdentifier("plan.select")
                 }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                if let id = focusedTarget {
+                    Button("Use 7 days") { copyGoal(id) }.accessibilityIdentifier("plan.copy-focused-week")
+                }
+                Spacer()
+                Button("Done") { endGoalEditing() }.accessibilityIdentifier("keyboard.done")
             }
         }
         .safeAreaInset(edge: .bottom) {
             if selecting { selectionActions.padding(.horizontal, 8).padding(.vertical, 6).background(.bar) }
         }
         .onAppear { if !loaded { load(); loaded = true } }
-        .onChange(of: store.ledger.currentBudget()?.id) { _, _ in if !plan.isDirty { load() } }
-        .onChange(of: roots.map(\.id)) { _, ids in
-            if !plan.isDirty { load() }
+        .onChange(of: store.ledger.currentBudget()?.id) { _, _ in load() }
+        .onChange(of: store.ledger.categories) { _, categories in
+            selected.formIntersection(categories.map(\.id)); load()
         }
-        .onChange(of: store.ledger.categories.map(\.id)) { _, ids in selected.formIntersection(ids) }
-        .onChange(of: focusedTarget) { _, id in
+        .onChange(of: focusedTarget) { old, id in
+            if let old { persistGoal(old) }
             guard id != nil else { return }
+            selected = []; multiSelecting = false
             DispatchQueue.main.async {
                 UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
             }
         }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { persistGoals() } }
+        .onDisappear { persistGoals() }
+        .confirmationDialog("Use the last seven days as your goals?", isPresented: $copyingWeek, titleVisibility: .visible) {
+            Button("Use last seven days") { copyAllGoals() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Replace the current goals with measured percentages, including subcategories. Uncategorized time stays unallocated. Goals stay fixed until you edit them.") }
+
         .sheet(item: $actionRequest) { request in
             switch request {
             case .move(let ids): CategoryMoveView(ids: ids) { finishSelection() }
@@ -85,51 +104,59 @@ struct CommitmentsView: View {
             }
             Button("Cancel", role: .cancel) { deleting = nil }
         } message: { _ in Text("Logs are kept. This category’s shares become Uncategorized, its label is removed from ideas, and children move up one level.") }
-        .confirmationDialog("Save your goal changes before grouping?", isPresented: $confirmGrouping, titleVisibility: .visible) {
-            if canSave { Button("Save and group") { if save() { actionRequest = .move(moveSelection) } } }
-            Button("Discard changes and group", role: .destructive) { load(); actionRequest = .move(moveSelection) }
-            Button("Keep editing", role: .cancel) {}
-        }
+
     }
 
     private func planList(today: AllocationPeriod, week: AllocationPeriod) -> some View {
         List {
             allocationSummary
             categoryOutline(today: today, week: week)
-            if !selecting {
-                Button("New top-level category", systemImage: "plus") { actionRequest = .name(nil, parent: nil) }
-                    .accessibilityIdentifier("plan.create-category")
-            }
             CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
         }.listStyle(.plain).listSectionSpacing(0)
-            .scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
+            .scrollDismissesKeyboard(.interactively).ledgerInputDismissal(showsKeyboardDone: false)
     }
 
     private var allocationSummary: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Your allocation").bold(); Spacer()
-                    Text(plan.total.map { "\(percent($0))% / 100%" } ?? "Check percentages")
-                        .bold().monospacedDigit().accessibilityIdentifier("plan.total")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text("Allocation").fontWeight(.semibold)
+                    Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 32) }
+                        .buttonStyle(.borderless).accessibilityLabel("About goals and category actions").accessibilityIdentifier("plan.help")
+                        .popover(isPresented: $showingHelp) {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Goals & categories").font(.headline)
+                                    Text("Tap a goal to edit. Changes save automatically. Use 7 days copies measured time into a fixed goal. Other goals stay unchanged.")
+                                    Text("Top-level goals total 100%. A child goal is a share of all your time, included within its parent. Leave child goals blank if you prefer.")
+                                    Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children.")
+                                    Text("Actuals use estimated sample periods. 7 days includes today and the six preceding dates; days with no logs are excluded. Uncategorized still counts toward the measured total.")
+                                    Text("Red is below goal, green is at goal at displayed precision, amber is above goal. pp means percentage points. These colors describe alignment, not whether an activity is good or bad.")
+                                }.font(.subheadline).padding()
+                            }.frame(width: 300, height: 350).presentationCompactAdaptation(.popover)
+                        }
+                    Spacer()
+                    Text(balance.map { "\(percent($0.total))% / 100%" } ?? "Check values")
+                        .fontWeight(.semibold).monospacedDigit().accessibilityIdentifier("plan.total")
                 }
-                if let total = plan.total {
-                    Text(abs(total - 100) < 0.0000001 ? "100% assigned" : total > 100 ? "\(percent(total - 100))% over — reduce a goal" : "\(percent(100 - total))% left to assign")
-                        .font(.subheadline).foregroundStyle(total > 100 ? Color.red : Color.secondary)
+                if let balance {
+                    Text(abs(balance.total - 100) < 0.0000001 ? "100% allocated" : balance.total > 100 ? "\(percent(balance.total - 100))% over allocated" : "\(percent(100 - balance.total))% left to allocate")
+                        .font(.caption).foregroundStyle(balance.total > 100 ? Color.red : Color.secondary)
                         .accessibilityIdentifier("plan.balance")
-                } else {
-                    Text("Enter percentages between 0 and 100.").font(.subheadline).foregroundStyle(.red)
+                    if let id = balance.overages.keys.sorted().first {
+                        Text("Child goals exceed \(store.categoryName(id)) by \(percent(balance.overages[id]!))%. Saved · allocation unfinished.")
+                            .font(.caption).foregroundStyle(.red).accessibilityIdentifier("plan.branch-balance")
+                    } else if let id = balance.missingRootGoals.first {
+                        Text("Set a parent goal for \(store.categoryName(id)). Saved · allocation unfinished.")
+                            .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("plan.branch-balance")
+                    }
                 }
-            }.padding(.vertical, 4)
-            if stale {
-                Text("Categories changed while you were editing. Reload the saved plan to continue.").font(.caption).foregroundStyle(.red)
-                Button("Reload saved plan") { load() }.accessibilityIdentifier("plan.reload")
-            }
-            Button("Save plan") { save() }.disabled(!canSave).accessibilityIdentifier("categories.save-targets")
-        } footer: {
-            Text("Set top-level category goals totaling 100%. Editing one share leaves the others unchanged.")
-                .font(.caption).foregroundStyle(.secondary)
+                Button("Use last 7 days as goals", systemImage: "arrow.uturn.backward") { endGoalEditing(); copyingWeek = true }
+                    .font(.subheadline).buttonStyle(.borderless)
+                    .disabled(!store.ledger.rollingAllocation().sufficient || !store.storageAvailable)
+                    .accessibilityIdentifier("plan.copy-week")
+            }.padding(.vertical, 2)
         }
     }
 
@@ -140,24 +167,21 @@ struct CommitmentsView: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowBackground(SelectionRowBackground(selected: !item.direct && selected.contains(item.category.id)))
             }
+            Button("New top-level category", systemImage: "plus") { endGoalEditing(); actionRequest = .name(nil, parent: nil) }
+                .accessibilityIdentifier("plan.create-category")
+                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
         } header: {
             if typeSize.isAccessibilitySize { Text("Categories") }
-            else { columnHeadings }
-        } footer: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Hold a category for actions. Tap the arrow to expand its children. Moving a parent carries its children.")
-                Text("Actual time: estimated sample periods today, and \(week.representedDays) of the last 7 days. Estimates extend half your notification interval around the first and last logs, capped at now and calendar-day boundaries. pp shows percentage points above or below your goal.")
-                    .accessibilityIdentifier("plan.coverage")
-            }.font(.caption).foregroundStyle(.secondary)
+            else { columnHeadings(week: week) }
         }
     }
 
-    private var columnHeadings: some View {
+    private func columnHeadings(week: AllocationPeriod) -> some View {
         HStack(spacing: 4) {
             Text("Category").frame(maxWidth: .infinity, alignment: .leading)
             Text("Goal").frame(width: 52, alignment: .trailing)
             Text("Today").frame(width: 60, alignment: .trailing)
-            Text("7 days").frame(width: 60, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 1) { Text("7 days"); Text("\(week.representedDays) of 7").accessibilityIdentifier("plan.coverage") }.frame(width: 60, alignment: .trailing)
         }.font(.caption2).foregroundStyle(.secondary).textCase(nil)
             .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
     }
@@ -179,7 +203,7 @@ struct CommitmentsView: View {
 
     private func categoryRow(_ item: CategoryOutlineItem, today: AllocationPeriod, week: AllocationPeriod) -> some View {
         let category = item.category
-        let target = item.depth == 0 ? plan.values?[category.id] : nil
+        let target = item.direct ? nil : store.ledger.currentGoals()[category.id]
         let todayMinutes = item.direct ? today.directMinutes[category.id, default: 0] : today.total(for: category.id, ledger: store.ledger)
         let weekMinutes = item.direct ? week.directMinutes[category.id, default: 0] : week.total(for: category.id, ledger: store.ledger)
         return Group {
@@ -205,16 +229,12 @@ struct CommitmentsView: View {
                         goal(item)
                         AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target)
                         AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target)
-                    }.contentShape(Rectangle()).onTapGesture { if selecting && !item.direct { toggleSelected(category.id) } }
+                    }
                 }
             }
         }.accessibilityElement(children: .contain)
             .accessibilityAddTraits(selected.contains(category.id) && !item.direct ? .isSelected : [])
-            .highPriorityGesture(LongPressGesture().onEnded { _ in
-                guard !item.direct else { return }
-                UIApplication.shared.dismissLedgerKeyboard()
-                selecting = true; selected.insert(category.id)
-            })
+
     }
 
     private func categoryName(_ item: CategoryOutlineItem) -> some View {
@@ -234,12 +254,11 @@ struct CommitmentsView: View {
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                     .onTapGesture {
                         guard !item.direct else { return }
-                        if selecting { toggleSelected(category.id) }
-                        else if hasChildren { toggleExpanded(category.id) }
+                        selectCategory(category.id)
                     }
                     .accessibilityLabel(item.direct ? "Directly assigned to \(category.name)" : category.name)
                     .accessibilityValue(selected.contains(category.id) && !item.direct ? "Selected" : "Not selected")
-                    .accessibilityAction(named: "Select category") { if !item.direct { selecting = true; selected.insert(category.id) } }
+                    .accessibilityAction(named: "Select category") { if !item.direct { selectCategory(category.id) } }
                     .accessibilityIdentifier(item.direct ? "plan.direct.\(category.id)" : "plan.name.\(category.id)")
         }.font(item.depth == 0 ? .subheadline.weight(.semibold) : .subheadline)
             .lineLimit(typeSize.isAccessibilitySize ? nil : 2).padding(.leading, CGFloat(item.depth) * 12)
@@ -247,12 +266,12 @@ struct CommitmentsView: View {
     }
 
     @ViewBuilder private func goal(_ item: CategoryOutlineItem) -> some View {
-        if item.depth == 0 {
+        if !item.direct {
             HStack(spacing: 0) {
-                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { plan.text[item.category.id] = $0 }))
+                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) }))
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .focused($focusedTarget, equals: item.category.id)
-                    .disabled(selecting).allowsHitTesting(!selecting)
+                    .disabled(multiSelecting || !store.storageAvailable).allowsHitTesting(!multiSelecting)
                     .accessibilityLabel("\(item.category.name) goal percent")
                     .accessibilityIdentifier("categories.target.\(item.category.id)")
                 Text("%").font(.caption2).foregroundStyle(.secondary)
@@ -260,37 +279,69 @@ struct CommitmentsView: View {
         } else {
             Text("—").font(.caption).foregroundStyle(.secondary)
                 .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
-                .accessibilityLabel("No goal for subcategories")
+                .accessibilityLabel("Direct time is included in the category goal")
         }
     }
     private func percent(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
-    private func load() { plan = AllocationPlanDraft(store.ledger.currentTargets()); error = nil }
-    @discardableResult private func save() -> Bool {
-        guard canSave, let values = plan.values else { return false }
-        UIApplication.shared.dismissLedgerKeyboard()
-        do { try store.saveAllocationPlan(values); load(); return true }
-        catch { self.error = error.localizedDescription; return false }
+    private func load() {
+        let known = Set(store.ledger.categories.map(\.id))
+        dirtyGoals.formIntersection(known)
+        var refreshed = AllocationPlanDraft(store.ledger.currentGoals())
+        for id in dirtyGoals { refreshed.text[id] = plan.text[id] }
+        plan = refreshed
+    }
+    private func persistGoal(_ id: String) {
+        guard dirtyGoals.contains(id) else { return }
+        let text = plan.text[id] ?? ""
+        var field = AllocationPlanDraft([:]); field.text[id] = text
+        guard let values = field.values else { error = "Enter a percentage from 0 to 100 for \(store.categoryName(id))."; return }
+        do {
+            try store.updateAllocationGoal(categoryID: id, percentage: values[id])
+            dirtyGoals.remove(id); error = nil; load()
+        } catch { self.error = error.localizedDescription }
+    }
+    private func persistGoals() { for id in dirtyGoals.sorted() { persistGoal(id) } }
+    private func endGoalEditing() { focusedTarget = nil; UIApplication.shared.dismissLedgerKeyboard(); persistGoals() }
+    private func copyGoal(_ id: String) {
+        guard let value = store.ledger.goalPercentage(for: id, from: store.ledger.rollingAllocation()) else { return }
+        dirtyGoals.remove(id)
+        do { try store.updateAllocationGoal(categoryID: id, percentage: value); error = nil; load() }
+        catch { self.error = error.localizedDescription }
+    }
+    private func copyAllGoals() {
+        guard let values = store.ledger.goalsFromAllocation(store.ledger.rollingAllocation()) else { return }
+        do { try store.saveAllocationGoals(values); dirtyGoals = []; error = nil; load() }
+        catch { self.error = error.localizedDescription }
     }
     private func groupSelected() {
-        UIApplication.shared.dismissLedgerKeyboard()
-        // Freeze the selection while the destination sheet is open. A move or
-        // a sync can change the root list before the sheet finishes dismissing.
+        endGoalEditing()
+        guard dirtyGoals.isEmpty else { return }
         moveSelection = store.ledger.orderedCategories.filter { selected.contains($0.id) }.map(\.id)
         guard !moveSelection.isEmpty else { return }
-        if plan.isDirty { confirmGrouping = true }
-        else { actionRequest = .move(moveSelection) }
+        actionRequest = .move(moveSelection)
     }
-
-    private func finishSelection() { selected = []; selecting = false }
+    private func selectCategory(_ id: String) {
+        endGoalEditing()
+        if multiSelecting { if !selected.insert(id).inserted { selected.remove(id) } }
+        else { selected = [id] }
+    }
+    private func finishSelection() { selected = []; multiSelecting = false }
     private func toggleExpanded(_ id: String) { if !expanded.insert(id).inserted { expanded.remove(id) } }
-    private func toggleSelected(_ id: String) { if !selected.insert(id).inserted { selected.remove(id) } }
     private var singleSelection: LedgerCategory? {
         guard selected.count == 1 else { return nil }
         return store.ledger.categories.first { selected.contains($0.id) }
     }
     private var selectionActions: some View {
         VStack(spacing: 4) {
-            Text(selected.isEmpty ? "Tap categories to select" : "\(selected.count) selected").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text(selected.isEmpty ? "Tap categories to select" : "\(selected.count) selected").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if let category = singleSelection {
+                    Button("Use 7-day goal") { copyGoal(category.id); finishSelection() }
+                        .font(.caption).disabled(!store.ledger.rollingAllocation().sufficient)
+                        .accessibilityIdentifier("plan.copy-selected-week")
+                }
+            }
             HStack(spacing: 0) {
                 if let category = singleSelection {
                     actionButton("Rename", icon: "pencil", id: "plan.rename") { actionRequest = .name(category, parent: store.ledger.categoryParents[category.id]) }
@@ -300,8 +351,8 @@ struct CommitmentsView: View {
                 actionButton("Move", icon: "folder", id: "plan.group-selected") { groupSelected() }.disabled(selected.isEmpty)
                 if let category = singleSelection {
                     actionButton("Delete", icon: "trash", id: "plan.delete") {
-                        if plan.isDirty { error = "Save or reload your goal changes before deleting a category." }
-                        else { deleting = category; confirmingDeletion = true }
+                        endGoalEditing()
+                        if dirtyGoals.isEmpty { deleting = category; confirmingDeletion = true }
                     }.tint(.red)
                 }
             }.disabled(!store.storageAvailable)

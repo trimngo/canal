@@ -876,7 +876,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(element(app, "plan.total").exists)
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertTrue(element(app, "plan.balance").waitForExistence(timeout: 5))
-        XCTAssertEqual(element(app, "plan.balance").label, "55% left to assign")
+        XCTAssertEqual(element(app, "plan.balance").label, "55% left to allocate")
         let save = app.buttons["categories.save-targets"]
         XCTAssertFalse(save.isEnabled)
         setPlanNumber("categories.target.work", to: "90", in: app)
@@ -890,7 +890,7 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.work", to: "85", in: app)
         showPlanSummary(in: app)
         reveal(save, in: app); XCTAssertTrue(save.isEnabled); save.tap()
-        XCTAssertEqual(element(app, "plan.balance").label, "100% assigned")
+        XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
         XCTAssertFalse(save.isEnabled)
         recordScreen("LifeAreaPlan", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
@@ -925,7 +925,6 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.work", to: "85", in: app)
         showPlanSummary(in: app)
         XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "85")
-        let save = app.buttons["categories.save-targets"]; reveal(save, in: app); save.tap()
         let children = element(app, "plan.children.work"); reveal(children, in: app); children.tap()
         XCTAssertTrue(app.staticTexts["Teaching"].waitForExistence(timeout: 5))
         recordScreen("CompactCategoryOutline", in: app)
@@ -971,7 +970,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("GroupedLifeAreas", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
         reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "25")
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% assigned")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Guitar practice"].waitForExistence(timeout: 5))
     }
@@ -1175,21 +1174,14 @@ final class TimeLedgerUITests: XCTestCase {
         let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
         app.buttons["mood.4"].tap(); tapCategory("work", in: app); tapCategory("social", in: app)
         let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
-        element(app, "category-context.activity").tap()
-        let text = app.textViews["log-text.field"]
-        XCTAssertTrue(text.waitForExistence(timeout: 5)); XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        text.typeText(" corrected")
-        app.buttons["log-text.save"].tap()
-        let context = element(app, "category-context.activity")
-        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains("corrected"))
+        editInline("category-context.activity", adding: " corrected", in: app)
+        XCTAssertTrue(element(app, "category-context.activity").label.contains("corrected"))
         XCTAssertEqual(search.value as? String, "work")
         XCTAssertEqual(element(app, "log-review.position").label, "1 of 1")
-        XCTAssertEqual(app.buttons["mood.4"].value as? String, "Selected")
+        XCTAssertTrue(app.buttons["category-tag.work"].exists); XCTAssertTrue(app.buttons["category-tag.social"].exists)
         app.buttons["category-search.clear"].tap()
-        XCTAssertEqual(app.buttons["category-select.work"].value as? String, "Selected")
-        let social = app.buttons["category-select.social"]; reveal(social, in: app)
-        XCTAssertEqual(social.value as? String, "Selected")
-        recordScreen("EditedLogWithCategorySearch", in: app)
+        let mood = app.buttons["mood.4"]; reveal(mood, in: app); XCTAssertEqual(mood.value as? String, "Selected")
+        recordScreen("InlineLogReview", in: app)
         app.buttons["log-review.save-next"].tap()
         let group = dashboardGroup("work", in: app); reveal(group, in: app); group.tap()
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "corrected")).firstMatch.waitForExistence(timeout: 5))
@@ -1201,21 +1193,10 @@ final class TimeLedgerUITests: XCTestCase {
         let group = dashboardGroup("uncategorized", in: app); reveal(group, in: app); group.tap()
         app.buttons["Choose group"].tap()
         app.buttons["mood.3"].tap(); tapCategory("work", in: app)
-        element(app, "category-context.activity").tap()
-        let text = app.textViews["log-text.field"]; XCTAssertTrue(text.waitForExistence(timeout: 5))
-        text.typeText(" discarded")
-        app.buttons["log-text.cancel"].tap()
-        XCTAssertEqual(element(app, "category-context.activity").label, "Quokka activity fixture")
-        XCTAssertEqual(app.buttons["category-select.work"].value as? String, "Selected")
-        let selectedMood = app.buttons["mood.3"]; reveal(selectedMood, in: app)
-        XCTAssertEqual(selectedMood.value as? String, "Selected")
-        element(app, "category-context.activity").tap()
-        XCTAssertTrue(text.waitForExistence(timeout: 5)); text.typeText(" corrected")
-        app.buttons["log-text.save"].tap()
+        editInline("category-context.activity", adding: " corrected", in: app)
         XCTAssertTrue(element(app, "category-context.activity").label.contains("corrected"))
-        reveal(selectedMood, in: app); XCTAssertEqual(selectedMood.value as? String, "Selected")
-        app.buttons["group-selection.done"].tap()
-        app.buttons["group.done"].tap()
+        XCTAssertTrue(app.buttons["category-tag.work"].exists)
+        app.buttons["group-selection.done"].tap(); app.buttons["group.done"].tap()
         XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 5))
     }
 
@@ -1321,10 +1302,8 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func selectPlanCategory(_ id: String, in app: XCUIApplication) {
-        let row = element(app, "plan.name.\(id)"); reveal(row, in: app)
-        XCTAssertTrue(row.isHittable)
-        if app.buttons["plan.selection-done"].exists { row.tap() }
-        else { row.press(forDuration: 0.8) }
+        if app.buttons["plan.selection-done"].exists && app.buttons["plan.select"].exists { app.buttons["plan.select"].tap() }
+        let row = element(app, "plan.name.\(id)"); reveal(row, in: app); row.tap()
         XCTAssertEqual(row.value as? String, "Selected")
     }
 
@@ -1523,7 +1502,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("InboxReviewAndSearch", in: app)
         review.tap()
         XCTAssertTrue(app.buttons["ranking.first"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["ranking.first"].label, "New manual idea")
+        XCTAssertEqual(app.buttons["ranking.first"].label, "Choose: New manual idea")
         XCTAssertTrue(app.staticTexts["Which is more important to act on now?"].exists)
         app.buttons["ranking.first"].tap()
         let first = app.buttons["ranking.first"].label, second = app.buttons["ranking.second"].label
@@ -1554,14 +1533,14 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
         if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
         openRanking(app)
-        XCTAssertEqual(app.buttons["ranking.first"].label, "A new idea during backlog review")
+        XCTAssertEqual(app.buttons["ranking.first"].label, "Choose: A new idea during backlog review")
         recordScreen("NewestCaptureScreening", in: app)
     }
 
     func testOneRejectedNewIdeaEndsReviewAndShowsOptionalBacklogAndStaleness() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-screening-inbox-fixture"]; app.launch()
         openInbox(app, capture: true); openRanking(app)
-        XCTAssertEqual(app.buttons["ranking.first"].label, "One quick new idea")
+        XCTAssertEqual(app.buttons["ranking.first"].label, "Choose: One quick new idea")
         XCTAssertEqual(app.buttons["ranking.second"].label, "Priority 20")
         XCTAssertTrue(element(app, "ranking.review-progress").exists)
         recordScreen("FastNewIdeaScreening", in: app)
@@ -1637,7 +1616,7 @@ final class TimeLedgerUITests: XCTestCase {
         let firstTitle = first.label, secondTitle = second.label
         let categorize = app.buttons["ranking.first.category"]; categorize.tap()
         let context = element(app, "category-context.activity")
-        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains(firstTitle))
+        XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains(firstTitle.replacingOccurrences(of: "Choose: ", with: "")))
         tapCategory("work", in: app)
         app.buttons["category-select.create"].tap()
         app.alerts.textFields["Group name"].typeText("Creative Projects")
@@ -1688,4 +1667,121 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Today"].tap()
         reveal(element(app, "report.range"), in: app)
     }
+    private func editInline(_ id: String, adding suffix: String, in app: XCUIApplication) {
+        let label = element(app, id); reveal(label, in: app); label.tap()
+        let field = app.textFields[id]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(suffix)
+        let done = app.buttons["keyboard.done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+        XCTAssertFalse(app.navigationBars["Edit idea"].exists)
+        XCTAssertFalse(app.navigationBars["Edit log text"].exists)
+    }
+
+    func testGoalsAutosaveNestedValuesAndUnfinishedTotalsAcrossRestart() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertFalse(app.buttons["categories.save-targets"].exists)
+        setPlanNumber("categories.target.work", to: "80", in: app)
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "5% left to allocate")
+        app.buttons["plan.children.work"].tap()
+        setPlanNumber("categories.target.teaching", to: "30", in: app)
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "5% left to allocate")
+        setPlanNumber("categories.target.music", to: "20", in: app)
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
+        recordScreen("AutosavedNestedGoals", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "80")
+        app.buttons["plan.children.work"].tap()
+        XCTAssertEqual(app.textFields["categories.target.teaching"].value as? String, "30")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "20")
+    }
+
+    func testCopyMeasuredWeekMakesFixedGoalsAndContextualHelpStaysHidden() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertFalse(app.staticTexts["Hold a category for actions."].exists)
+        app.buttons["plan.copy-week"].tap(); app.sheets.buttons["Use last seven days"].tap()
+        XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
+        let workValue = app.textFields["categories.target.work"].value as? String
+        app.buttons["plan.children.work"].tap()
+        XCTAssertFalse((app.textFields["categories.target.teaching"].value as? String ?? "").isEmpty)
+        let work = app.textFields["categories.target.work"]; work.tap()
+        XCTAssertTrue(app.buttons["plan.copy-focused-week"].waitForExistence(timeout: 5))
+        app.buttons["plan.copy-focused-week"].tap(); app.buttons["keyboard.done"].firstMatch.tap()
+        XCTAssertEqual(Double(work.value as? String ?? "") ?? -1, Double(workValue ?? "") ?? -2, accuracy: 0.02)
+        app.buttons["plan.help"].tap()
+        XCTAssertTrue(app.staticTexts["Goals & categories"].waitForExistence(timeout: 5))
+        recordScreen("GoalHelpPopover", in: app)
+    }
+
+    func testSingleTapCategoryActionsAndExplicitMultipleSelection() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        element(app, "plan.name.work").tap()
+        XCTAssertTrue(app.buttons["plan.rename"].exists); XCTAssertTrue(app.buttons["plan.create-child"].exists)
+        app.buttons["plan.select"].tap()
+        let music = element(app, "plan.name.music"); reveal(music, in: app); music.tap()
+        XCTAssertFalse(app.buttons["plan.rename"].exists); XCTAssertTrue(app.buttons["plan.group-selected"].exists)
+        recordScreen("ExplicitMultipleCategorySelection", in: app)
+        app.buttons["plan.selection-done"].tap()
+        XCTAssertFalse(app.buttons["plan.group-selected"].exists)
+        let create = app.buttons["plan.create-category"]; reveal(create, in: app)
+        XCTAssertTrue(create.exists)
+    }
+
+    func testLogCategorySearchSelectsOnceKeepsKeyboardAndShowsRemovableTags() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-review-range-fixture"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
+        app.buttons["category-select.work"].tap()
+        XCTAssertTrue(app.buttons["category-tag.work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        search.typeText("social")
+        XCTAssertTrue(app.buttons["category-tag.work"].isHittable)
+        app.buttons["category-select.social"].tap()
+        XCTAssertTrue(app.buttons["category-tag.social"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["category-tag.work"].isHittable)
+        recordScreen("PinnedTagsWithKeyboard", in: app)
+        app.buttons["category-tag.work"].tap()
+        XCTAssertFalse(app.buttons["category-tag.work"].exists)
+        app.buttons["keyboard.done"].firstMatch.tap()
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+        XCTAssertTrue(dashboardGroup("social", in: app).exists)
+    }
+
+    func testInboxUsesSamePinnedTagsAndInlineTextEditing() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        openInbox(app)
+        editInline("inbox.details.a", adding: " updated", in: app)
+        let categorize = app.buttons["inbox.category.a"]; reveal(categorize, in: app); categorize.tap()
+        let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
+        app.buttons["category-select.work"].tap()
+        XCTAssertTrue(app.buttons["category-tag.work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        search.typeText("social"); app.buttons["category-select.social"].tap()
+        XCTAssertTrue(app.buttons["category-tag.social"].exists)
+        app.buttons["keyboard.done"].firstMatch.tap()
+        editInline("category-context.activity", adding: " categorized", in: app)
+        recordScreen("InboxSharedTagPicker", in: app)
+        app.buttons["idea-categories.done"].tap()
+        XCTAssertTrue(element(app, "inbox.details.a").label.contains("categorized"))
+        XCTAssertTrue(categorize.label.contains("Work")); XCTAssertTrue(categorize.label.contains("Socializing"))
+    }
+
+    func testRankingInlineEditDoesNotChooseAndChoiceUsesSeparateButton() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        openInbox(app); openRanking(app)
+        let first = app.buttons["ranking.first"], second = app.buttons["ranking.second"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let original = first.label, other = second.label
+        editInline("ranking.first.text", adding: " corrected", in: app)
+        XCTAssertEqual(first.label, original + " corrected"); XCTAssertEqual(second.label, other)
+        XCTAssertFalse(app.navigationBars["Idea notes"].exists)
+        recordScreen("InlineRankingWithSeparateChoice", in: app)
+        first.tap()
+        XCTAssertNotEqual(first.label, original + " corrected")
+    }
+
 }

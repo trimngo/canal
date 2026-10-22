@@ -33,7 +33,7 @@ struct CategorySelectionList: View {
     var activity: String? = nil
     var timestamp: Date? = nil
     var mood: Binding<Int?>? = nil
-    var editActivity: (() -> Void)? = nil
+    var saveActivity: ((String) throws -> Void)? = nil
     var selectionHelp = "Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected."
     @State private var query = ""
     #if os(iOS)
@@ -43,21 +43,24 @@ struct CategorySelectionList: View {
     @State private var creating = false
     @State private var groupName = ""
     @State private var error: String?
+    @State private var showingHelp = false
     var body: some View {
         List {
             if let mood {
                 Section("Mood (optional)") { MoodSelectionView(selection: mood) }
             }
-            Button("Uncategorized") { selection = []; dismissSearchKeyboard() }
+            Button("Uncategorized") { selection = []; query = "" }
             if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, store.ledger.searchCategories(query).isEmpty {
                 Text("No matching categories").foregroundStyle(.secondary).accessibilityIdentifier("category-search.empty")
             }
             ForEach(store.ledger.searchCategories(query)) { category in
                 Button {
-                    dismissSearchKeyboard()
                     if selection.contains(category.id) { selection.removeAll { $0 == category.id } }
                     else if store.ledger.categoryConflicts(category.id, with: selection).isEmpty { selection.append(category.id) }
-                    else { replacing = category.id }
+                    else { dismissSearchKeyboard(); replacing = category.id; return }
+                    #if os(iOS)
+                    query = ""
+                    #endif
                 } label: {
                     HStack {
                         #if os(watchOS)
@@ -71,7 +74,7 @@ struct CategorySelectionList: View {
                     #if os(iOS)
                     .padding(.leading, CGFloat(depth(of: category.id)) * 18)
                     #endif
-                }.accessibilityIdentifier("category-select.\(category.id)")
+                }.buttonStyle(.borderless).accessibilityIdentifier("category-select.\(category.id)")
                     .accessibilityLabel(store.ledger.categoryPath(category.id))
                     .accessibilityValue(selection.contains(category.id) ? "Selected" : "Not selected")
                     .accessibilityAddTraits(selection.contains(category.id) ? .isSelected : [])
@@ -81,17 +84,21 @@ struct CategorySelectionList: View {
             }
                 .accessibilityIdentifier("category-select.create")
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("category-select.error") }
+            #if os(watchOS)
             Text(selectionHelp).font(.footnote).foregroundStyle(.secondary)
+            #endif
         }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
+            .ledgerInputDismissal(preservingKeyboard: true)
             #endif
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     if let activity, !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        CategoryEntryContext(activity: activity, timestamp: timestamp, editActivity: editEntry)
+                        CategoryEntryContext(activity: activity, timestamp: timestamp, saveActivity: saveActivity)
                     }
                     #if os(iOS)
+                    CategorySelectedTags(selection: $selection)
                     categorySearch
                     #endif
                 }
@@ -113,7 +120,7 @@ struct CategorySelectionList: View {
                 Button("Replace") {
                     if let id = replacing {
                         let conflicts = Set(store.ledger.categoryConflicts(id, with: selection))
-                        selection.removeAll { conflicts.contains($0) }; selection.append(id)
+                        selection.removeAll { conflicts.contains($0) }; selection.append(id); query = ""
                     }
                     replacing = nil
                 }
@@ -123,10 +130,6 @@ struct CategorySelectionList: View {
                     Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
                 }
             }
-    }
-    private var editEntry: (() -> Void)? {
-        guard let editActivity else { return nil }
-        return { dismissSearchKeyboard(); editActivity() }
     }
     private func dismissSearchKeyboard() {
         #if os(iOS)
@@ -138,12 +141,17 @@ struct CategorySelectionList: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
             TextField("Search categories", text: $query).focused($searchFocused)
-                .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
+                .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.done)
                 .onSubmit { searchFocused = false }.accessibilityIdentifier("category-search.field")
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     .buttonStyle(.plain).accessibilityLabel("Clear category search").accessibilityIdentifier("category-search.clear")
             }
+            Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 32) }
+                .buttonStyle(.plain).accessibilityLabel("About category selection").accessibilityIdentifier("category-select.help")
+                .popover(isPresented: $showingHelp) {
+                    Text(selectionHelp).font(.subheadline).padding().frame(width: 280).presentationCompactAdaptation(.popover)
+                }
         }.padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 16).padding(.vertical, 8).background(.background)
     }
@@ -155,6 +163,57 @@ struct CategorySelectionList: View {
         return depth
     }
 }
+
+#if os(iOS)
+/// Kept outside the filtered List, so selections remain visible above the
+/// keyboard while a different query hides their original rows.
+private struct CategorySelectedTags: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Binding var selection: [String]
+    var body: some View {
+        if !selection.isEmpty {
+            CategoryTagLayout(spacing: 6) {
+                ForEach(selection, id: \.self) { id in
+                    Button { selection.removeAll { $0 == id } } label: {
+                        HStack(spacing: 6) {
+                            Text(store.categoryName(id)).lineLimit(1)
+                            Image(systemName: "xmark").font(.caption2.weight(.semibold))
+                        }.font(.subheadline).padding(.horizontal, 10).frame(minHeight: 36)
+                            .background(Color.accentColor.opacity(0.2), in: Capsule())
+                    }.buttonStyle(.borderless)
+                        .accessibilityLabel("Remove \(store.ledger.categoryPath(id))")
+                        .accessibilityIdentifier("category-tag.\(id)")
+                }
+            }.padding(.horizontal, 16).padding(.top, 4).frame(maxWidth: .infinity, alignment: .leading).background(.background)
+        }
+    }
+}
+
+private struct CategoryTagLayout: Layout {
+    var spacing: CGFloat
+    private func arrangement(width: CGFloat, subviews: Subviews) -> (CGSize, [CGPoint]) {
+        var x: CGFloat = 0, y: CGFloat = 0, height: CGFloat = 0
+        var positions: [CGPoint] = []
+        for view in subviews {
+            let size = view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if x > 0 && x + size.width > width { x = 0; y += height + spacing; height = 0 }
+            positions.append(CGPoint(x: x, y: y))
+            x += size.width + spacing; height = max(height, size.height)
+        }
+        return (CGSize(width: width, height: y + height), positions)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrangement(width: max(1, proposal.width ?? 300), subviews: subviews).0
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let positions = arrangement(width: bounds.width, subviews: subviews).1
+        for (index, view) in subviews.enumerated() {
+            view.place(at: CGPoint(x: bounds.minX + positions[index].x, y: bounds.minY + positions[index].y),
+                       anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: nil))
+        }
+    }
+}
+#endif
 
 /// Phone post-processing only; capture and Apple's Watch dictation stay intact.
 struct MoodSelectionView: View {
@@ -189,7 +248,7 @@ private struct CategoryEntryContext: View {
     @EnvironmentObject private var store: LedgerStore
     let activity: String
     let timestamp: Date?
-    var editActivity: (() -> Void)? = nil
+    var saveActivity: ((String) throws -> Void)? = nil
     @State private var expanded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -208,7 +267,7 @@ private struct CategoryEntryContext: View {
                 .frame(height: 160)
                 #endif
             } else {
-                activityText.lineLimit(3)
+                activityText.lineLimit(2)
             }
             if activity.count > 100 || activity.contains("\n") {
                 Button(expanded ? "Show less" : "Read full entry") { expanded.toggle() }
@@ -223,10 +282,12 @@ private struct CategoryEntryContext: View {
             .accessibilityIdentifier("category-context.activity")
     }
     @ViewBuilder private var activityText: some View {
-        if let editActivity {
-            activityLabel.onTapGesture(perform: editActivity)
-                .accessibilityAddTraits(.isButton).accessibilityHint("Edit log text")
-                .accessibilityAction { editActivity() }
+        #if os(iOS)
+        if let saveActivity {
+            InlineEntryText(text: activity, identifier: "category-context.activity", maxLength: 500, save: saveActivity)
         } else { activityLabel }
+        #else
+        activityLabel
+        #endif
     }
 }

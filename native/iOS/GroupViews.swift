@@ -65,7 +65,7 @@ struct GroupEntriesView: View {
                     Text("Suggestions work offline and learn from confirmed choices. Every log stays Uncategorized until you confirm its group.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-            }.safeAreaInset(edge: .bottom, spacing: 0) {
+            }.ledgerInputDismissal().safeAreaInset(edge: .bottom, spacing: 0) {
                 if selecting {
                     Button("Move \(selected.count) logs to category") { moving = LogMoveRequest(ids: selected) }
                         .buttonStyle(.borderedProminent).disabled(selected.isEmpty || !store.storageAvailable)
@@ -114,13 +114,15 @@ struct GroupEntriesView: View {
     private func entryRow(_ entry: CheckIn) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                Button { editing = entry } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.activity).foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 3) {
+                    InlineEntryText(text: entry.activity, identifier: "group.text.\(entry.id)", maxLength: 500) {
+                        try store.updateLogActivity(id: entry.id, activity: $0)
+                    }.disabled(selecting)
+                    Button { editing = entry } label: {
                         Text(allDays || rangeStart != nil ? "\(store.dayLabel(entry.end)) · \(store.time(entry.end))" : store.time(entry.end))
                             .font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                }.buttonStyle(.plain).disabled(selecting)
+                    }.buttonStyle(.borderless).accessibilityLabel("Edit time and details")
+                }.frame(maxWidth: .infinity, alignment: .leading)
                 if !selecting { DeleteLogButton(entry: entry, identifierPrefix: "group.delete-log") }
             }
             Text("Group: \(store.categoryNames(for: entry))")
@@ -187,12 +189,12 @@ struct GroupAssignmentView: View {
     @State var selection: [String]
     @State private var mood: Int?
     @State private var error: String?
-    @State private var editingText = false
     @State private var loaded = false
     private var currentEntry: CheckIn { store.ledger.activeEntries.first { $0.id == entry.id } ?? entry }
     var body: some View {
         NavigationStack {
-            CategorySelectionList(selection: $selection, activity: currentEntry.activity, timestamp: entry.end, mood: $mood, editActivity: { editingText = true })
+            CategorySelectionList(selection: $selection, activity: currentEntry.activity, timestamp: entry.end, mood: $mood,
+                                  saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) })
                 .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }
@@ -206,7 +208,7 @@ struct GroupAssignmentView: View {
                         }.accessibilityIdentifier("group-selection.done")
                     }
                 }
-        }.sheet(isPresented: $editingText) { LogTextEditView(entry: currentEntry) }
+        }
             .onAppear { if !loaded { mood = entry.mood; loaded = true } }
     }
 }

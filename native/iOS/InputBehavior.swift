@@ -12,13 +12,21 @@ extension UIApplication {
 // The recognizer observes taps without consuming the control's original tap.
 // Text inputs keep focus when tapped, and drafts are never cleared on dismissal.
 private final class OutsideInputTap: UITapGestureRecognizer, UIGestureRecognizerDelegate {
+    let keyboardPreservingRegions = NSHashTable<UIView>.weakObjects()
     func configure() {
         addTarget(self, action: #selector(dismissInput))
         cancelsTouchesInView = false; delaysTouchesBegan = false; delaysTouchesEnded = false
         delegate = self
     }
-    @objc private func dismissInput() { view?.endEditing(true) }
+    @objc private func dismissInput() {
+        // Let the tapped SwiftUI control finish its action before keyboard
+        // dismissal moves the control underneath the completed touch.
+        DispatchQueue.main.async { [weak self] in self?.view?.endEditing(true) }
+    }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        for region in keyboardPreservingRegions.allObjects where region.window === touch.view?.window && !region.isHidden {
+            if region.bounds.contains(touch.location(in: region)) { return false }
+        }
         var current: UIResponder? = touch.view
         while let candidate = current {
             // Alerts manage their own keyboard and actions. Ending editing
@@ -33,32 +41,42 @@ private final class OutsideInputTap: UITapGestureRecognizer, UIGestureRecognizer
 }
 
 private struct KeyboardTapInstaller: UIViewRepresentable {
+    var preservesKeyboard = false
     final class Host: UIView {
+        var preservesKeyboard = false
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            guard let window, !(window.gestureRecognizers ?? []).contains(where: { $0 is OutsideInputTap }) else { return }
-            let tap = OutsideInputTap(target: nil, action: nil)
-            tap.configure(); window.addGestureRecognizer(tap)
+            guard let window else { return }
+            let tap: OutsideInputTap
+            if let existing = window.gestureRecognizers?.first(where: { $0 is OutsideInputTap }) as? OutsideInputTap { tap = existing }
+            else { tap = OutsideInputTap(target: nil, action: nil); tap.configure(); window.addGestureRecognizer(tap) }
+            if preservesKeyboard { tap.keyboardPreservingRegions.add(self) }
         }
     }
-    func makeUIView(context: Context) -> Host { Host() }
+    func makeUIView(context: Context) -> Host { let host = Host(); host.preservesKeyboard = preservesKeyboard; return host }
     func updateUIView(_ view: Host, context: Context) {}
 }
 
 private struct InputDismissal: ViewModifier {
+    var preservingKeyboard: Bool
+    var showsKeyboardDone: Bool
     func body(content: Content) -> some View {
-        content.background(KeyboardTapInstaller().allowsHitTesting(false))
+        content.background(KeyboardTapInstaller(preservesKeyboard: preservingKeyboard).allowsHitTesting(false))
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { UIApplication.shared.dismissLedgerKeyboard() }
-                        .accessibilityIdentifier("keyboard.done")
+                    if showsKeyboardDone {
+                        Spacer()
+                        Button("Done") { UIApplication.shared.dismissLedgerKeyboard() }
+                            .accessibilityIdentifier("keyboard.done")
+                    }
                 }
             }
     }
 }
 extension View {
-    func ledgerInputDismissal() -> some View { modifier(InputDismissal()) }
+    func ledgerInputDismissal(preservingKeyboard: Bool = false, showsKeyboardDone: Bool = true) -> some View {
+        modifier(InputDismissal(preservingKeyboard: preservingKeyboard, showsKeyboardDone: showsKeyboardDone))
+    }
 }
 
 struct LogDeletionUndoBar: View {

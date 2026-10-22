@@ -36,7 +36,7 @@ struct InboxView: View {
                         .focused($focused).accessibilityIdentifier("inbox.text").id("inbox.capture")
                     Button("Save") {
                         do { try store.addCapture(text); text = ""; focused = true } catch { store.report(error) }
-                    }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
+                    }.disabled(!store.storageAvailable)
                         .accessibilityIdentifier("inbox.save")
                 }
                 Section {
@@ -233,15 +233,14 @@ struct InboxView: View {
             } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3).frame(width: 44, height: 44) }
                 .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
             VStack(alignment: .leading, spacing: 6) {
-                Text(capture.text).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                    .onTapGesture { focused = false; editing = capture }
-                    .accessibilityAction(named: "Edit idea") { focused = false; editing = capture }
-                    .accessibilityIdentifier("inbox.details.\(capture.id)")
+                InlineEntryText(text: capture.text, identifier: "inbox.details.\(capture.id)") {
+                    try store.updateCaptureText(capture, text: $0)
+                }
                 Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
                 CaptureCategoryButton(capture: capture, identifier: "inbox.category.\(capture.id)")
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
-                Button("Edit idea") { focused = false; editing = capture }
+                Button("Notes") { focused = false; editing = capture }
                 if !capture.isDone {
                     if capture.isReference == true {
                         Button("Move to New Ideas") { moveReference(capture, reference: false) }
@@ -318,22 +317,19 @@ private struct CaptureEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Idea") {
-                    TextEditor(text: $text).frame(minHeight: 100).accessibilityIdentifier("capture.edit-text")
-                }
                 Section("Notes (optional)") {
                     TextEditor(text: $notes).frame(minHeight: 140).accessibilityIdentifier("capture.edit-notes")
                 }
                 Text("Captured \(capture.createdAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.footnote).foregroundStyle(.secondary)
-            }.navigationTitle("Edit idea").navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle("Idea notes").navigationBarTitleDisplayMode(.inline)
                 .scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            do { try store.updateCapture(capture, text: text, notes: notes); dismiss() } catch { store.report(error) }
-                        }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.storageAvailable)
+                            do { try store.updateCapture(capture, text: store.ledger.captures.first { $0.id == capture.id }?.text ?? capture.text, notes: notes); dismiss() } catch { store.report(error) }
+                        }.disabled(!store.storageAvailable)
                             .accessibilityIdentifier("capture.edit-save")
                     }
                 }
@@ -444,7 +440,7 @@ private struct RankingView: View {
                 }
                 Spacer(minLength: 0)
               }.padding(24)
-            }.navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
+            }.ledgerInputDismissal().navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
                 .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
@@ -457,18 +453,23 @@ private struct RankingView: View {
     }
     private func choice(_ capture: Capture, pair: RankingPair, id: String) -> some View {
         VStack(spacing: 8) {
+            InlineEntryText(text: capture.text, identifier: "\(id).text", font: .title3) {
+                try store.updateCaptureText(capture, text: $0)
+            }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(.secondary.opacity(0.4)))
             Button {
                 do { try store.chooseCapture(capture.id, pair: pair) } catch { store.report(error) }
             } label: {
-                Text(capture.text).font(.title3).frame(maxWidth: .infinity, minHeight: 90).padding(12)
-            }.buttonStyle(.bordered).accessibilityIdentifier(id)
+                Text("Choose this").fontWeight(.semibold).frame(maxWidth: .infinity, minHeight: 44)
+            }.buttonStyle(.borderedProminent).accessibilityIdentifier(id)
+                .accessibilityLabel("Choose: \(capture.text)")
             CaptureCategoryButton(capture: capture, identifier: "\(id).category")
             HStack {
                 Button("Snooze", systemImage: "moon.zzz") { snoozing = capture }
                     .accessibilityIdentifier("\(id).snooze")
                 Spacer()
                 Menu {
-                    Button("Edit idea") { editing = capture }.accessibilityIdentifier("\(id).edit")
+                    Button("Notes") { editing = capture }.accessibilityIdentifier("\(id).edit")
                     Button("Mark done") {
                         do { try store.setCaptureDone(capture, done: true) } catch { store.report(error) }
                     }.accessibilityIdentifier("\(id).done")
