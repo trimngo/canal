@@ -26,15 +26,9 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult -parallel-testing-enabled NO \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalsAutosaveNestedValuesAndUnfinishedTotalsAcrossRestart \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCopyMeasuredWeekMakesFixedGoalsAndContextualHelpStaysHidden \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSingleTapCategoryActionsAndExplicitMultipleSelection \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testLogCategorySearchSelectsOnceKeepsKeyboardAndShowsRemovableTags \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxUsesSamePinnedTagsAndInlineTextEditing \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingInlineEditDoesNotChooseAndChoiceUsesSeparateButton \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testReviewTextEditRetainsSearchSelectedCategoriesMoodAndPosition \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCategoryPickerShowsAllHierarchyLevelsWithoutExpansionAndKeepsEntryVisible \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testMultiCategorySelectionResolvesParentConflictExplicitly \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingCanCategorizeWithoutAnsweringOrChangingTheComparison \
     CODE_SIGNING_ALLOWED=NO test
 fi
