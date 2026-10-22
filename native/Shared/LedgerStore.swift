@@ -50,8 +50,29 @@ final class LedgerStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
+                defaults.removeObject(forKey: "dashboard.hide-zero-time")
+                defaults.removeObject(forKey: "commitments.hide-zero-time")
+            }
             if ProcessInfo.processInfo.arguments.contains(where: { ["--ui-empty-ledger", "--ui-allocation-fixture", "--ui-life-area-fixture", "--ui-commitments-fixture", "--ui-goal-hours-fixture"].contains($0) }) {
                 defaults.removeObject(forKey: "goals.display-unit")
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-zero-category-fixture") {
+                defaults.removeObject(forKey: "goals.display-unit")
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"),
+                    LedgerCategory(id: "admin", name: "Administration"), LedgerCategory(id: "music", name: "Music"),
+                    LedgerCategory(id: "guitar", name: "Guitar"), LedgerCategory(id: "food", name: "Eating")]
+                for index in 0..<30 { fixture.categories.append(LedgerCategory(id: "unused-\(index)", name: String(format: "Unused %02d", index))) }
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                try fixture.moveCategory("admin", to: "work", writer: "fixture")
+                try fixture.moveCategory("guitar", to: "music", writer: "fixture")
+                fixture.settings.reportingTimeZoneIdentifier = "UTC"
+                let now = Date(), day = fixture.reportingDay(containing: now)
+                try fixture.saveSample(at: max(day, now.addingTimeInterval(-300)), activity: "Teaching now", categoryIDs: ["teaching"], writer: "fixture", now: now)
+                try fixture.saveSample(at: day.addingTimeInterval(-43200), activity: "Eating yesterday", categoryIDs: ["food"], writer: "fixture", now: now)
+                try fixture.saveAllocationGoals(["guitar": 25], writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-goal-hours-fixture") {
                 var fixture = Ledger()

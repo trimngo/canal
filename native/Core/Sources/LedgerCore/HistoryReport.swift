@@ -31,11 +31,13 @@ public struct HistoryReport: Sendable {
     /// the report so expanding a row never re-estimates or double counts logs.
     public var directMinutes: [String: Double] = [:]
 
-    public func categoryOutline(in ledger: Ledger, expanded: Set<String>) -> [HistoryCategoryRow] {
+    public func categoryOutline(in ledger: Ledger, expanded: Set<String>, hideZeroTime: Bool = false) -> [HistoryCategoryRow] {
         let period = AllocationPeriod(trackedMinutes: trackedMinutes, directMinutes: directMinutes)
+        let visible = ledger.activeCategoryIDs(in: [period])
         var result: [HistoryCategoryRow] = []
         func append(_ row: BreakdownRow, depth: Int) {
-            let children = ledger.children(of: row.id)
+            guard !hideZeroTime || visible.contains(row.id) else { return }
+            let children = ledger.children(of: row.id).filter { !hideZeroTime || visible.contains($0.id) }
             result.append(HistoryCategoryRow(row: row, depth: depth, direct: false, hasChildren: !children.isEmpty))
             guard expanded.contains(row.id), !children.isEmpty else { return }
             if directMinutes[row.id, default: 0] > 0 {
@@ -46,6 +48,12 @@ public struct HistoryReport: Sendable {
             }
         }
         for row in rows { append(row, depth: 0) }
+        if !hideZeroTime {
+            let reported = Set(rows.map(\.id))
+            for category in ledger.children(of: nil) where !reported.contains(category.id) {
+                append(BreakdownRow(id: category.id, name: category.name, minutes: 0, dayMinutes: trackedMinutes), depth: 0)
+            }
+        }
         return result
     }
 }

@@ -5,6 +5,7 @@ import LedgerCore
 struct HistoryPanel: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
+    var hideZeroTime = true
     let select: (BreakdownRow) -> Void
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
@@ -65,7 +66,7 @@ struct HistoryPanel: View {
         ScrollView {
             VStack(spacing: 14) {
                 if report.rows.isEmpty { empty }
-                ForEach(report.categoryOutline(in: store.ledger, expanded: expandedCategories)) { item in
+                ForEach(report.categoryOutline(in: store.ledger, expanded: expandedCategories, hideZeroTime: hideZeroTime)) { item in
                     breakdownRow(item)
                 }
                 if report.rows.contains(where: { !store.ledger.children(of: $0.id).isEmpty }) {

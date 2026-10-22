@@ -74,4 +74,57 @@ final class HistoryCategoryOutlineTests: XCTestCase {
         XCTAssertEqual(changed.categoryOutline(in: ledger, expanded: ["work"]).first { $0.id == "teaching" }?.row.minutes, 60)
         XCTAssertEqual(ledger.entries.count, 5)
     }
+
+    func testZeroFilterHidesEmptyBranchesWithoutChangingTotalsOrLogs() throws {
+        var ledger = try fixture()
+        ledger.categories.append(LedgerCategory(id: "unused", name: "Unused root"))
+        let before = ledger
+        let report = ledger.history(range: .today, now: now, calendar: calendar)
+        let hidden = report.categoryOutline(in: ledger, expanded: ["work", "teaching", "music"], hideZeroTime: true)
+        XCTAssertFalse(hidden.contains { ["empty", "unused"].contains($0.row.id) })
+        XCTAssertEqual(hidden.first { $0.id == "teaching" }?.hasChildren, false)
+        XCTAssertEqual(hidden.filter { $0.depth == 0 }.map(\.row), report.rows)
+        XCTAssertEqual(hidden.first { $0.id == "direct:work" }?.row.minutes, 30)
+        XCTAssertTrue(hidden.contains { $0.id == "uncategorized" })
+        let shown = report.categoryOutline(in: ledger, expanded: ["work", "teaching"], hideZeroTime: false)
+        XCTAssertEqual(shown.first { $0.id == "unused" }?.row.minutes, 0)
+        XCTAssertEqual(shown.first { $0.id == "empty" }?.row.minutes, 0)
+        XCTAssertEqual(ledger, before)
+    }
+
+    func testVisibilityKeepsGoalsEvenWhenZeroAndIncludesAllAncestors() throws {
+        let ledger = try fixture()
+        let ids = ledger.activeCategoryIDs(in: [], includingGoals: ["empty": 0, "guitar": 15])
+        XCTAssertEqual(ids, ["empty", "teaching", "work", "guitar", "music"])
+        XCTAssertFalse(ids.contains("admin"))
+    }
+
+    func testVisibilityUsesBothPeriodsAndKeepsDirectParentTime() throws {
+        let ledger = try fixture()
+        let today = AllocationPeriod(directMinutes: ["work": 12, "admin": 0])
+        let week = AllocationPeriod(directMinutes: ["guitar": 30, "uncategorized": 8])
+        XCTAssertEqual(ledger.activeCategoryIDs(in: [today, week]), ["work", "guitar", "music", "uncategorized"])
+        XCTAssertEqual(ledger.activeCategoryIDs(in: [today]), ["work"])
+        XCTAssertTrue(ledger.activeCategoryIDs(in: []).isEmpty)
+    }
+
+    func testZeroFilterUsesSelectedPeriodRatherThanAllTimeActivity() throws {
+        var ledger = try fixture()
+        ledger.categories.append(LedgerCategory(id: "older", name: "Only yesterday"))
+        try ledger.saveSample(at: date("2026-10-20T10:00:00Z"), activity: "Yesterday", categoryIDs: ["older"], writer: "test", now: now)
+        let today = ledger.history(range: .today, now: now, calendar: calendar)
+        let week = ledger.history(range: .week, now: now, calendar: calendar)
+        XCTAssertFalse(today.categoryOutline(in: ledger, expanded: [], hideZeroTime: true).contains { $0.id == "older" })
+        XCTAssertTrue(week.categoryOutline(in: ledger, expanded: [], hideZeroTime: true).contains { $0.id == "older" })
+        XCTAssertTrue(today.categoryOutline(in: ledger, expanded: [], hideZeroTime: false).contains { $0.id == "older" && $0.row.minutes == 0 })
+    }
+
+    func testEmptyFilteredReportDoesNotInventTimeOrUncategorizedRows() throws {
+        let ledger = Ledger()
+        let report = ledger.history(range: .today, now: now, calendar: calendar)
+        XCTAssertTrue(report.categoryOutline(in: ledger, expanded: [], hideZeroTime: true).isEmpty)
+        XCTAssertEqual(report.categoryOutline(in: ledger, expanded: [], hideZeroTime: false).count, ledger.children(of: nil).count)
+        XCTAssertEqual(report.trackedMinutes, 0)
+        XCTAssertTrue(report.rows.isEmpty)
+    }
 }

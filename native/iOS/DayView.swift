@@ -23,6 +23,7 @@ struct AllocationHistoryView: View {
     @State private var range: HistoryRange = .today
     @State private var start = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
     @State private var end = Date()
+    @AppStorage("dashboard.hide-zero-time") private var hideZeroTime = true
 
     var body: some View {
         content(now: now)
@@ -37,6 +38,13 @@ struct AllocationHistoryView: View {
                         Label("Calendar", systemImage: "calendar")
                     }.accessibilityIdentifier("dashboard.calendar")
                     Button("Categories") { managingGroups = true }.accessibilityIdentifier("dashboard.groups")
+                    Menu {
+                        Toggle("Hide zero-time categories", isOn: $hideZeroTime)
+                            .accessibilityIdentifier("dashboard.hide-zero-time")
+                    } label: {
+                        Label("Filter categories", systemImage: hideZeroTime ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    }.accessibilityIdentifier("dashboard.filter")
+                        .accessibilityValue(hideZeroTime ? "Zero-time categories hidden" : "All categories shown")
                 }
             }
             .sheet(isPresented: $managingGroups, onDismiss: { now = Date() }) { GroupManagerView() }
@@ -79,7 +87,7 @@ struct AllocationHistoryView: View {
                 }
             }.padding(.horizontal, 20).padding(.vertical, 8)
             Divider()
-            HistoryPanel(report: report) { row in
+            HistoryPanel(report: report, hideZeroTime: hideZeroTime) { row in
                 selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
             }.padding(.top, 12)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)

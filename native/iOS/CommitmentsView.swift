@@ -26,12 +26,12 @@ struct CommitmentsView: View {
     @State private var plan = AllocationPlanDraft([:])
     @State private var reference = AllocationReference()
     @AppStorage("goals.display-unit") private var displayUnit = AllocationDisplayUnit.percent
+    @AppStorage("commitments.hide-zero-time") private var hideZeroTime = true
     @State private var loaded = false
     @State private var selected = Set<String>()
     @State private var multiSelecting = false
     @State private var dirtyGoals = Set<String>()
     @State private var showingHelp = false
-    @State private var copyingWeek = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = Set<String>()
     @State private var actionRequest: CategoryActionRequest?
@@ -55,7 +55,6 @@ struct CommitmentsView: View {
         return result
     }
     private var displayedGoals: [String: Double] { percentageGoals.map { store.ledger.calculatedAllocationGoals($0) } ?? store.ledger.currentGoals() }
-    private var capacity: AllocationCapacity? { percentageGoals.map { store.ledger.allocationCapacity(goals: $0, reference: reference) } }
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
@@ -80,6 +79,7 @@ struct CommitmentsView: View {
                 Button("Done") { endGoalEditing() }.accessibilityIdentifier("keyboard.done")
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) { displayControls }
         .safeAreaInset(edge: .bottom) {
             if selecting { selectionActions.padding(.horizontal, 8).padding(.vertical, 6).background(.bar) }
         }
@@ -101,15 +101,17 @@ struct CommitmentsView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistGoals() } }
         .onDisappear { persistGoals() }
-        .confirmationDialog("Use the last seven days as your goals?", isPresented: $copyingWeek, titleVisibility: .visible) {
-            Button("Use last seven days") { copyAllGoals() }
-            Button("Cancel", role: .cancel) {}
-        } message: { Text("Copy measured percentages to categories without children. Parent goals are their children’s total. Direct and Uncategorized time stay unallocated. Goals stay fixed until you edit them.") }
-
         .sheet(item: $actionRequest) { request in
             switch request {
             case .move(let ids): CategoryMoveView(ids: ids) { finishSelection() }
-            case .name(let category, let parent): CategoryNameView(category: category, parentID: parent) { finishSelection() }
+            case .name(let category, let parent):
+                CategoryNameView(category: category, parentID: parent) {
+                    finishSelection()
+                    if category == nil {
+                        hideZeroTime = false
+                        if let parent { expanded.insert(parent) }
+                    }
+                }
             case .logs(let category):
                 GroupEntriesView(day: Date(), groupID: category.id, initialName: category.name, allTime: true)
                     .onAppear { finishSelection() }
@@ -127,7 +129,6 @@ struct CommitmentsView: View {
 
     private func planList(today: AllocationPeriod, week: AllocationPeriod) -> some View {
         List {
-            allocationSummary
             categoryOutline(today: today, week: week)
             CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
@@ -135,43 +136,27 @@ struct CommitmentsView: View {
             .scrollDismissesKeyboard(.interactively).ledgerInputDismissal(showsKeyboardDone: false)
     }
 
-    private var allocationSummary: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("Balance").fontWeight(.semibold)
-                    Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 32) }
-                        .buttonStyle(.borderless).accessibilityLabel("About goals and category actions").accessibilityIdentifier("plan.help")
-                        .popover(isPresented: $showingHelp) { goalHelp }
-                    Spacer()
-                    Picker("Display unit", selection: Binding(get: { displayUnit }, set: switchUnit)) {
-                        ForEach(AllocationDisplayUnit.allCases, id: \.self) { unit in Text(unit.label).tag(unit) }
-                    }.pickerStyle(.segmented).frame(width: 144).accessibilityIdentifier("plan.unit")
-                }
-                HStack {
-                    Text("Priority goals")
-                    Spacer()
-                    Text(capacity.map { amount($0.goalsPercentage) } ?? "Check values")
-                        .fontWeight(.semibold).monospacedDigit().accessibilityIdentifier("plan.total")
-                }
-                HStack {
-                    Text("Other activities").foregroundStyle(.secondary)
-                    Spacer()
-                    Text(capacity?.otherPercentage.map(amount) ?? "—")
-                        .monospacedDigit().accessibilityIdentifier("plan.capacity.other")
-                }
-                HStack {
-                    Text((capacity?.roomPercentage ?? 0) < -0.0000001 ? "Over by" : "Room left")
-                    Spacer()
-                    Text(capacity?.roomPercentage.map { amount(abs($0)) } ?? "—")
-                        .monospacedDigit().accessibilityIdentifier("plan.capacity.room")
-                }.foregroundStyle((capacity?.roomPercentage ?? 0) < -0.0000001 ? Color.red : Color.primary)
-                Button("Use last 7 days as goals", systemImage: "arrow.uturn.backward") { endGoalEditing(); copyingWeek = true }
-                    .font(.subheadline).buttonStyle(.borderless)
-                    .disabled(!reference.period.sufficient || !store.storageAvailable)
-                    .accessibilityIdentifier("plan.copy-week")
-            }.font(.subheadline).padding(.vertical, 2)
-        }
+    private var displayControls: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Picker("Display unit", selection: Binding(get: { displayUnit }, set: switchUnit)) {
+                    ForEach(AllocationDisplayUnit.allCases, id: \.self) { unit in Text(unit.label).tag(unit) }
+                }.pickerStyle(.segmented).frame(width: 144).accessibilityIdentifier("plan.unit")
+                Spacer(minLength: 0)
+                Button { endGoalEditing(); hideZeroTime.toggle() } label: {
+                    Label("Hide zero", systemImage: "line.3.horizontal.decrease")
+                        .font(.subheadline).lineLimit(1).minimumScaleFactor(0.8)
+                }.buttonStyle(.bordered).tint(hideZeroTime ? Color.accentColor : Color.secondary)
+                    .accessibilityLabel("Hide zero-time categories")
+                    .accessibilityValue(hideZeroTime ? "On" : "Off")
+                    .accessibilityAddTraits(hideZeroTime ? .isSelected : [])
+                    .accessibilityIdentifier("plan.hide-zero-time")
+                Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 36) }
+                    .accessibilityLabel("About goals and category actions").accessibilityIdentifier("plan.help")
+                    .popover(isPresented: $showingHelp) { goalHelp }
+            }.padding(.horizontal, 12).padding(.vertical, 6)
+            Divider()
+        }.background(.bar)
     }
 
     private var goalHelp: some View {
@@ -185,7 +170,8 @@ struct CommitmentsView: View {
                     Text("A completed date with logs is needed to convert goals into hours. You can still edit percentages and see today’s time.")
                 }
                 Text("A goal stays a fixed percentage. Editing its hours equivalent converts it into that percentage; switching units never changes the saved goal. Hours equivalents can change as your recent recorded-day average changes.")
-                Text("Leave goals blank for activities you only want to observe. Priority goals plus the recent share of activities without their own goals gives an estimate of room left. Direct and Uncategorized time are included in other activities. This estimate does not require goals to total 100%.")
+                Text("Hide zero removes categories with no time today or in the previous seven completed dates. Categories with goals stay visible, including zero goals. Parents stay visible with their children. Turn the filter off to see every category; nothing is deleted.")
+                Text("Leave goals blank for activities you only want to observe. Goals save individually when you finish editing.")
                 Text("Edit goals on categories without children. Each parent adds up its children’s goals. Direct time counts toward the parent’s actual time without a separate goal.")
                 Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children. Use 7 days copies measured shares into fixed goals.")
                 Text("Red is below goal, green is at goal, amber is above goal. In Time mode, today’s accumulated time is compared with the daily goal equivalent; in % mode, proportions are compared.")
@@ -236,8 +222,12 @@ struct CommitmentsView: View {
     }
 
     private func outline(today: AllocationPeriod, week: AllocationPeriod) -> [CategoryOutlineItem] {
+        var retainedGoals = displayedGoals
+        for id in selected.union(dirtyGoals) { retainedGoals[id] = 0 }
+        let visible = store.ledger.activeCategoryIDs(in: [today, week], includingGoals: retainedGoals)
         var result: [CategoryOutlineItem] = []
         func append(_ category: LedgerCategory, depth: Int) {
+            guard !hideZeroTime || visible.contains(category.id) else { return }
             result.append(CategoryOutlineItem(category: category, depth: depth))
             let children = store.ledger.children(of: category.id)
             guard expanded.contains(category.id), !children.isEmpty else { return }
@@ -374,11 +364,6 @@ struct CommitmentsView: View {
         guard let value = store.ledger.goalPercentage(for: id, from: reference.period) else { return }
         dirtyGoals.remove(id)
         do { try store.updateAllocationGoal(categoryID: id, percentage: value); error = nil; load() }
-        catch { self.error = error.localizedDescription }
-    }
-    private func copyAllGoals() {
-        guard let values = store.ledger.goalsFromAllocation(reference.period) else { return }
-        do { try store.saveAllocationGoals(values); dirtyGoals = []; error = nil; load() }
         catch { self.error = error.localizedDescription }
     }
     private func groupSelected() {
