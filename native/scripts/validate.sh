@@ -24,6 +24,7 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcrun simctl bootstatus "$DEVICE_ID" -b
   xcrun simctl ui "$DEVICE_ID" appearance dark
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalDirectionArrowsUseExistingFeedbackInBothColumnsAndUnits \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCommitmentsColumnHeadingsSortAndReverseWithinTheHierarchy \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCommitmentsActualSortsWorkInBothUnitsAndPersistWithBlankGoalsLast \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCommitmentsBlankGoalFilterIgnoresActualTimeAndKeepsZeroGoals \
