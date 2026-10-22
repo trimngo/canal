@@ -16,9 +16,9 @@ public struct AllocationPlanDraft: Equatable, Sendable {
     public var text: [String: String]
     private var originalText: [String: String]
     private var originalValues: [String: Double]
-    public init(_ values: [String: Double]) {
+    public init(_ values: [String: Double], maximumFractionDigits: Int = 8) {
         originalValues = values
-        text = values.mapValues { $0.formatted(.number.locale(Locale(identifier: "en_US_POSIX")).grouping(.never).precision(.fractionLength(0...8))) }
+        text = values.mapValues { $0.formatted(.number.locale(Locale(identifier: "en_US_POSIX")).grouping(.never).precision(.fractionLength(0...maximumFractionDigits))) }
         originalText = text
     }
     public var isDirty: Bool { text.filter { !$0.value.isEmpty } != originalText }

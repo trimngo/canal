@@ -875,11 +875,11 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertFalse(app.buttons["categories.save-targets"].exists)
         setPlanNumber("categories.target.teaching", to: "90", in: app)
-        showPlanSummary(in: app); XCTAssertTrue(element(app, "plan.balance").label.contains("5% over"))
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "105%")
         setPlanNumber("categories.target.teaching", to: "80", in: app)
-        showPlanSummary(in: app); XCTAssertTrue(element(app, "plan.balance").label.contains("5% left"))
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "95%")
         setPlanNumber("categories.target.teaching", to: "85", in: app)
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "100%")
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
         XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "85")
         XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "15")
@@ -955,7 +955,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("GroupedLifeAreas", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
         reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "25")
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "100%")
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Guitar practice"].waitForExistence(timeout: 5))
     }
@@ -1289,7 +1289,8 @@ final class TimeLedgerUITests: XCTestCase {
         let field = app.textFields[id]; reveal(field, in: app)
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12)); field.typeText(value)
-        XCTAssertEqual(field.value as? String, value)
+        if value.isEmpty { XCTAssertTrue(["", "—"].contains(field.value as? String ?? "")) }
+        else { XCTAssertEqual(field.value as? String, value) }
         if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
     }
 
@@ -1647,18 +1648,111 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
 
+    private func switchGoalUnit(_ label: String, in app: XCUIApplication) {
+        showPlanSummary(in: app)
+        let picker = app.segmentedControls["plan.unit"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.buttons[label].tap()
+    }
+
+    func testGoalUnitsShowOneValueAndHourEditsConvertToFixedPercentages() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        let weekMusic = element(app, "plan.actual.week.music"); reveal(weekMusic, in: app)
+        XCTAssertTrue(weekMusic.label.contains("7.1%")); XCTAssertFalse(weekMusic.label.contains("1h"))
+        switchGoalUnit("Time", in: app)
+        reveal(weekMusic, in: app); XCTAssertTrue(weekMusic.label.contains("1h per day")); XCTAssertFalse(weekMusic.label.contains("%"))
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "1.4")
+        setPlanNumber("categories.target.teaching", to: "4", in: app)
+        XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "4")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "1.4")
+        recordScreen("GoalsTimeOnly", in: app)
+        switchGoalUnit("%", in: app)
+        let teaching = app.textFields["categories.target.teaching"]; reveal(teaching, in: app)
+        XCTAssertEqual(teaching.value as? String, "28.57")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "10")
+        recordScreen("GoalsPercentOnly", in: app)
+        switchGoalUnit("Time", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        XCTAssertEqual(app.segmentedControls["plan.unit"].buttons["Time"].value as? String, "1")
+        app.buttons["plan.children.work"].tap()
+        XCTAssertEqual(app.textFields["categories.target.teaching"].value as? String, "4")
+    }
+
+    func testOptionalGoalsAndOtherActivitiesShowCapacityWithoutAllocating100() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertEqual(element(app, "plan.total").label, "30%")
+        XCTAssertEqual(element(app, "plan.capacity.other").label, "64.29%")
+        XCTAssertEqual(element(app, "plan.capacity.room").label, "5.71%")
+        XCTAssertTrue(app.staticTexts["Room left"].exists)
+        XCTAssertTrue((app.textFields["categories.target.food"].value as? String ?? "").isEmpty || app.textFields["categories.target.food"].value as? String == "—")
+        setPlanNumber("categories.target.music", to: "20", in: app)
+        showPlanSummary(in: app); XCTAssertTrue(app.staticTexts["Over by"].exists)
+        XCTAssertEqual(element(app, "plan.capacity.room").label, "4.29%")
+        setPlanNumber("categories.target.music", to: "", in: app)
+        showPlanSummary(in: app)
+        XCTAssertEqual(element(app, "plan.total").label, "20%")
+        XCTAssertEqual(element(app, "plan.capacity.other").label, "71.43%")
+        switchGoalUnit("Time", in: app)
+        XCTAssertEqual(element(app, "plan.total").label, "2h 48m")
+        XCTAssertEqual(element(app, "plan.capacity.other").label, "10h")
+        XCTAssertEqual(element(app, "plan.capacity.room").label, "1h 12m")
+        recordScreen("OptionalGoalsAndRoomLeft", in: app)
+    }
+
+    func testTimeModeWithoutCompletedDataPreservesExistingPercentageGoals() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        setPlanNumber("categories.target.work", to: "30", in: app)
+        switchGoalUnit("Time", in: app)
+        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
+        XCTAssertFalse(work.isEnabled)
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.capacity.room").label, "—")
+        XCTAssertFalse(app.buttons["plan.copy-week"].isEnabled)
+        switchGoalUnit("%", in: app)
+        reveal(work, in: app); XCTAssertEqual(work.value as? String, "30")
+    }
+
+    func testInvalidHoursStayEditableAndUnitSwitchDoesNotDiscardThem() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap(); switchGoalUnit("Time", in: app)
+        setPlanNumber("categories.target.teaching", to: "20", in: app)
+        let error = element(app, "plan.error"); reveal(error, in: app); XCTAssertTrue(error.exists)
+        switchGoalUnit("%", in: app)
+        XCTAssertEqual(app.segmentedControls["plan.unit"].buttons["Time"].value as? String, "1")
+        let teaching = app.textFields["categories.target.teaching"]; reveal(teaching, in: app)
+        XCTAssertEqual(teaching.value as? String, "20")
+        setPlanNumber("categories.target.teaching", to: "4", in: app)
+        XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "4")
+        XCTAssertFalse(element(app, "plan.error").exists)
+    }
+
+    func testHistoricalAverageUsesCompletedDaysWhileTodayStaysLive() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertEqual(element(app, "plan.coverage").label, "3 of 7")
+        app.buttons["plan.children.work"].tap()
+        let week = element(app, "plan.actual.week.teaching"); reveal(week, in: app)
+        XCTAssertTrue(week.label.contains("28.6%"))
+        switchGoalUnit("Time", in: app)
+        reveal(week, in: app); XCTAssertTrue(week.label.contains("4h per day"))
+        let today = element(app, "plan.actual.today.teaching"); XCTAssertFalse(today.label.contains("per day"))
+        XCTAssertFalse(today.label.contains("%"))
+        recordScreen("CompletedDayAverage", in: app)
+    }
+
     func testGoalsAutosaveNestedValuesAndUnfinishedTotalsAcrossRestart() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertFalse(app.buttons["categories.save-targets"].exists)
         XCTAssertFalse(app.textFields["categories.target.work"].exists)
         setPlanNumber("categories.target.teaching", to: "80", in: app)
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "5% left to allocate")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "95%")
         XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "80")
         setPlanNumber("categories.target.music", to: "30", in: app)
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "10% over allocated")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "110%")
         setPlanNumber("categories.target.music", to: "20", in: app)
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "100%")
         recordScreen("CalculatedParentGoals", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
         XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "80")
@@ -1672,7 +1766,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertFalse(app.staticTexts["Hold a category for actions."].exists)
         app.buttons["plan.copy-week"].tap(); app.sheets.buttons["Use last seven days"].tap()
-        let copied = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "left to allocate"), object: element(app, "plan.balance"))
+        let copied = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "0%"), object: element(app, "plan.total"))
         XCTAssertEqual(XCTWaiter.wait(for: [copied], timeout: 5), .completed)
         let musicValue = app.textFields["categories.target.music"].value as? String
         app.buttons["plan.children.work"].tap()
@@ -1703,7 +1797,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.textFields["categories.target.work"].exists)
         XCTAssertFalse(app.textFields["categories.target.music"].exists)
         XCTAssertTrue(element(app, "categories.direct-goal.music").exists)
-        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "10% over allocated")
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.total").label, "110%")
         recordScreen("NestedCalculatedGoalsAndDirectTime", in: app)
     }
 

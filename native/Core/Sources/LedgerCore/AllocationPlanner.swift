@@ -34,6 +34,10 @@ public struct TargetBudget: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct AllocationPeriod: Equatable, Sendable {
+    public init(trackedMinutes: Double = 0, directMinutes: [String: Double] = [:], representedDays: Int = 0, requestedDays: Int = 1) {
+        self.trackedMinutes = trackedMinutes; self.directMinutes = directMinutes
+        self.representedDays = representedDays; self.requestedDays = requestedDays
+    }
     public var trackedMinutes = 0.0
     public var directMinutes: [String: Double] = [:]
     public var representedDays = 0

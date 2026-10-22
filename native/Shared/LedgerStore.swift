@@ -50,6 +50,28 @@ final class LedgerStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains(where: { ["--ui-empty-ledger", "--ui-allocation-fixture", "--ui-life-area-fixture", "--ui-commitments-fixture", "--ui-goal-hours-fixture"].contains($0) }) {
+                defaults.removeObject(forKey: "goals.display-unit")
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-goal-hours-fixture") {
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "food", name: "Eating")]
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                var settings = fixture.settings; settings.reportingTimeZoneIdentifier = "UTC"; settings.inferenceMethod = .carryForward
+                try fixture.saveSettings(settings, writer: "fixture")
+                var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(secondsFromGMT: 0)!
+                let now = Date(), today = cal.startOfDay(for: now)
+                for offset in -3 ... -1 {
+                    let day = cal.date(byAdding: .day, value: offset, to: today)!
+                    for (minute, id) in [(427.5, "teaching"), (660.0, "music"), (720.0, "food"), (1252.5, "food")] {
+                        try fixture.saveSample(at: day.addingTimeInterval(minute * 60), activity: "\(id) observation", categoryIDs: [id], writer: "fixture", now: now)
+                    }
+                }
+                try fixture.saveSample(at: max(today, now.addingTimeInterval(-3600)), activity: "Today teaching", categoryIDs: ["teaching"], writer: "fixture", now: now)
+                try fixture.saveSample(at: now, activity: "Today music", categoryIDs: ["music"], writer: "fixture", now: now)
+                try fixture.saveAllocationGoals(["teaching": 20, "music": 10], writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }

@@ -24,6 +24,8 @@ struct CommitmentsView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var plan = AllocationPlanDraft([:])
+    @State private var reference = AllocationReference()
+    @AppStorage("goals.display-unit") private var displayUnit = AllocationDisplayUnit.percent
     @State private var loaded = false
     @State private var selected = Set<String>()
     @State private var multiSelecting = false
@@ -41,14 +43,26 @@ struct CommitmentsView: View {
 
     private var roots: [LedgerCategory] { store.ledger.children(of: nil) }
     private var selecting: Bool { multiSelecting || !selected.isEmpty }
-    private var displayedGoals: [String: Double] { plan.values.map { store.ledger.calculatedAllocationGoals($0) } ?? store.ledger.currentGoals() }
-    private var balance: AllocationGoalBalance? { plan.values.map { store.ledger.allocationGoalBalance($0) } }
+    private var percentageGoals: [String: Double]? {
+        guard let values = plan.values else { return nil }
+        if displayUnit == .percent { return values }
+        guard reference.averageDayMinutes != nil else { return store.ledger.editableAllocationGoals() }
+        var result: [String: Double] = [:]
+        for (id, hours) in values {
+            guard let value = reference.percentage(forDailyHours: hours), value <= 100 + 0.0000001 else { return nil }
+            result[id] = min(100, value)
+        }
+        return result
+    }
+    private var displayedGoals: [String: Double] { percentageGoals.map { store.ledger.calculatedAllocationGoals($0) } ?? store.ledger.currentGoals() }
+    private var capacity: AllocationCapacity? { percentageGoals.map { store.ledger.allocationCapacity(goals: $0, reference: reference) } }
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
             let today = store.ledger.allocation(on: context.date, now: context.date)
-            let week = store.ledger.rollingAllocation(now: context.date)
+            let week = reference.period
             planList(today: today, week: week)
+                .onChange(of: store.ledger.reportingDay(containing: context.date)) { _, _ in refreshReference(); load() }
         }
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -69,14 +83,17 @@ struct CommitmentsView: View {
         .safeAreaInset(edge: .bottom) {
             if selecting { selectionActions.padding(.horizontal, 8).padding(.vertical, 6).background(.bar) }
         }
-        .onAppear { if !loaded { load(); loaded = true } }
+        .onAppear { if !loaded { refreshReference(); load(); loaded = true } }
         .onChange(of: store.ledger.currentBudget()?.id) { _, _ in load() }
         .onChange(of: store.ledger.categories) { _, categories in
-            selected.formIntersection(categories.map(\.id)); load()
+            selected.formIntersection(categories.map(\.id)); refreshReference(); load()
         }
+        .onChange(of: store.ledger.entries) { _, _ in refreshReference(); load() }
+        .onChange(of: store.ledger.logDeletions) { _, _ in refreshReference(); load() }
+        .onChange(of: store.ledger.settings) { _, _ in refreshReference(); load() }
         .onChange(of: focusedTarget) { old, id in
             if let old { persistGoal(old) }
-            guard id != nil else { return }
+            guard id != nil else { refreshReference(); load(); return }
             selected = []; multiSelecting = false
             DispatchQueue.main.async {
                 UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil)
@@ -120,41 +137,77 @@ struct CommitmentsView: View {
 
     private var allocationSummary: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text("Allocation").fontWeight(.semibold)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text("Balance").fontWeight(.semibold)
                     Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 32) }
                         .buttonStyle(.borderless).accessibilityLabel("About goals and category actions").accessibilityIdentifier("plan.help")
-                        .popover(isPresented: $showingHelp) {
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Goals & categories").font(.headline)
-                                    Text("Tap a goal to edit. Changes save automatically. Use 7 days copies measured time into a fixed goal. Other goals stay unchanged.")
-                                    Text("Edit goals on categories without children. Each parent goal automatically adds up its children’s goals. All percentages are shares of your total time; aim for 100% overall.")
-                                    Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children.")
-                                    Text("Direct time counts toward the parent’s actual time, without a separate goal. A parent can meet its goal while an individual child is below its goal.")
-                                    Text("Use 7 days copies measured leaf-category percentages. Direct and Uncategorized time stay unallocated; other goals are not redistributed.")
-                                    Text("Actuals use estimated sample periods. 7 days includes today and the six preceding dates; days with no logs are excluded. Uncategorized still counts toward the measured total.")
-                                    Text("Red is below goal, green is at goal at displayed precision, amber is above goal. pp means percentage points. These colors describe alignment, not whether an activity is good or bad.")
-                                }.font(.subheadline).padding()
-                            }.frame(width: 300, height: 350).presentationCompactAdaptation(.popover)
-                        }
+                        .popover(isPresented: $showingHelp) { goalHelp }
                     Spacer()
-                    Text(balance.map { "\(percent($0.total))% / 100%" } ?? "Check values")
+                    Picker("Display unit", selection: Binding(get: { displayUnit }, set: switchUnit)) {
+                        ForEach(AllocationDisplayUnit.allCases, id: \.self) { unit in Text(unit.label).tag(unit) }
+                    }.pickerStyle(.segmented).frame(width: 144).accessibilityIdentifier("plan.unit")
+                }
+                HStack {
+                    Text("Priority goals")
+                    Spacer()
+                    Text(capacity.map { amount($0.goalsPercentage) } ?? "Check values")
                         .fontWeight(.semibold).monospacedDigit().accessibilityIdentifier("plan.total")
                 }
-                if let balance {
-                    Text(abs(balance.total - 100) < 0.0000001 ? "100% allocated" : balance.total > 100 ? "\(percent(balance.total - 100))% over allocated" : "\(percent(100 - balance.total))% left to allocate")
-                        .font(.caption).foregroundStyle(balance.total > 100 ? Color.red : Color.secondary)
-                        .accessibilityIdentifier("plan.balance")
-
+                HStack {
+                    Text("Other activities").foregroundStyle(.secondary)
+                    Spacer()
+                    Text(capacity?.otherPercentage.map(amount) ?? "—")
+                        .monospacedDigit().accessibilityIdentifier("plan.capacity.other")
                 }
+                HStack {
+                    Text((capacity?.roomPercentage ?? 0) < -0.0000001 ? "Over by" : "Room left")
+                    Spacer()
+                    Text(capacity?.roomPercentage.map { amount(abs($0)) } ?? "—")
+                        .monospacedDigit().accessibilityIdentifier("plan.capacity.room")
+                }.foregroundStyle((capacity?.roomPercentage ?? 0) < -0.0000001 ? Color.red : Color.primary)
+                    .accessibilityIdentifier("plan.balance")
                 Button("Use last 7 days as goals", systemImage: "arrow.uturn.backward") { endGoalEditing(); copyingWeek = true }
                     .font(.subheadline).buttonStyle(.borderless)
-                    .disabled(!store.ledger.rollingAllocation().sufficient || !store.storageAvailable)
+                    .disabled(!reference.period.sufficient || !store.storageAvailable)
                     .accessibilityIdentifier("plan.copy-week")
-            }.padding(.vertical, 2)
+            }.font(.subheadline).padding(.vertical, 2)
         }
+    }
+
+    private var goalHelp: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Goals & categories").font(.headline)
+                Text("Choose % to compare balance or Time to judge hours. Each cell shows one unit. Time goals use decimal hours per day; today shows time so far and 7 days shows an average per recorded day.")
+                if let minutes = reference.averageDayMinutes {
+                    Text("Hours use an average recorded day of \(store.duration(minutes)), from \(reference.period.representedDays) of the previous seven completed dates. These are estimates from your logs, not a wake/sleep schedule. Missing days are excluded.")
+                } else {
+                    Text("A completed date with logs is needed to convert goals into hours. You can still edit percentages and see today’s time.")
+                }
+                Text("A goal stays a fixed percentage. Editing its hours equivalent converts it into that percentage; switching units never changes the saved goal. Hours equivalents can change as your recent recorded-day average changes.")
+                Text("Leave goals blank for activities you only want to observe. Priority goals plus the recent share of activities without their own goals gives an estimate of room left. Direct and Uncategorized time are included in other activities. This estimate does not require goals to total 100%.")
+                Text("Edit goals on categories without children. Each parent adds up its children’s goals. Direct time counts toward the parent’s actual time without a separate goal.")
+                Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children. Use 7 days copies measured shares into fixed goals.")
+                Text("Red is below goal, green is at goal, amber is above goal. In Time mode, today’s accumulated time is compared with the daily goal equivalent; in % mode, proportions are compared.")
+            }.font(.subheadline).padding()
+        }.frame(width: 300, height: 350).presentationCompactAdaptation(.popover)
+    }
+
+    private func amount(_ percentage: Double) -> String {
+        if displayUnit == .percent { return "\(percent(percentage))%" }
+        guard let minutes = reference.dailyMinutes(for: percentage) else { return "—" }
+        return store.duration(minutes).replacingOccurrences(of: " 0m", with: "")
+    }
+    private func switchUnit(_ next: AllocationDisplayUnit) {
+        guard next != displayUnit else { return }
+        endGoalEditing()
+        guard dirtyGoals.isEmpty else { return }
+        refreshReference(); displayUnit = next; load()
+    }
+    private func refreshReference() {
+        guard focusedTarget == nil, dirtyGoals.isEmpty else { return }
+        reference = store.ledger.completedAllocationReference()
     }
 
     private func categoryOutline(today: AllocationPeriod, week: AllocationPeriod) -> some View {
@@ -178,7 +231,7 @@ struct CommitmentsView: View {
             Text("Category").frame(maxWidth: .infinity, alignment: .leading)
             Text("Goal").frame(width: 52, alignment: .trailing)
             Text("Today").frame(width: 60, alignment: .trailing)
-            VStack(alignment: .trailing, spacing: 1) { Text("7 days"); Text("\(week.representedDays) of 7").accessibilityIdentifier("plan.coverage") }.frame(width: 60, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 1) { Text(displayUnit == .time ? "7d avg" : "7 days"); Text("\(week.representedDays) of 7").accessibilityIdentifier("plan.coverage") }.frame(width: 60, alignment: .trailing)
         }.font(.caption2).foregroundStyle(.secondary).textCase(nil)
             .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
     }
@@ -210,12 +263,12 @@ struct CommitmentsView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text("Today").font(.caption)
-                            AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target, compact: false)
+                            AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target, unit: displayUnit, reference: reference, compact: false).accessibilityIdentifier("plan.actual.today.\(item.id)")
                         }
                         Spacer()
                         VStack(alignment: .leading) {
-                            Text("7 days").font(.caption)
-                            AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target, compact: false)
+                            Text(displayUnit == .time ? "7-day average per day" : "7 days").font(.caption)
+                            AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target, unit: displayUnit, reference: reference, dailyAverage: true, compact: false).accessibilityIdentifier("plan.actual.week.\(item.id)")
                         }
                     }
                 }
@@ -224,8 +277,8 @@ struct CommitmentsView: View {
                     categoryName(item)
                     HStack(spacing: 4) {
                         goal(item)
-                        AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target)
-                        AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target)
+                        AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target, unit: displayUnit, reference: reference).accessibilityIdentifier("plan.actual.today.\(item.id)")
+                        AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target, unit: displayUnit, reference: reference, dailyAverage: true).accessibilityIdentifier("plan.actual.week.\(item.id)")
                     }
                 }
             }
@@ -264,23 +317,25 @@ struct CommitmentsView: View {
 
     @ViewBuilder private func goal(_ item: CategoryOutlineItem) -> some View {
         if !item.direct && !store.ledger.children(of: item.category.id).isEmpty {
-            Text(displayedGoals[item.category.id].map { "\(percent($0))%" } ?? "—")
-                .font(.subheadline.weight(.semibold)).monospacedDigit()
+            Text(displayedGoals[item.category.id].map(amount) ?? "—")
+                .font(.subheadline.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
                 .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
                 .frame(minHeight: 44)
-                .accessibilityLabel("\(item.category.name) calculated goal percent")
-                .accessibilityValue(displayedGoals[item.category.id].map(percent) ?? "No goal")
+                .accessibilityLabel("\(item.category.name) calculated goal \(displayUnit == .percent ? "percent" : "hours per day")")
+                .accessibilityValue(displayedGoals[item.category.id].flatMap { displayUnit == .percent ? percent($0) : reference.dailyMinutes(for: $0).map { percent($0 / 60) } } ?? "No goal")
                 .accessibilityHint("Sum of child goals. Expand to edit the children.")
                 .accessibilityIdentifier("categories.calculated-goal.\(item.category.id)")
         } else if !item.direct {
             HStack(spacing: 0) {
-                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) }))
+                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { if plan.text[item.category.id] != $0 { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) } }))
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .focused($focusedTarget, equals: item.category.id)
-                    .disabled(multiSelecting || !store.storageAvailable).allowsHitTesting(!multiSelecting)
-                    .accessibilityLabel("\(item.category.name) goal percent")
+                    .disabled(multiSelecting || !store.storageAvailable || (displayUnit == .time && reference.averageDayMinutes == nil)).allowsHitTesting(!multiSelecting)
+                    .accessibilityLabel("\(item.category.name) goal \(displayUnit == .percent ? "percent" : "hours per day")")
                     .accessibilityIdentifier("categories.target.\(item.category.id)")
-                Text("%").font(.caption2).foregroundStyle(.secondary)
+                if !(plan.text[item.category.id] ?? "").isEmpty || focusedTarget == item.category.id {
+                    Text(displayUnit == .percent ? "%" : "h").font(.caption2).foregroundStyle(.secondary)
+                }
             }.font(.subheadline).frame(width: typeSize.isAccessibilitySize ? 86 : 52).frame(minHeight: 44)
         } else {
             Text("—").font(.caption).foregroundStyle(.secondary)
@@ -293,7 +348,9 @@ struct CommitmentsView: View {
     private func load() {
         let known = Set(store.ledger.categories.filter { store.ledger.children(of: $0.id).isEmpty }.map(\.id))
         dirtyGoals.formIntersection(known)
-        var refreshed = AllocationPlanDraft(store.ledger.editableAllocationGoals())
+        let values = store.ledger.editableAllocationGoals()
+        let shown = displayUnit == .percent ? values : values.compactMapValues { reference.dailyMinutes(for: $0).map { $0 / 60 } }
+        var refreshed = AllocationPlanDraft(shown, maximumFractionDigits: 2)
         for id in dirtyGoals { refreshed.text[id] = plan.text[id] }
         plan = refreshed
     }
@@ -301,22 +358,27 @@ struct CommitmentsView: View {
         guard dirtyGoals.contains(id) else { return }
         let text = plan.text[id] ?? ""
         var field = AllocationPlanDraft([:]); field.text[id] = text
-        guard let values = field.values else { error = "Enter a percentage from 0 to 100 for \(store.categoryName(id))."; return }
+        guard let values = field.values else { error = "Enter a valid \(displayUnit == .percent ? "percentage" : "number of daily hours") for \(store.categoryName(id))."; return }
+        let percentage = values[id].flatMap { displayUnit == .percent ? $0 : reference.percentage(forDailyHours: $0) }
+        if values[id] != nil, (percentage == nil || percentage! > 100 + 0.0000001) {
+            error = displayUnit == .time ? "Enter hours up to the average recorded day (\(reference.averageDayMinutes.map(store.duration) ?? "no reference yet"))." : "Enter a percentage from 0 to 100."
+            return
+        }
         do {
-            try store.updateAllocationGoal(categoryID: id, percentage: values[id])
+            try store.updateAllocationGoal(categoryID: id, percentage: percentage.map { min(100, $0) })
             dirtyGoals.remove(id); error = nil; load()
         } catch { self.error = error.localizedDescription }
     }
     private func persistGoals() { for id in dirtyGoals.sorted() { persistGoal(id) } }
     private func endGoalEditing() { focusedTarget = nil; UIApplication.shared.dismissLedgerKeyboard(); persistGoals() }
     private func copyGoal(_ id: String) {
-        guard let value = store.ledger.goalPercentage(for: id, from: store.ledger.rollingAllocation()) else { return }
+        guard let value = store.ledger.goalPercentage(for: id, from: reference.period) else { return }
         dirtyGoals.remove(id)
         do { try store.updateAllocationGoal(categoryID: id, percentage: value); error = nil; load() }
         catch { self.error = error.localizedDescription }
     }
     private func copyAllGoals() {
-        guard let values = store.ledger.goalsFromAllocation(store.ledger.rollingAllocation()) else { return }
+        guard let values = store.ledger.goalsFromAllocation(reference.period) else { return }
         do { try store.saveAllocationGoals(values); dirtyGoals = []; error = nil; load() }
         catch { self.error = error.localizedDescription }
     }
@@ -345,7 +407,7 @@ struct CommitmentsView: View {
                 Spacer()
                 if let category = singleSelection, store.ledger.children(of: category.id).isEmpty {
                     Button("Use 7-day goal") { copyGoal(category.id); finishSelection() }
-                        .font(.caption).disabled(!store.ledger.rollingAllocation().sufficient)
+                        .font(.caption).disabled(!reference.period.sufficient)
                         .accessibilityIdentifier("plan.copy-selected-week")
                 }
             }
