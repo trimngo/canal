@@ -1673,7 +1673,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertFalse(app.staticTexts["Hold a category for actions."].exists)
         app.buttons["plan.copy-week"].tap(); app.sheets.buttons["Use last seven days"].tap()
-        XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
+        let copied = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "100% allocated"), object: element(app, "plan.balance"))
+        XCTAssertEqual(XCTWaiter.wait(for: [copied], timeout: 5), .completed)
         let musicValue = app.textFields["categories.target.music"].value as? String
         app.buttons["plan.children.work"].tap()
         XCTAssertFalse((app.textFields["categories.target.teaching"].value as? String ?? "").isEmpty)
@@ -1735,6 +1736,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["category-tag.social"].exists)
         app.buttons["keyboard.done"].firstMatch.tap()
         editInline("category-context.activity", adding: " categorized", in: app)
+        XCTAssertTrue(app.buttons["category-tag.work"].exists); XCTAssertTrue(app.buttons["category-tag.social"].exists)
         recordScreen("InboxSharedTagPicker", in: app)
         app.buttons["idea-categories.done"].tap()
         XCTAssertTrue(element(app, "inbox.details.a").label.contains("categorized"))

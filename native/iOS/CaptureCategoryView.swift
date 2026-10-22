@@ -6,18 +6,20 @@ struct CaptureCategoryButton: View {
     let capture: Capture
     let identifier: String
     @State private var showing = false
+    @State private var selection: [String] = []
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
     private var names: String { store.ledger.categoryIDs(for: current).map { store.ledger.categoryPath($0) }.joined(separator: " + ") }
     var body: some View {
         Button {
-            UIApplication.shared.dismissLedgerKeyboard(); showing = true
+            UIApplication.shared.dismissLedgerKeyboard()
+            selection = store.ledger.categoryIDs(for: current); showing = true
         } label: {
             Label(names.isEmpty ? "Categorize" : names, systemImage: "tag")
                 .font(.subheadline).lineLimit(2).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
         }.buttonStyle(.borderless).accessibilityIdentifier(identifier)
             .accessibilityLabel(names.isEmpty ? "Categorize idea" : "Categories: \(names)")
             .sheet(isPresented: $showing) {
-                CaptureCategoryView(capture: current, initialSelection: store.ledger.categoryIDs(for: current))
+                CaptureCategoryView(capture: current, selection: $selection)
             }
     }
 }
@@ -26,12 +28,9 @@ private struct CaptureCategoryView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     let capture: Capture
-    @State private var selection: [String]
+    @Binding var selection: [String]
     @State private var error: String?
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
-    init(capture: Capture, initialSelection: [String]) {
-        self.capture = capture; _selection = State(initialValue: initialSelection)
-    }
     var body: some View {
         NavigationStack {
             CategorySelectionList(selection: $selection, activity: current.text, timestamp: capture.createdAt,

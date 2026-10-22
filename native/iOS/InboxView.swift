@@ -306,12 +306,21 @@ private struct InlineCaptureNotes: View {
     @State private var expanded = false
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
     var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
-            InlineEntryText(text: current.notes ?? "", identifier: identifier, allowEmpty: true) { notes in
-                try store.updateCapture(capture, text: current.text, notes: notes)
-            }.padding(.vertical, 6)
-        } label: { Text("Notes").font(.caption).foregroundStyle(.secondary) }
-            .accessibilityIdentifier("\(identifier).expand")
+        VStack(alignment: .leading, spacing: 4) {
+            Button { expanded.toggle() } label: {
+                HStack {
+                    Text("Notes").font(.caption)
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2)
+                }.foregroundStyle(.secondary).frame(minHeight: 32).contentShape(Rectangle())
+            }.buttonStyle(.borderless).accessibilityIdentifier("\(identifier).expand")
+                .accessibilityLabel(expanded ? "Collapse notes" : "Expand notes")
+            if expanded {
+                InlineEntryText(text: current.notes ?? "", identifier: identifier, allowEmpty: true) { notes in
+                    try store.updateCapture(capture, text: current.text, notes: notes)
+                }.padding(.vertical, 6)
+            }
+        }.accessibilityElement(children: .contain)
     }
 }
 
