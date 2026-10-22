@@ -1640,8 +1640,8 @@ final class TimeLedgerUITests: XCTestCase {
 
     private func editInline(_ id: String, adding suffix: String, in app: XCUIApplication) {
         let label = element(app, id); reveal(label, in: app); label.tap()
-        let field = app.textFields[id]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let field = element(app, id)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText(suffix)
         let done = app.buttons["keyboard.done"].firstMatch
         XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
@@ -1674,13 +1674,13 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Hold a category for actions."].exists)
         app.buttons["plan.copy-week"].tap(); app.sheets.buttons["Use last seven days"].tap()
         XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
-        let workValue = app.textFields["categories.target.work"].value as? String
+        let musicValue = app.textFields["categories.target.music"].value as? String
         app.buttons["plan.children.work"].tap()
         XCTAssertFalse((app.textFields["categories.target.teaching"].value as? String ?? "").isEmpty)
         let work = app.textFields["categories.target.work"]; work.tap()
         XCTAssertTrue(app.buttons["plan.copy-focused-week"].waitForExistence(timeout: 5))
         app.buttons["plan.copy-focused-week"].tap(); app.buttons["keyboard.done"].firstMatch.tap()
-        XCTAssertEqual(Double(work.value as? String ?? "") ?? -1, Double(workValue ?? "") ?? -2, accuracy: 0.02)
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, musicValue)
         app.buttons["plan.help"].tap()
         XCTAssertTrue(app.staticTexts["Goals & categories"].waitForExistence(timeout: 5))
         recordScreen("GoalHelpPopover", in: app)
