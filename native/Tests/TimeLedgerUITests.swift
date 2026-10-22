@@ -1674,8 +1674,9 @@ final class TimeLedgerUITests: XCTestCase {
         switchGoalUnit("Time", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
         XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
-        app.buttons["plan.children.work"].tap()
-        XCTAssertEqual(app.textFields["categories.target.teaching"].value as? String, "4")
+        let expand = app.buttons["plan.children.work"]; reveal(expand, in: app); expand.tap()
+        let restored = app.textFields["categories.target.teaching"]; reveal(restored, in: app)
+        XCTAssertEqual(restored.value as? String, "4")
     }
 
     func testOptionalGoalsAndOtherActivitiesShowCapacityWithoutAllocating100() {
