@@ -151,7 +151,7 @@ struct CommitmentsView: View {
                     Rectangle().fill(segmentColor(segment, report: report))
                         .frame(width: proxy.size.width * segment.minutes / report.window.minutes)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(segment.id)
+                        .accessibilityLabel(segmentLabel(segment, report: report))
                         .accessibilityValue(store.duration(segment.minutes))
                         .accessibilityIdentifier("goals.day-segment.\(segment.id)")
                 }
@@ -178,6 +178,15 @@ struct CommitmentsView: View {
         case .elapsed: return elapsedColor
         case .other: return otherColor
         case .goal(let id): return report.commitments.first { $0.id == id }.map { color($0, in: report) } ?? .teal
+        }
+    }
+
+    private func segmentLabel(_ segment: GoalDayBarSegment, report: DailyGoalsReport) -> String {
+        switch segment.kind {
+        case .elapsed: return "Elapsed clock time"
+        case .other: return "Other remaining time"
+        case .goal(let id):
+            return "\(report.commitments.first { $0.id == id }?.category.name ?? "Goal") time still needed"
         }
     }
 
