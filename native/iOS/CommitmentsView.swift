@@ -166,7 +166,6 @@ struct CommitmentsView: View {
                     Text(capacity?.roomPercentage.map { amount(abs($0)) } ?? "—")
                         .monospacedDigit().accessibilityIdentifier("plan.capacity.room")
                 }.foregroundStyle((capacity?.roomPercentage ?? 0) < -0.0000001 ? Color.red : Color.primary)
-                    .accessibilityIdentifier("plan.balance")
                 Button("Use last 7 days as goals", systemImage: "arrow.uturn.backward") { endGoalEditing(); copyingWeek = true }
                     .font(.subheadline).buttonStyle(.borderless)
                     .disabled(!reference.period.sufficient || !store.storageAvailable)
@@ -229,7 +228,7 @@ struct CommitmentsView: View {
     private func columnHeadings(week: AllocationPeriod) -> some View {
         HStack(spacing: 4) {
             Text("Category").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Goal").frame(width: 52, alignment: .trailing)
+            Text(displayUnit == .time ? "Goal/day" : "Goal").frame(width: 52, alignment: .trailing)
             Text("Today").frame(width: 60, alignment: .trailing)
             VStack(alignment: .trailing, spacing: 1) { Text(displayUnit == .time ? "7d avg" : "7 days"); Text("\(week.representedDays) of 7").accessibilityIdentifier("plan.coverage") }.frame(width: 60, alignment: .trailing)
         }.font(.caption2).foregroundStyle(.secondary).textCase(nil)
