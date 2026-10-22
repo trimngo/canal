@@ -52,13 +52,33 @@ struct AllocationOutlineValue: View {
         case nil: return ""
         }
     }
+    private var feedbackSymbol: String? {
+        switch feedback {
+        case .below: return "arrow.up"
+        case .above: return "arrow.down"
+        case .aligned, nil: return nil
+        }
+    }
+    private var feedbackDirection: String {
+        switch feedback {
+        case .below: return "Up toward goal"
+        case .above: return "Down toward goal"
+        case .aligned, nil: return ""
+        }
+    }
     var body: some View {
-        Text(value).font(.subheadline.weight(.semibold)).monospacedDigit()
-            .lineLimit(1).minimumScaleFactor(0.8).foregroundStyle(feedbackColor)
+        HStack(spacing: 2) {
+            if let feedbackSymbol {
+                Image(systemName: feedbackSymbol).font(.system(size: compact ? 8 : 12, weight: .bold))
+                    .frame(width: compact ? 8 : 12).accessibilityHidden(true)
+            }
+            Text(value).lineLimit(1).minimumScaleFactor(0.7)
+        }.font(.subheadline.weight(.semibold)).monospacedDigit().foregroundStyle(feedbackColor)
             .frame(width: compact ? 60 : nil, alignment: .trailing)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(period.sufficient
                 ? "\(title): \(value)\(unit == .time && dailyAverage ? " per day" : "")\(feedbackLabel)"
                 : "\(title): insufficient data")
+            .accessibilityValue(feedbackDirection)
     }
 }
