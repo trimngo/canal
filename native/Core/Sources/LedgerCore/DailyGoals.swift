@@ -42,9 +42,9 @@ public struct DailyGoalsReport: Equatable, Sendable {
     public var neededMinutes: Double { commitments.reduce(0) { $0 + $1.remainingMinutes } }
     public var otherMinutes: Double { max(0, window.remainingMinutes - neededMinutes) }
     public var shortfallMinutes: Double { max(0, neededMinutes - window.remainingMinutes) }
-    /// Every row uses the same ruler, including parent totals. Fill is actual
+    /// Visible leaf goals use the same ruler. Fill is actual
     /// progress inside this target width, rather than a second normalized bar.
-    public var goalScaleMinutes: Double { goals.map(\.targetMinutes).max() ?? 0 }
+    public var goalScaleMinutes: Double { commitments.map(\.targetMinutes).max() ?? 0 }
     public func goalWidthFraction(_ goal: DailyGoalProgress) -> Double {
         goalScaleMinutes > 0 ? goal.targetMinutes / goalScaleMinutes : 0
     }
@@ -84,17 +84,19 @@ extension Ledger {
         // Deliberately no clippingTo: early/late entries still count. Keep the
         // existing midpoint/carry-forward and equal-share category accounting.
         let actual = allocation(on: now, now: now, calendar: calendar)
-        let goals = currentGoals(at: now)
+        let index = AllocationCategoryIndex(ledger: self)
+        let goals = index.goals(editableAllocationGoals(at: now))
+        let totals = index.totals(actual.directMinutes)
         var progress: [DailyGoalProgress] = []
         func append(_ category: LedgerCategory, depth: Int) {
-            let children = children(of: category.id)
+            let children = index.children(of: category.id)
             if let percentage = goals[category.id], percentage.isFinite, percentage >= 0 {
                 progress.append(DailyGoalProgress(category: category, targetMinutes: window.minutes * percentage / 100,
-                    actualMinutes: actual.total(for: category.id, ledger: self), depth: depth, isRollup: !children.isEmpty))
+                    actualMinutes: totals[category.id, default: 0], depth: depth, isRollup: !children.isEmpty))
             }
             for child in children { append(child, depth: depth + 1) }
         }
-        for root in children(of: nil) { append(root, depth: 0) }
+        for root in index.children(of: nil) { append(root, depth: 0) }
         return DailyGoalsReport(window: window, goals: progress,
                                 uncategorizedMinutes: actual.directMinutes["uncategorized", default: 0])
     }

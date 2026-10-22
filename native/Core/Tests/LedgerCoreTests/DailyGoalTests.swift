@@ -170,6 +170,19 @@ final class DailyGoalTests: XCTestCase {
         XCTAssertEqual(music.targetMinutes, 90)
     }
 
+    func testVisibleLeafGoalsSetTheBarScaleWithoutParentTotals() throws {
+        var ledger = try fixture()
+        var admin = LedgerCategory(id: "admin", name: "Administration"); admin.parentID = "work"
+        ledger.categories.append(admin)
+        try ledger.saveAllocationGoals(["music": 10, "teaching": 20, "admin": 15], effectiveAt: date("2026-01-01T00:00:00Z"), writer: "test")
+        let report = try XCTUnwrap(ledger.dailyGoals(now: date("2026-10-22T17:30:00+02:00"), calendar: calendar))
+        XCTAssertEqual(Set(report.commitments.map(\.id)), ["music", "teaching", "admin"])
+        XCTAssertEqual(report.goals.first { $0.id == "work" }?.targetMinutes, 315)
+        XCTAssertEqual(report.goalScaleMinutes, 180)
+        XCTAssertEqual(report.neededMinutes, 405)
+        XCTAssertEqual(report.goalWidthFraction(try XCTUnwrap(report.commitments.first { $0.id == "teaching" })), 1)
+    }
+
     func testWholeDayBarIncludesElapsedGoalsAndOtherWithoutChangingScale() throws {
         var ledger = try fixture()
         let now = date("2026-10-22T17:30:00+02:00")

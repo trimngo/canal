@@ -25,6 +25,15 @@ struct GoalEditorView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var plan = AllocationPlanDraft([:])
     @State private var reference = AllocationReference()
+    @State private var latestReference = AllocationReference()
+    @State private var categoryIndex = AllocationCategoryIndex()
+    @State private var today = AllocationPeriod()
+    @State private var todayTotals: [String: Double] = [:]
+    @State private var weekTotals: [String: Double] = [:]
+    @State private var savedGoals: [String: Double] = [:]
+    @State private var reportRevision = UUID()
+    @State private var clockStart = Date()
+    @State private var reportsLoading = true
     @AppStorage("goals.display-unit") private var displayUnit = AllocationDisplayUnit.percent
     // Keep the existing preference key so upgrades preserve the filter choice.
     @AppStorage("commitments.hide-zero-time") private var hideBlankGoals = true
@@ -44,7 +53,7 @@ struct GoalEditorView: View {
     @State private var error: String?
     @FocusState private var focusedTarget: String?
 
-    private var roots: [LedgerCategory] { store.ledger.children(of: nil) }
+    private var roots: [LedgerCategory] { categoryIndex.children(of: nil) }
     private var selecting: Bool { multiSelecting || !selected.isEmpty }
     private var percentageGoals: [String: Double]? {
         guard let values = plan.values else { return nil }
@@ -57,14 +66,14 @@ struct GoalEditorView: View {
         }
         return result
     }
-    private var displayedGoals: [String: Double] { percentageGoals.map { store.ledger.calculatedAllocationGoals($0) } ?? store.ledger.currentGoals() }
+    private var displayedGoals: [String: Double] { percentageGoals.map { categoryIndex.goals($0) } ?? savedGoals }
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { context in
-            let today = store.ledger.allocation(on: context.date, now: context.date)
-            let week = reference.period
-            planList(today: today, week: week)
-                .onChange(of: store.ledger.reportingDay(containing: context.date)) { _, _ in refreshReference(); load() }
+        TimelineView(.periodic(from: clockStart, by: 60)) { context in
+            // Draft edits invalidate this view. They must not rescan log history.
+            let goals = displayedGoals
+            planList(today: today, week: reference.period, goals: goals)
+                .onChange(of: Int(context.date.timeIntervalSince1970 / 60)) { _, _ in reportRevision = UUID() }
         }
         .navigationTitle("Edit goals").navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -86,14 +95,24 @@ struct GoalEditorView: View {
         .safeAreaInset(edge: .bottom) {
             if selecting { selectionActions.padding(.horizontal, 8).padding(.vertical, 6).background(.bar) }
         }
-        .onAppear { if !loaded { refreshReference(); load(); loaded = true } }
+        .onAppear {
+            if !loaded {
+                categoryIndex = AllocationCategoryIndex(ledger: store.ledger)
+                latestReference.goalDayMinutes = store.ledger.goalDayWindow()?.minutes
+                refreshReference(); load(); loaded = true
+            }
+        }
+        .task(id: reportRevision) { await prepareReports() }
         .onChange(of: store.ledger.currentBudget()?.id) { _, _ in load() }
         .onChange(of: store.ledger.categories) { _, categories in
-            selected.formIntersection(categories.map(\.id)); refreshReference(); load()
+            categoryIndex = AllocationCategoryIndex(ledger: store.ledger)
+            todayTotals = categoryIndex.totals(today.directMinutes)
+            weekTotals = categoryIndex.totals(reference.period.directMinutes)
+            selected.formIntersection(categories.map(\.id)); load(); reportRevision = UUID()
         }
-        .onChange(of: store.ledger.entries) { _, _ in refreshReference(); load() }
-        .onChange(of: store.ledger.logDeletions) { _, _ in refreshReference(); load() }
-        .onChange(of: store.ledger.settings) { _, _ in refreshReference(); load() }
+        .onChange(of: store.ledger.entries) { _, _ in reportRevision = UUID() }
+        .onChange(of: store.ledger.logDeletions) { _, _ in reportRevision = UUID() }
+        .onChange(of: store.ledger.settings) { _, _ in reportRevision = UUID() }
         .onChange(of: focusedTarget) { old, id in
             if let old { persistGoal(old) }
             guard id != nil else { refreshReference(); load(); return }
@@ -130,9 +149,10 @@ struct GoalEditorView: View {
 
     }
 
-    private func planList(today: AllocationPeriod, week: AllocationPeriod) -> some View {
+    private func planList(today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> some View {
         List {
-            categoryOutline(today: today, week: week)
+            categoryOutline(today: today, week: week, goals: goals)
+            if reportsLoading { ProgressView("Updating time totals…").accessibilityIdentifier("plan.loading") }
             CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
         }.listStyle(.plain).listSectionSpacing(0)
@@ -195,13 +215,27 @@ struct GoalEditorView: View {
     }
     private func refreshReference() {
         guard focusedTarget == nil, dirtyGoals.isEmpty else { return }
-        reference = store.ledger.goalAllocationReference()
+        reference = latestReference
+        weekTotals = categoryIndex.totals(reference.period.directMinutes)
     }
 
-    private func categoryOutline(today: AllocationPeriod, week: AllocationPeriod) -> some View {
+    private func prepareReports() async {
+        let ledger = store.ledger, now = Date(), revision = reportRevision
+        let work = Task.detached(priority: .userInitiated) {
+            (ledger.allocation(on: now, now: now), ledger.goalAllocationReference(now: now))
+        }
+        let result = await withTaskCancellationHandler(operation: { await work.value }, onCancel: { work.cancel() })
+        guard !Task.isCancelled, revision == reportRevision else { return }
+        today = result.0
+        todayTotals = categoryIndex.totals(result.0.directMinutes)
+        latestReference = result.1
+        refreshReference(); load(); reportsLoading = false
+    }
+
+    private func categoryOutline(today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> some View {
         Section {
-            ForEach(outline(today: today, week: week)) { item in
-                categoryRow(item, today: today, week: week)
+            ForEach(outline(today: today, week: week, goals: goals)) { item in
+                categoryRow(item, today: today, week: week, goals: goals)
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowBackground(SelectionRowBackground(selected: !item.direct && selected.contains(item.category.id)))
             }
@@ -272,20 +306,23 @@ struct GoalEditorView: View {
         else { sortColumn = column; sortDescending = column != .category }
     }
 
-    private func outline(today: AllocationPeriod, week: AllocationPeriod) -> [CategoryOutlineItem] {
-        var retainedGoals = displayedGoals
+    private func outline(today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> [CategoryOutlineItem] {
+        var retainedGoals = goals
         for id in dirtyGoals { retainedGoals[id] = 0 }
-        let visible = store.ledger.activeCategoryIDs(in: [], includingGoals: retainedGoals)
-        let savedGoals = store.ledger.currentGoals()
+        var visible = Set(retainedGoals.keys)
+        for id in dirtyGoals {
+            var node = id
+            while let parent = categoryIndex.parents[node] { visible.insert(parent); node = parent }
+        }
         func sorted(_ categories: [LedgerCategory]) -> [LedgerCategory] {
-            store.ledger.sortedAllocationCategories(categories, by: sortColumn, descending: sortDescending,
-                                                    goals: savedGoals, today: today, week: week)
+            categoryIndex.sorted(categories, by: sortColumn, descending: sortDescending, goals: savedGoals,
+                                 todayTotals: today.sufficient ? todayTotals : nil, weekTotals: week.sufficient ? weekTotals : nil)
         }
         var result: [CategoryOutlineItem] = []
         func append(_ category: LedgerCategory, depth: Int) {
             guard !hideBlankGoals || visible.contains(category.id) else { return }
             result.append(CategoryOutlineItem(category: category, depth: depth))
-            let children = store.ledger.children(of: category.id)
+            let children = categoryIndex.children(of: category.id)
             guard expanded.contains(category.id), !children.isEmpty else { return }
             if !hideBlankGoals && (today.directMinutes[category.id, default: 0] > 0 || week.directMinutes[category.id, default: 0] > 0) {
                 result.append(CategoryOutlineItem(category: category, depth: depth + 1, direct: true))
@@ -296,15 +333,15 @@ struct GoalEditorView: View {
         return result
     }
 
-    private func categoryRow(_ item: CategoryOutlineItem, today: AllocationPeriod, week: AllocationPeriod) -> some View {
+    private func categoryRow(_ item: CategoryOutlineItem, today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> some View {
         let category = item.category
-        let target = item.direct ? nil : displayedGoals[category.id]
-        let todayMinutes = item.direct ? today.directMinutes[category.id, default: 0] : today.total(for: category.id, ledger: store.ledger)
-        let weekMinutes = item.direct ? week.directMinutes[category.id, default: 0] : week.total(for: category.id, ledger: store.ledger)
+        let target = item.direct ? nil : goals[category.id]
+        let todayMinutes = item.direct ? today.directMinutes[category.id, default: 0] : todayTotals[category.id, default: 0]
+        let weekMinutes = item.direct ? week.directMinutes[category.id, default: 0] : weekTotals[category.id, default: 0]
         return Group {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) { categoryName(item); goal(item) }
+                    HStack(spacing: 4) { categoryName(item); goal(item, goals: goals) }
                     HStack {
                         VStack(alignment: .leading) {
                             Text("Today").font(.caption)
@@ -321,7 +358,7 @@ struct GoalEditorView: View {
                 HStack(spacing: 4) {
                     categoryName(item)
                     HStack(spacing: 4) {
-                        goal(item)
+                        goal(item, goals: goals)
                         AllocationOutlineValue(title: "Today", period: today, minutes: todayMinutes, target: target, unit: displayUnit, reference: reference).accessibilityIdentifier("plan.actual.today.\(item.id)")
                         AllocationOutlineValue(title: "7 days", period: week, minutes: weekMinutes, target: target, unit: displayUnit, reference: reference, dailyAverage: true).accessibilityIdentifier("plan.actual.week.\(item.id)")
                     }
@@ -334,7 +371,7 @@ struct GoalEditorView: View {
 
     private func categoryName(_ item: CategoryOutlineItem) -> some View {
         let category = item.category
-        let hasChildren = !item.direct && !store.ledger.children(of: category.id).isEmpty
+        let hasChildren = !item.direct && !categoryIndex.children(of: category.id).isEmpty
         return HStack(spacing: 0) {
             if hasChildren {
                 Button { toggleExpanded(category.id) } label: {
@@ -360,14 +397,14 @@ struct GoalEditorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder private func goal(_ item: CategoryOutlineItem) -> some View {
-        if !item.direct && !store.ledger.children(of: item.category.id).isEmpty {
-            Text(displayedGoals[item.category.id].map(amount) ?? "—")
+    @ViewBuilder private func goal(_ item: CategoryOutlineItem, goals: [String: Double]) -> some View {
+        if !item.direct && !categoryIndex.children(of: item.category.id).isEmpty {
+            Text(goals[item.category.id].map(amount) ?? "—")
                 .font(.subheadline.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
                 .frame(width: typeSize.isAccessibilitySize ? 86 : 52, alignment: .trailing)
                 .frame(minHeight: 44)
                 .accessibilityLabel("\(item.category.name) calculated goal \(displayUnit == .percent ? "percent" : "hours per day")")
-                .accessibilityValue(displayedGoals[item.category.id].flatMap { displayUnit == .percent ? percent($0) : reference.dailyMinutes(for: $0).map { percent($0 / 60) } } ?? "No goal")
+                .accessibilityValue(goals[item.category.id].flatMap { displayUnit == .percent ? percent($0) : reference.dailyMinutes(for: $0).map { percent($0 / 60) } } ?? "No goal")
                 .accessibilityHint("Sum of child goals. Expand to edit the children.")
                 .accessibilityIdentifier("categories.calculated-goal.\(item.category.id)")
         } else if !item.direct {
@@ -391,9 +428,10 @@ struct GoalEditorView: View {
     }
     private func percent(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...2))) }
     private func load() {
-        let known = Set(store.ledger.categories.filter { store.ledger.children(of: $0.id).isEmpty }.map(\.id))
+        let known = categoryIndex.leafIDs
         dirtyGoals.formIntersection(known)
         let values = store.ledger.editableAllocationGoals()
+        savedGoals = categoryIndex.goals(values)
         let shown = displayUnit == .percent ? values : values.compactMapValues { reference.dailyMinutes(for: $0).map { $0 / 60 } }
         var refreshed = AllocationPlanDraft(shown, maximumFractionDigits: 2)
         for id in dirtyGoals { refreshed.text[id] = plan.text[id] }
@@ -445,7 +483,7 @@ struct GoalEditorView: View {
             HStack {
                 Text(selected.isEmpty ? "Tap categories to select" : "\(selected.count) selected").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                if let category = singleSelection, store.ledger.children(of: category.id).isEmpty {
+                if let category = singleSelection, categoryIndex.children(of: category.id).isEmpty {
                     Button("Use 7-day goal") { copyGoal(category.id); finishSelection() }
                         .font(.caption).disabled(!reference.period.sufficient)
                         .accessibilityIdentifier("plan.copy-selected-week")
@@ -453,7 +491,7 @@ struct GoalEditorView: View {
             }
             HStack(spacing: 0) {
                 if let category = singleSelection {
-                    actionButton("Rename", icon: "pencil", id: "plan.rename") { actionRequest = .name(category, parent: store.ledger.categoryParents[category.id]) }
+                    actionButton("Rename", icon: "pencil", id: "plan.rename") { actionRequest = .name(category, parent: categoryIndex.parents[category.id]) }
                     actionButton("Add child", icon: "plus", id: "plan.create-child") { actionRequest = .name(nil, parent: category.id) }
                     actionButton("Logs", icon: "list.bullet", id: "plan.view-logs") { actionRequest = .logs(category) }
                 }

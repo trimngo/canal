@@ -18,7 +18,7 @@ struct CommitmentsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
                         timeLeft(report)
-                        if report.goals.isEmpty {
+                        if report.commitments.isEmpty {
                             ContentUnavailableView {
                                 Label("What do you want time for?", systemImage: "clock")
                             } description: {
@@ -28,7 +28,7 @@ struct CommitmentsView: View {
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 22) {
-                                ForEach(report.goals) { goal in goalRow(goal, report: report) }
+                                ForEach(report.commitments) { goal in goalRow(goal, report: report) }
                             }
                         }
                         if report.uncategorizedMinutes > 0 {
@@ -105,7 +105,7 @@ struct CommitmentsView: View {
                         ScrollView { VStack(alignment: .leading, spacing: 12) {
                             Text("Time left today").font(.headline)
                             Text("The upper bar is the entire configured day. Dark gray is elapsed clock time. The Now marker separates elapsed from remaining time. Colored sections after Now are time still needed for goals; light gray is left for other activities. These amounts are not an activity schedule or calendar availability.")
-                            Text("Every category with a goal stays listed, including goals already met and 0% goals. Parent totals include their children and Direct time. Parent totals are not added again to the day bar.")
+                            Text("Categories with their own goals stay listed, including goals already met and 0% goals. Parent totals are available in Edit goals and are not counted again here.")
                             Text("Goal bar lengths share one scale: a two-hour goal is twice as long as a one-hour goal. Filled color is logged progress inside that goal. Tap a row for its logged and target times. If goals do not fit, their colored time stops at the day’s end and the shortfall shows the extra time needed.")
                             Text("Daily goal hours are your fixed percentages of this window. All of today’s logs count, including outside it. Unrecorded or uncategorized activity can make progress look lower.")
                             Text("Changing the shared window also changes check-in hours when All day notifications are off. It never blocks logging.")
@@ -195,9 +195,8 @@ struct CommitmentsView: View {
             HStack(alignment: .firstTextBaseline) {
                 HStack(spacing: 8) {
                     Circle().fill(color(goal, in: report)).frame(width: 8, height: 8).accessibilityHidden(true)
-                    Text(goal.category.name).font(goal.isRollup ? .headline : .body.weight(.medium))
-                    if goal.isRollup { Text("Total").font(.caption2).foregroundStyle(.secondary) }
-                }.padding(.leading, CGFloat(goal.depth) * 14)
+                    Text(goal.category.name).font(.body.weight(.medium))
+                }
                 Spacer(minLength: 12)
                 Text(goal.isMet ? "Met" : "\(store.duration(goal.remainingMinutes)) left")
                     .font(.subheadline.weight(.medium)).monospacedDigit()
@@ -205,7 +204,7 @@ struct CommitmentsView: View {
                 .onTapGesture { toggleDetail(goal.id) }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(goal.category.name)
-                .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today. \(goal.isMet ? "Goal met" : "\(store.duration(goal.remainingMinutes)) remaining")\(goal.isRollup ? "; parent total" : "")")
+                .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today. \(goal.isMet ? "Goal met" : "\(store.duration(goal.remainingMinutes)) remaining")")
                 .accessibilityHint("Tap to show or hide logged and goal times")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { toggleDetail(goal.id) }

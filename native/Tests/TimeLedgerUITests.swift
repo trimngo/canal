@@ -1676,23 +1676,23 @@ final class TimeLedgerUITests: XCTestCase {
         let music = element(app, "goals.progress.music")
         XCTAssertEqual(music.value as? String, "1h 0m of 3h 0m today. 2h 0m remaining")
         XCTAssertTrue(element(app, "goals.progress.teaching").exists)
-        XCTAssertTrue(element(app, "goals.progress.work").exists)
+        XCTAssertFalse(element(app, "goals.progress.work").exists)
         XCTAssertFalse(element(app, "goals.progress.food").exists)
         XCTAssertFalse(app.segmentedControls["plan.unit"].exists)
         XCTAssertFalse(app.buttons["plan.sort.today"].exists)
         recordScreen("DailyGoalsTimeAndProgress", in: app)
     }
 
-    func testGoalBarsShareOneScaleAndParentAndZeroGoalsStayListed() {
+    func testGoalBarsShareOneScaleWithoutParentTotals() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-proportional"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
         let music = element(app, "goals.target-bar.music"), teaching = element(app, "goals.target-bar.teaching")
         XCTAssertTrue(music.waitForExistence(timeout: 5)); XCTAssertTrue(teaching.exists)
         XCTAssertEqual(teaching.frame.width, music.frame.width * 2, accuracy: 2)
-        XCTAssertTrue((element(app, "goals.progress.work").value as? String ?? "").contains("parent total"))
+        XCTAssertFalse(element(app, "goals.progress.work").exists)
         XCTAssertTrue(element(app, "goals.progress.food").exists)
         XCTAssertEqual(element(app, "goals.needed").label, "1h 30m left across your goals")
-        recordScreen("ProportionalGoalBarsAndParents", in: app)
+        recordScreen("ProportionalLeafGoalBars", in: app)
     }
 
     func testDayBarShowsElapsedAndRemainingOnTheWholeWindowScale() {
@@ -1713,11 +1713,12 @@ final class TimeLedgerUITests: XCTestCase {
     func testCompletedGoalsRemainVisibleWithoutOpeningAnotherSection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-completed"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
-        for id in ["music", "teaching", "food", "work"] {
+        for id in ["music", "teaching", "food"] {
             let row = element(app, "goals.progress.\(id)")
             XCTAssertTrue(row.waitForExistence(timeout: 5))
             XCTAssertTrue((row.value as? String ?? "").contains("Goal met"))
         }
+        XCTAssertFalse(element(app, "goals.progress.work").exists)
         XCTAssertFalse(element(app, "goals.met").exists)
         XCTAssertEqual(element(app, "goals.needed").label, "0m left across your goals")
         XCTAssertTrue(element(app, "goals.day-segment.other").exists)
@@ -1763,6 +1764,26 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(music.value as? String, "1h 0m of 4h 30m today. 3h 30m remaining")
         XCTAssertEqual(element(app, "goals.needed").label, "4h 30m left across your goals")
         recordScreen("DailyGoalsAfterEditing", in: app)
+    }
+
+    func testGoalEditorEditsWithLargeHistoryAndKeepsParentTotals() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-large-editor"]; app.launch()
+        openGoalEditor(in: app)
+        setPlanNumber("categories.target.music", to: "27.5", in: app)
+        let arrow = app.buttons["plan.children.work"]
+        reveal(arrow, in: app)
+        if arrow.label.hasPrefix("Expand ") { arrow.tap() }
+        setPlanNumber("categories.target.teaching", to: "32.5", in: app)
+        XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "32.5")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "27.5")
+        recordScreen("GoalEditorWithLargeHistory", in: app)
+        app.buttons["Close"].tap()
+        XCTAssertFalse(element(app, "goals.progress.work").exists)
+        app.terminate(); app.launchArguments = []; app.launch()
+        openGoalEditor(in: app)
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "27.5")
+        let parent = element(app, "categories.calculated-goal.work"); reveal(parent, in: app)
+        XCTAssertEqual(parent.value as? String, "32.5")
     }
 
     func testDailyGoalsWithoutHistoryUsesConfiguredWindowForGoalEditing() {

@@ -72,6 +72,25 @@ final class LedgerStore: ObservableObject {
                 else if args.contains("--ui-daily-goals-completed") { goals = ["music": 5, "teaching": 10, "food": 0] }
                 else { goals = ["music": 20, "teaching": 20] }
                 try fixture.saveAllocationGoals(goals, effectiveAt: day.addingTimeInterval(-86400), writer: "fixture")
+                if args.contains("--ui-daily-goals-large-editor") {
+                    for group in 0..<10 {
+                        let parent = "area-\(group)"
+                        fixture.categories.append(LedgerCategory(id: parent, name: "Area \(group)"))
+                        for item in 0..<10 {
+                            var category = LedgerCategory(id: "detail-\(group)-\(item)", name: "Activity \(group)-\(item)")
+                            category.parentID = parent
+                            fixture.categories.append(category)
+                        }
+                    }
+                    for offset in -7...0 {
+                        for sample in 0..<72 {
+                            let id = "detail-\(sample / 10)-\(sample % 10)"
+                            fixture.entries.append(CheckIn(end: day.addingTimeInterval(Double(offset * 86400 + (7 * 60 + sample * 12) * 60)),
+                                activity: "History observation \(sample)", categoryID: id, revision: Revision(counter: Int64(fixture.entries.count + 1), writer: "fixture"),
+                                sampleID: "history-\(offset)-\(sample)", categoryAssignment: .manual))
+                        }
+                    }
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {

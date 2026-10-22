@@ -21,18 +21,39 @@ extension Ledger {
             }
             if let value, value.isFinite { values[category.id] = value }
         }
-        return categories.sorted { lhs, rhs in
-            if column != .category {
-                let a = values[lhs.id], b = values[rhs.id]
-                // A blank goal is always last; an explicit zero is a value.
-                if (a == nil) != (b == nil) { return a != nil }
-                if let a, let b, a != b { return descending ? a > b : a < b }
-            }
-            let names = lhs.name.localizedStandardCompare(rhs.name)
-            if names != .orderedSame {
-                return column == .category && descending ? names == .orderedDescending : names == .orderedAscending
-            }
-            return lhs.id < rhs.id
+        return sortAllocationCategories(categories, by: column, descending: descending, values: values)
+    }
+}
+
+extension AllocationCategoryIndex {
+    /// The editor has already aggregated these columns once for all rows.
+    public func sorted(_ categories: [LedgerCategory], by column: AllocationSortColumn, descending: Bool,
+                       goals: [String: Double], todayTotals: [String: Double]?, weekTotals: [String: Double]?) -> [LedgerCategory] {
+        let values: [String: Double]
+        switch column {
+        case .category: values = [:]
+        case .goal: values = goals
+        case .today: values = todayTotals.map { totals in Dictionary(uniqueKeysWithValues: categories.map { ($0.id, totals[$0.id, default: 0]) }) } ?? [:]
+        case .week: values = weekTotals.map { totals in Dictionary(uniqueKeysWithValues: categories.map { ($0.id, totals[$0.id, default: 0]) }) } ?? [:]
         }
+        return sortAllocationCategories(categories, by: column, descending: descending, values: values)
+    }
+}
+
+private func sortAllocationCategories(_ categories: [LedgerCategory], by column: AllocationSortColumn, descending: Bool,
+                                      values: [String: Double]) -> [LedgerCategory] {
+    let values = values.filter { $0.value.isFinite }
+    return categories.sorted { lhs, rhs in
+        if column != .category {
+            let a = values[lhs.id], b = values[rhs.id]
+            // A blank goal is always last; an explicit zero is a value.
+            if (a == nil) != (b == nil) { return a != nil }
+            if let a, let b, a != b { return descending ? a > b : a < b }
+        }
+        let names = lhs.name.localizedStandardCompare(rhs.name)
+        if names != .orderedSame {
+            return column == .category && descending ? names == .orderedDescending : names == .orderedAscending
+        }
+        return lhs.id < rhs.id
     }
 }
