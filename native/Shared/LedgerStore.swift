@@ -50,6 +50,26 @@ final class LedgerStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
+                defaults.removeObject(forKey: "goals.display-unit")
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"),
+                                      LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "food", name: "Eating")]
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                fixture.settings.reportingTimeZoneIdentifier = "UTC"
+                fixture.settings.inferenceMethod = .carryForward
+                fixture.settings.use24HourTime = true
+                fixture.settings.notificationsAllDay = true
+                let stamp = ISO8601DateFormatter(), day = stamp.date(from: "2026-10-22T00:00:00Z")!
+                let now = stamp.date(from: "2026-10-22T17:30:00Z")!
+                for (minute, id) in [(427.5, "music"), (480.0, "teaching"), (600.0, "food"), (1042.5, "food")] {
+                    try fixture.saveSample(at: day.addingTimeInterval(minute * 60), activity: "\(id) observation", categoryIDs: [id], writer: "fixture", now: now)
+                }
+                let goals = ProcessInfo.processInfo.arguments.contains("--ui-daily-goals-overflow")
+                    ? ["music": 50.0, "teaching": 50.0] : ["music": 20.0, "teaching": 20.0]
+                try fixture.saveAllocationGoals(goals, effectiveAt: day.addingTimeInterval(-86400), writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
                 defaults.removeObject(forKey: "dashboard.hide-zero-time")
                 defaults.removeObject(forKey: "commitments.hide-zero-time")

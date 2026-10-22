@@ -83,7 +83,15 @@ final class TimeLedgerUITests: XCTestCase {
         return target
     }
 
+    private func openGoalEditor(in app: XCUIApplication) {
+        app.tabBars.buttons["Commitments"].tap()
+        let edit = app.buttons["goals.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+        XCTAssertTrue(app.segmentedControls["plan.unit"].waitForExistence(timeout: 5))
+    }
+
     private func openLogs(_ app: XCUIApplication) {
+        if app.navigationBars["Edit goals"].exists { app.buttons["Close"].tap() }
         app.tabBars.buttons["Log"].tap()
         let logs = element(app, "today.logs"); reveal(logs, in: app); logs.tap()
     }
@@ -872,12 +880,12 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testTargetsAreAccessibleAndPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertFalse(app.buttons["categories.save-targets"].exists)
         setPlanNumber("categories.target.teaching", to: "90", in: app)
         setPlanNumber("categories.target.teaching", to: "80", in: app)
         setPlanNumber("categories.target.teaching", to: "85", in: app)
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openGoalEditor(in: app)
         XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "85")
         XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "15")
     }
@@ -900,7 +908,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCompactCommitmentsKeepsGoalsAndActivityLogs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-commitments-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertTrue(app.segmentedControls["plan.unit"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Weekly minimum"].exists)
         XCTAssertFalse(app.buttons["plan.remaining.work"].exists)
@@ -916,7 +924,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testBulkGroupingIntoExistingParentPreviewsGoalsAndCanUndo() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
         XCTAssertTrue(app.textFields["categories.target.music"].exists)
         XCTAssertFalse(app.navigationBars["Categories"].exists)
@@ -938,7 +946,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testBulkGroupingCreatesParentAndPersistsWithoutLosingLogs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
         recordScreen("DirectCategorySelection", in: app)
         app.buttons["plan.group-selected"].tap()
@@ -950,7 +958,7 @@ final class TimeLedgerUITests: XCTestCase {
         let goal = app.staticTexts["Personal projects calculated goal percent"]; reveal(goal, in: app)
         XCTAssertEqual(goal.value as? String, "25")
         recordScreen("GroupedLifeAreas", in: app)
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openGoalEditor(in: app)
         reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "25")
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Guitar practice"].waitForExistence(timeout: 5))
@@ -958,7 +966,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCommitmentsShowsAllRootCategoriesAndExpandsWithoutChangingSelection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertTrue(app.segmentedControls["plan.unit"].waitForExistence(timeout: 5))
         app.buttons["plan.hide-blank-goals"].tap()
         XCTAssertFalse(app.buttons["plan.add-area"].exists)
@@ -983,7 +991,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testCompactOutlineExpandsChildrenWithoutOpeningLogs() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         app.buttons["plan.hide-blank-goals"].tap()
         XCTAssertTrue(app.segmentedControls["plan.unit"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["categories.save-targets"].exists)
@@ -1000,7 +1008,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(element(app, "categories.calculated-goal.music").exists)
         // Leaf names and totals have no navigation action.
         guitar.tap()
-        XCTAssertTrue(app.navigationBars["Commitments"].exists)
+        XCTAssertTrue(app.navigationBars["Edit goals"].exists)
         XCTAssertFalse(app.buttons["group.done"].exists)
         recordScreen("CompactNestedOutline", in: app)
         reveal(music, in: app); music.tap()
@@ -1014,7 +1022,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testGroupingProtectsUnsavedGoalsAndCancelKeepsSelection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         setPlanNumber("categories.target.teaching", to: "35", in: app)
         selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
         app.buttons["plan.group-selected"].tap()
@@ -1027,7 +1035,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testGroupingCanSaveACompleteDraftBeforePreviewingMove() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-life-area-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         setPlanNumber("categories.target.teaching", to: "35", in: app)
         setPlanNumber("categories.target.music", to: "10", in: app)
         selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
@@ -1203,7 +1211,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCategoryActionsCreateChildFirstThenMoveSelectedLogs() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertFalse(app.buttons["plan.manage-categories"].exists)
         XCTAssertFalse(app.buttons["plan.select.work"].exists)
         selectPlanCategory("work", in: app)
@@ -1230,13 +1238,13 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
         app.buttons["group.done"].tap()
         XCUIDevice.shared.press(.home); app.activate()
-        XCTAssertTrue(app.navigationBars["Commitments"].exists)
+        XCTAssertTrue(app.navigationBars["Edit goals"].exists)
         recordScreen("CategoryOutlineAfterMove", in: app)
     }
 
     func testSelectingCategoriesAtAnyDepthOffersOnlyMoveForMultiple() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         app.buttons["plan.hide-blank-goals"].tap()
         let arrow = app.buttons["plan.children.work"]; reveal(arrow, in: app); arrow.tap()
         selectPlanCategory("work", in: app); selectPlanCategory("teaching", in: app)
@@ -1249,7 +1257,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCategoryRenameAndDeleteKeepLogsAndPromoteChildren() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); selectPlanCategory("work", in: app)
+        openGoalEditor(in: app); selectPlanCategory("work", in: app)
         app.buttons["plan.rename"].tap()
         let name = app.textFields["category-name.field"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap(); name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 20)); name.typeText("Responsibilities")
@@ -1656,29 +1664,102 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.buttons[label].tap()
     }
 
-    func testGoalDirectionArrowsUseExistingFeedbackInBothColumnsAndUnits() {
-        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+    func testDailyGoalsShowsTimeRemainingAndMatchingProgressWithoutTable() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
+        XCTAssertEqual(element(app, "goals.time-left").label, "4h 30m left today")
+        XCTAssertEqual(element(app, "goals.needed").label, "3h 0m left across your goals")
+        XCTAssertEqual(element(app, "goals.other-time").label, "1h 30m for other activities")
+        XCTAssertTrue(element(app, "goals.capacity-bar").exists)
+        let music = element(app, "goals.progress.music")
+        XCTAssertEqual(music.value as? String, "1h 0m of 3h 0m today. 2h 0m remaining")
+        XCTAssertTrue(element(app, "goals.progress.teaching").exists)
+        XCTAssertFalse(element(app, "goals.progress.work").exists)
+        XCTAssertFalse(element(app, "goals.progress.food").exists)
+        XCTAssertFalse(app.segmentedControls["plan.unit"].exists)
+        XCTAssertFalse(app.buttons["plan.sort.today"].exists)
+        recordScreen("DailyGoalsTimeAndProgress", in: app)
+    }
+
+    func testDailyGoalsMakesShortfallExplicit() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-overflow"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertEqual(element(app, "goals.time-left").label, "4h 30m left today")
+        XCTAssertEqual(element(app, "goals.needed").label, "12h 0m left across your goals")
+        XCTAssertEqual(element(app, "goals.shortfall").label, "7h 30m more than the time left")
+        XCTAssertFalse(element(app, "goals.other-time").exists)
+        recordScreen("DailyGoalsShortfall", in: app)
+    }
+
+    func testDayWindowChangesGoalHoursWithoutClippingEarlierLogsOrAllDayAlerts() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        app.buttons["goals.day-window"].tap()
+        element(app, "goals.window-start").tap()
+        let eight = app.buttons["08:00"]; reveal(eight, in: app); eight.tap()
+        app.buttons["goals.window-save"].tap()
+        let music = element(app, "goals.progress.music")
+        XCTAssertTrue(music.waitForExistence(timeout: 5))
+        XCTAssertEqual(music.value as? String, "1h 0m of 2h 48m today. 1h 48m remaining")
+        XCTAssertEqual(element(app, "goals.time-left").label, "4h 30m left today")
+        app.tabBars.buttons["Settings"].tap()
+        let allDay = app.switches["settings.notifications-all-day"]; reveal(allDay, in: app)
+        XCTAssertEqual(allDay.value as? String, "1")
+        app.terminate(); app.launchArguments = []; app.launch()
+        openGoalEditor(in: app); switchGoalUnit("Time", in: app)
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "2.8")
+    }
+
+    func testEditingGoalUpdatesSimpleProgressImmediately() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
+        openGoalEditor(in: app)
+        setPlanNumber("categories.target.music", to: "30", in: app)
+        app.buttons["Close"].tap()
+        let music = element(app, "goals.progress.music")
+        XCTAssertTrue(music.waitForExistence(timeout: 5))
+        XCTAssertEqual(music.value as? String, "1h 0m of 4h 30m today. 3h 30m remaining")
+        XCTAssertEqual(element(app, "goals.needed").label, "4h 30m left across your goals")
+        recordScreen("DailyGoalsAfterEditing", in: app)
+    }
+
+    func testDailyGoalsWithoutHistoryUsesConfiguredWindowForGoalEditing() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(app.buttons["Set goals"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "goals.time-left").exists)
+        app.buttons["goals.edit"].tap()
+        app.buttons["plan.hide-blank-goals"].tap()
+        switchGoalUnit("Time", in: app)
+        setPlanNumber("categories.target.work", to: "3", in: app)
+        switchGoalUnit("%", in: app)
+        XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "20")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(element(app, "goals.progress.work").waitForExistence(timeout: 5))
+    }
+
+    func testGoalEditorRetainsFeedbackWithoutDirectionArrows() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+        openGoalEditor(in: app)
         let todayMusic = element(app, "plan.actual.today.music"), weekMusic = element(app, "plan.actual.week.music")
         let weekWork = element(app, "plan.actual.week.work")
         XCTAssertTrue(todayMusic.waitForExistence(timeout: 5))
-        XCTAssertEqual(todayMusic.value as? String, "Up toward goal")
-        XCTAssertEqual(weekMusic.value as? String, "Up toward goal")
-        XCTAssertEqual(weekWork.value as? String, "Down toward goal")
-        recordScreen("GoalDirectionArrowsPercent", in: app)
+        XCTAssertTrue(todayMusic.label.contains("below goal"))
+        XCTAssertTrue(weekMusic.label.contains("below goal"))
+        XCTAssertTrue(weekWork.label.contains("above goal"))
+        recordScreen("GoalEditorPercent", in: app)
         switchGoalUnit("Time", in: app)
-        XCTAssertEqual(todayMusic.value as? String, "Up toward goal")
-        XCTAssertEqual(weekMusic.value as? String, "Up toward goal")
-        XCTAssertEqual(weekWork.value as? String, "Down toward goal")
+        XCTAssertTrue(todayMusic.label.contains("below goal"))
+        XCTAssertTrue(weekMusic.label.contains("below goal"))
+        XCTAssertTrue(weekWork.label.contains("above goal"))
         app.buttons["plan.hide-blank-goals"].tap()
         let food = element(app, "plan.actual.week.food"); reveal(food, in: app)
         XCTAssertFalse((food.value as? String ?? "").contains("toward goal"))
-        recordScreen("GoalDirectionArrowsTime", in: app)
+        recordScreen("GoalEditorTime", in: app)
     }
 
     func testCommitmentsColumnHeadingsSortAndReverseWithinTheHierarchy() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-sort-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         let work = element(app, "plan.name.work"), music = element(app, "plan.name.music")
         XCTAssertTrue(work.waitForExistence(timeout: 5))
         XCTAssertLessThan(music.frame.minY, work.frame.minY)
@@ -1705,7 +1786,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCommitmentsActualSortsWorkInBothUnitsAndPersistWithBlankGoalsLast() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-sort-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         app.buttons["plan.hide-blank-goals"].tap()
         let food = element(app, "plan.name.food"), work = element(app, "plan.name.work"), music = element(app, "plan.name.music")
         app.buttons["plan.sort.today"].tap()
@@ -1724,7 +1805,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["plan.sort.week"].value as? String, "Descending")
         XCTAssertLessThan(food.frame.minY, work.frame.minY)
         recordScreen("CommitmentsSortSevenDaysTime", in: app)
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openGoalEditor(in: app)
         XCTAssertEqual(app.buttons["plan.sort.week"].value as? String, "Descending")
         XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
         XCTAssertLessThan(food.frame.minY, work.frame.minY)
@@ -1764,7 +1845,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCommitmentsBlankGoalFilterIgnoresActualTimeAndKeepsZeroGoals() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-zero-category-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertEqual(app.buttons["plan.hide-blank-goals"].value as? String, "On")
         // Actual time is deliberately irrelevant: Work has today's time and
         // Eating has historical time, but both have blank goals.
@@ -1788,14 +1869,14 @@ final class TimeLedgerUITests: XCTestCase {
         let admin = element(app, "plan.name.admin"); reveal(admin, in: app); XCTAssertTrue(admin.exists)
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertEqual(app.buttons["dashboard.filter"].value as? String, "Zero-time categories hidden")
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertEqual(app.buttons["plan.hide-blank-goals"].value as? String, "Off")
         let unused = element(app, "plan.name.unused-1"); reveal(unused, in: app); XCTAssertTrue(unused.exists)
     }
 
     func testCommitmentsUnitPickerStaysPinnedWhileScrollingAndSwitchingUnits() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-zero-category-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         app.buttons["plan.hide-blank-goals"].tap()
         let picker = app.segmentedControls["plan.unit"]
         let initialY = picker.frame.minY
@@ -1813,23 +1894,23 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testGoalUnitsShowOneValueAndHourEditsConvertToFixedPercentages() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         let weekMusic = element(app, "plan.actual.week.music"); reveal(weekMusic, in: app)
         XCTAssertTrue(weekMusic.label.contains("7.1%")); XCTAssertFalse(weekMusic.label.contains("1h"))
         switchGoalUnit("Time", in: app)
         reveal(weekMusic, in: app); XCTAssertTrue(weekMusic.label.contains("1h per day")); XCTAssertFalse(weekMusic.label.contains("%"))
-        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "1.4")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "1.5")
         setPlanNumber("categories.target.teaching", to: "4", in: app)
         XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "4")
-        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "1.4")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "1.5")
         recordScreen("GoalsTimeOnly", in: app)
         switchGoalUnit("%", in: app)
         let teaching = app.textFields["categories.target.teaching"]; reveal(teaching, in: app)
-        XCTAssertEqual(teaching.value as? String, "28.57")
+        XCTAssertEqual(teaching.value as? String, "26.67")
         XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "10")
         recordScreen("GoalsPercentOnly", in: app)
         switchGoalUnit("Time", in: app)
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openGoalEditor(in: app)
         XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
         let expand = app.buttons["plan.children.work"]; reveal(expand, in: app); expand.tap()
         let restored = app.textFields["categories.target.teaching"]; reveal(restored, in: app)
@@ -1838,7 +1919,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testOptionalGoalsRemainEditableWithoutBalanceSummary() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertFalse(app.staticTexts["Priority goals"].exists)
         XCTAssertFalse(app.staticTexts["Other activities"].exists)
         XCTAssertFalse(app.staticTexts["Over by"].exists)
@@ -1853,11 +1934,12 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testTimeModeWithoutCompletedDataPreservesExistingPercentageGoals() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         setPlanNumber("categories.target.work", to: "30", in: app)
         switchGoalUnit("Time", in: app)
         let work = app.textFields["categories.target.work"]; reveal(work, in: app)
-        XCTAssertFalse(work.isEnabled)
+        XCTAssertTrue(work.isEnabled)
+        XCTAssertEqual(work.value as? String, "4.5")
         XCTAssertFalse(app.buttons["plan.copy-week"].exists)
         switchGoalUnit("%", in: app)
         reveal(work, in: app); XCTAssertEqual(work.value as? String, "30")
@@ -1865,7 +1947,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testInvalidHoursStayEditableAndUnitSwitchDoesNotDiscardThem() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); switchGoalUnit("Time", in: app)
+        openGoalEditor(in: app); switchGoalUnit("Time", in: app)
         setPlanNumber("categories.target.teaching", to: "20", in: app)
         let error = element(app, "plan.error"); reveal(error, in: app); XCTAssertTrue(error.exists)
         switchGoalUnit("%", in: app)
@@ -1879,7 +1961,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testHistoricalAverageUsesCompletedDaysWhileTodayStaysLive() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertEqual(element(app, "plan.coverage").label, "3 of 7")
         app.buttons["plan.children.work"].tap()
         let week = element(app, "plan.actual.week.teaching"); reveal(week, in: app)
@@ -1893,7 +1975,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testGoalsAutosaveNestedValuesAndUnfinishedTotalsAcrossRestart() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertFalse(app.buttons["categories.save-targets"].exists)
         XCTAssertFalse(app.textFields["categories.target.work"].exists)
         setPlanNumber("categories.target.teaching", to: "80", in: app)
@@ -1901,7 +1983,7 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.music", to: "30", in: app)
         setPlanNumber("categories.target.music", to: "20", in: app)
         recordScreen("CalculatedParentGoals", in: app)
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openGoalEditor(in: app)
         XCTAssertEqual(element(app, "categories.calculated-goal.work").value as? String, "80")
         app.buttons["plan.children.work"].tap()
         XCTAssertEqual(app.textFields["categories.target.teaching"].value as? String, "80")
@@ -1910,7 +1992,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testIndividualGoalCopyAndContextualHelpRemainWithoutBulkCopy() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         XCTAssertFalse(app.staticTexts["Hold a category for actions."].exists)
         XCTAssertFalse(app.buttons["plan.copy-week"].exists)
         let musicValue = app.textFields["categories.target.music"].value as? String
@@ -1932,7 +2014,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testNestedCalculatedGoalsAndDirectRowsHaveNoEditableTarget() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         app.buttons["plan.hide-blank-goals"].tap()
         app.buttons["plan.children.work"].tap()
         app.buttons["plan.children.music"].tap()
@@ -1948,7 +2030,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testSingleTapCategoryActionsAndExplicitMultipleSelection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        openGoalEditor(in: app)
         element(app, "plan.name.work").tap()
         XCTAssertTrue(app.buttons["plan.rename"].exists); XCTAssertTrue(app.buttons["plan.create-child"].exists)
         app.buttons["plan.select"].tap()

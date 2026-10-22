@@ -1,20 +1,28 @@
 import Foundation
 
-/// A recorded-day reference, never a wake/sleep window or a filter on samples.
+/// Measured history, with an optional daily goal conversion basis. Neither
+/// reference filters samples or changes the historical actual-time denominator.
 public struct AllocationReference: Equatable, Sendable {
     public var period: AllocationPeriod
-    public init(period: AllocationPeriod = AllocationPeriod()) { self.period = period }
+    public var goalDayMinutes: Double?
+    public init(period: AllocationPeriod = AllocationPeriod(), goalDayMinutes: Double? = nil) {
+        self.period = period; self.goalDayMinutes = goalDayMinutes
+    }
     public var averageDayMinutes: Double? {
         guard period.sufficient, period.trackedMinutes.isFinite, period.trackedMinutes > 0 else { return nil }
         return period.trackedMinutes / Double(period.representedDays)
     }
     public func dailyMinutes(for percentage: Double) -> Double? {
-        guard percentage.isFinite, percentage >= 0, let averageDayMinutes else { return nil }
-        return averageDayMinutes * percentage / 100
+        guard percentage.isFinite, percentage >= 0, let goalBasisMinutes else { return nil }
+        return goalBasisMinutes * percentage / 100
     }
     public func percentage(forDailyHours hours: Double) -> Double? {
-        guard hours.isFinite, hours >= 0, let averageDayMinutes else { return nil }
-        return hours * 60 / averageDayMinutes * 100
+        guard hours.isFinite, hours >= 0, let goalBasisMinutes else { return nil }
+        return hours * 60 / goalBasisMinutes * 100
+    }
+    public var goalBasisMinutes: Double? {
+        if let goalDayMinutes { return goalDayMinutes.isFinite && goalDayMinutes > 0 ? goalDayMinutes : nil }
+        return averageDayMinutes
     }
     public func averageMinutes(_ minutes: Double) -> Double? {
         guard period.sufficient, minutes.isFinite, minutes >= 0 else { return nil }

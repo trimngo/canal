@@ -130,9 +130,12 @@ struct SettingsView: View {
                 Text("Midpoint switches activities halfway between samples. The other method keeps each activity until the next sample. Estimates extend half your notification interval before the first log and after the last. Random mode uses your configured average interval. Estimates are capped at now and calendar-day boundaries; unsampled time outside that period is excluded. Every log counts, regardless of its time. Days without logs are excluded. Changing methods keeps your original samples.")
             }
             Section {
+                NavigationLink { DayWindowSettingsView() } label: {
+                    LabeledContent("Day window", value: "\(minuteLabel(store.ledger.settings.startMinute))–\(minuteLabel(store.ledger.settings.endMinute))")
+                }.accessibilityIdentifier("settings.day-window")
                 Button("Categories & targets") { managingGroups = true }
             } header: { Text("Time allocation") } footer: {
-                Text("Offline suggestions use activity words and confirmed choices. A suggestion never assigns a group until you confirm it. Create and rename groups anytime.")
+                Text("The day window estimates daily goal hours and time remaining. Every log counts, including outside it. Offline category suggestions wait for your confirmation.")
             }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)
@@ -187,6 +190,12 @@ struct SettingsView: View {
                 // Follow incoming settings while preserving an unsaved draft.
                 var previousDraft = previous; previousDraft.revision = settings.revision
                 if settings == previousDraft { settings = updated }
+                else {
+                    // A window can be edited from its own screen while other
+                    // notification fields are still an unsaved local draft.
+                    if settings.startMinute == previous.startMinute { settings.startMinute = updated.startMinute }
+                    if settings.endMinute == previous.endMinute { settings.endMinute = updated.endMinute }
+                }
             }
             .sheet(isPresented: $managingGroups) { GroupManagerView() }
     }

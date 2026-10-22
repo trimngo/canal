@@ -20,7 +20,7 @@ private struct CategoryOutlineItem: Identifiable {
     var id: String { direct ? "direct:\(category.id)" : category.id }
 }
 
-struct CommitmentsView: View {
+struct GoalEditorView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var plan = AllocationPlanDraft([:])
@@ -49,7 +49,7 @@ struct CommitmentsView: View {
     private var percentageGoals: [String: Double]? {
         guard let values = plan.values else { return nil }
         if displayUnit == .percent { return values }
-        guard reference.averageDayMinutes != nil else { return store.ledger.editableAllocationGoals() }
+        guard reference.goalBasisMinutes != nil else { return store.ledger.editableAllocationGoals() }
         var result: [String: Double] = [:]
         for (id, hours) in values {
             guard let value = reference.percentage(forDailyHours: hours), value <= 100 + 0.0000001 else { return nil }
@@ -66,7 +66,7 @@ struct CommitmentsView: View {
             planList(today: today, week: week)
                 .onChange(of: store.ledger.reportingDay(containing: context.date)) { _, _ in refreshReference(); load() }
         }
-        .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Edit goals").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if selecting { Button("Done") { finishSelection() }.accessibilityIdentifier("plan.selection-done") }
@@ -167,12 +167,12 @@ struct CommitmentsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Goals & categories").font(.headline)
                 Text("Choose % to compare balance or Time to judge hours. Each cell shows one unit. Time goals use decimal hours per day; today shows time so far and 7 days shows an average per recorded day.")
-                if let minutes = reference.averageDayMinutes {
-                    Text("Hours use an average recorded day of \(store.duration(minutes)), from \(reference.period.representedDays) of the previous seven completed dates. These are estimates from your logs, not a wake/sleep schedule. Missing days are excluded.")
+                if let minutes = reference.goalBasisMinutes {
+                    Text("Daily goal hours use your configured day window of \(store.duration(minutes)). The 7-day column still uses \(reference.period.representedDays) of the previous seven completed dates. All log entries count, including outside the window. Missing days are excluded.")
                 } else {
-                    Text("A completed date with logs is needed to convert goals into hours. You can still edit percentages and see today’s time.")
+                    Text("Set a valid day window in Settings to convert goals into hours. You can still edit percentages and see today’s time.")
                 }
-                Text("A goal stays a fixed percentage. Editing its hours equivalent converts it into that percentage; switching units never changes the saved goal. Hours equivalents can change as your recent recorded-day average changes.")
+                Text("A goal stays a fixed percentage. Editing its hours equivalent converts it into that percentage; switching units never changes the saved goal. Hours equivalents change only when the configured window length changes (including daylight-saving changes).")
                 Text("Hide blank removes only categories without a goal, regardless of time logged. A goal of 0% stays visible, as do parents with child goals. Direct rows have no separate goal and are hidden by this filter. Turn the filter off to see every category; nothing is deleted.")
                 Text("Leave goals blank for activities you only want to observe. Goals save individually when you finish editing.")
                 Text("Edit goals on categories without children. Each parent adds up its children’s goals. Direct time counts toward the parent’s actual time without a separate goal.")
@@ -195,7 +195,7 @@ struct CommitmentsView: View {
     }
     private func refreshReference() {
         guard focusedTarget == nil, dirtyGoals.isEmpty else { return }
-        reference = store.ledger.completedAllocationReference()
+        reference = store.ledger.goalAllocationReference()
     }
 
     private func categoryOutline(today: AllocationPeriod, week: AllocationPeriod) -> some View {
@@ -375,7 +375,7 @@ struct CommitmentsView: View {
                 TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { if plan.text[item.category.id] != $0 { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) } }))
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .focused($focusedTarget, equals: item.category.id)
-                    .disabled(multiSelecting || !store.storageAvailable || (displayUnit == .time && reference.averageDayMinutes == nil)).allowsHitTesting(!multiSelecting)
+                    .disabled(multiSelecting || !store.storageAvailable || (displayUnit == .time && reference.goalBasisMinutes == nil)).allowsHitTesting(!multiSelecting)
                     .accessibilityLabel("\(item.category.name) goal \(displayUnit == .percent ? "percent" : "hours per day")")
                     .accessibilityIdentifier("categories.target.\(item.category.id)")
                 if !(plan.text[item.category.id] ?? "").isEmpty || focusedTarget == item.category.id {
@@ -406,7 +406,7 @@ struct CommitmentsView: View {
         guard let values = field.values else { error = "Enter a valid \(displayUnit == .percent ? "percentage" : "number of daily hours") for \(store.categoryName(id))."; return }
         let percentage = values[id].flatMap { displayUnit == .percent ? $0 : reference.percentage(forDailyHours: $0) }
         if values[id] != nil, (percentage == nil || percentage! > 100 + 0.0000001) {
-            error = displayUnit == .time ? "Enter hours up to the average recorded day (\(reference.averageDayMinutes.map(store.duration) ?? "no reference yet"))." : "Enter a percentage from 0 to 100."
+            error = displayUnit == .time ? "Enter hours up to the configured day window (\(reference.goalBasisMinutes.map(store.duration) ?? "no window yet"))." : "Enter a percentage from 0 to 100."
             return
         }
         do {
