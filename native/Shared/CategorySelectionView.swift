@@ -90,7 +90,6 @@ struct CategorySelectionList: View {
         }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
-            .ledgerInputDismissal(preservingKeyboard: true)
             #endif
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
@@ -130,6 +129,9 @@ struct CategorySelectionList: View {
                     Text("Selecting \(store.ledger.categoryPath(id)) replaces \(store.ledger.categoryConflicts(id, with: selection).map { store.categoryName($0) }.joined(separator: ", ")). Other selections are kept.")
                 }
             }
+            #if os(iOS)
+            .ledgerInputDismissal(preservingKeyboard: true)
+            #endif
     }
     private func dismissSearchKeyboard() {
         #if os(iOS)
@@ -267,7 +269,11 @@ private struct CategoryEntryContext: View {
                 .frame(height: 160)
                 #endif
             } else {
+                #if os(iOS)
                 activityText.lineLimit(2)
+                #else
+                activityText.lineLimit(3)
+                #endif
             }
             if activity.count > 100 || activity.contains("\n") {
                 Button(expanded ? "Show less" : "Read full entry") { expanded.toggle() }

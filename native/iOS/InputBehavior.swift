@@ -13,6 +13,7 @@ extension UIApplication {
 // Text inputs keep focus when tapped, and drafts are never cleared on dismissal.
 private final class OutsideInputTap: UITapGestureRecognizer, UIGestureRecognizerDelegate {
     let keyboardPreservingRegions = NSHashTable<UIView>.weakObjects()
+    private weak var inputToDismiss: UIView?
     func configure() {
         addTarget(self, action: #selector(dismissInput))
         cancelsTouchesInView = false; delaysTouchesBegan = false; delaysTouchesEnded = false
@@ -21,7 +22,8 @@ private final class OutsideInputTap: UITapGestureRecognizer, UIGestureRecognizer
     @objc private func dismissInput() {
         // Let the tapped SwiftUI control finish its action before keyboard
         // dismissal moves the control underneath the completed touch.
-        DispatchQueue.main.async { [weak self] in self?.view?.endEditing(true) }
+        let input = inputToDismiss
+        DispatchQueue.main.async { [weak input] in input?.resignFirstResponder() }
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         for region in keyboardPreservingRegions.allObjects where region.window === touch.view?.window && !region.isHidden {
@@ -35,7 +37,13 @@ private final class OutsideInputTap: UITapGestureRecognizer, UIGestureRecognizer
             if candidate is UITextField || candidate is UITextView || candidate is UIControl || candidate is UIAlertController { return false }
             current = candidate.next
         }
-        return true
+        inputToDismiss = view.flatMap { firstResponder(in: $0) }
+        return inputToDismiss != nil
+    }
+    private func firstResponder(in view: UIView) -> UIView? {
+        if view.isFirstResponder { return view }
+        for child in view.subviews { if let input = firstResponder(in: child) { return input } }
+        return nil
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 }

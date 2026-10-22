@@ -8,14 +8,15 @@ struct InlineEntryText: View {
     let identifier: String
     var font: Font = .body
     var maxLength: Int? = nil
+    var allowEmpty = false
     let save: (String) throws -> Void
     @State private var draft: String
     @State private var error: String?
     @State private var editing = false
     @FocusState private var focused: Bool
 
-    init(text: String, identifier: String, font: Font = .body, maxLength: Int? = nil, save: @escaping (String) throws -> Void) {
-        self.text = text; self.identifier = identifier; self.font = font; self.maxLength = maxLength; self.save = save
+    init(text: String, identifier: String, font: Font = .body, maxLength: Int? = nil, allowEmpty: Bool = false, save: @escaping (String) throws -> Void) {
+        self.text = text; self.identifier = identifier; self.font = font; self.maxLength = maxLength; self.allowEmpty = allowEmpty; self.save = save
         _draft = State(initialValue: text)
     }
     var body: some View {
@@ -27,7 +28,7 @@ struct InlineEntryText: View {
                     .onSubmit { if finish() { focused = false; editing = false } }
                     .task { focused = true }
             } else {
-                Text(text).font(font).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                Text(text.isEmpty ? "Add notes…" : text).font(font).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     .onTapGesture { draft = text; editing = true }
                     .accessibilityIdentifier(identifier).accessibilityHint("Tap to edit inline")
                     .accessibilityAction(named: "Edit text") { draft = text; editing = true }
@@ -41,7 +42,7 @@ struct InlineEntryText: View {
     @discardableResult private func finish() -> Bool {
         guard editing, draft != text else { return true }
         let value = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { error = "Enter some text."; return false }
+        guard allowEmpty || !value.isEmpty else { error = "Enter some text."; return false }
         if let maxLength, value.count > maxLength { error = "Keep this entry to \(maxLength) characters."; return false }
         do { try save(value); draft = value; error = nil; return true }
         catch { self.error = error.localizedDescription; return false }

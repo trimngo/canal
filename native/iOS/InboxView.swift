@@ -15,7 +15,6 @@ struct InboxView: View {
     @State private var ranking = false
     @State private var showBacklog = false
     @State private var showSnoozed = false
-    @State private var editing: Capture?
     @State private var snoozing: Capture?
     @State private var copiedIdeaCount: Int?
     private var snoozed: [Capture] { store.ledger.snoozedCaptures(at: clock) }
@@ -172,7 +171,6 @@ struct InboxView: View {
                 .onChange(of: ranking) { _, presented in
                     if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
                 }
-                .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
@@ -238,9 +236,9 @@ struct InboxView: View {
                 }
                 Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
                 CaptureCategoryButton(capture: capture, identifier: "inbox.category.\(capture.id)")
+                InlineCaptureNotes(capture: capture, identifier: "inbox.notes.\(capture.id)")
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
-                Button("Notes") { focused = false; editing = capture }
                 if !capture.isDone {
                     if capture.isReference == true {
                         Button("Move to New Ideas") { moveReference(capture, reference: false) }
@@ -301,39 +299,19 @@ struct InboxView: View {
     }
 }
 
-private struct CaptureEditView: View {
+private struct InlineCaptureNotes: View {
     @EnvironmentObject private var store: LedgerStore
-    @Environment(\.dismiss) private var dismiss
     let capture: Capture
-    @State private var text: String
-    @State private var notes: String
-
-    init(capture: Capture) {
-        self.capture = capture
-        _text = State(initialValue: capture.text)
-        _notes = State(initialValue: capture.notes ?? "")
-    }
-
+    let identifier: String
+    @State private var expanded = false
+    private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Notes (optional)") {
-                    TextEditor(text: $notes).frame(minHeight: 140).accessibilityIdentifier("capture.edit-notes")
-                }
-                Text("Captured \(capture.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }.navigationTitle("Idea notes").navigationBarTitleDisplayMode(.inline)
-                .scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
-                            do { try store.updateCapture(capture, text: store.ledger.captures.first { $0.id == capture.id }?.text ?? capture.text, notes: notes); dismiss() } catch { store.report(error) }
-                        }.disabled(!store.storageAvailable)
-                            .accessibilityIdentifier("capture.edit-save")
-                    }
-                }
-        }
+        DisclosureGroup(isExpanded: $expanded) {
+            InlineEntryText(text: current.notes ?? "", identifier: identifier, allowEmpty: true) { notes in
+                try store.updateCapture(capture, text: current.text, notes: notes)
+            }.padding(.vertical, 6)
+        } label: { Text("Notes").font(.caption).foregroundStyle(.secondary) }
+            .accessibilityIdentifier("\(identifier).expand")
     }
 }
 
@@ -401,7 +379,6 @@ private struct RankingView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     @State private var snoozing: Capture?
-    @State private var editing: Capture?
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -442,7 +419,6 @@ private struct RankingView: View {
               }.padding(24)
             }.ledgerInputDismissal().navigationTitle("Rank ideas").navigationBarTitleDisplayMode(.inline)
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
-                .sheet(item: $editing) { CaptureEditView(capture: $0) }
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
                 .task { do { try store.resumeRanking() } catch { store.report(error) } }
                 .onChange(of: store.inbox.pair, initial: true) { _, _ in
@@ -464,12 +440,12 @@ private struct RankingView: View {
             }.buttonStyle(.borderedProminent).accessibilityIdentifier(id)
                 .accessibilityLabel("Choose: \(capture.text)")
             CaptureCategoryButton(capture: capture, identifier: "\(id).category")
+            InlineCaptureNotes(capture: capture, identifier: "\(id).notes")
             HStack {
                 Button("Snooze", systemImage: "moon.zzz") { snoozing = capture }
                     .accessibilityIdentifier("\(id).snooze")
                 Spacer()
                 Menu {
-                    Button("Notes") { editing = capture }.accessibilityIdentifier("\(id).edit")
                     Button("Mark done") {
                         do { try store.setCaptureDone(capture, done: true) } catch { store.report(error) }
                     }.accessibilityIdentifier("\(id).done")
