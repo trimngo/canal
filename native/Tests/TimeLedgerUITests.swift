@@ -1673,7 +1673,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("GoalsPercentOnly", in: app)
         switchGoalUnit("Time", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
-        XCTAssertEqual(app.segmentedControls["plan.unit"].buttons["Time"].value as? String, "1")
+        XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
         app.buttons["plan.children.work"].tap()
         XCTAssertEqual(app.textFields["categories.target.teaching"].value as? String, "4")
     }
@@ -1719,7 +1719,7 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.teaching", to: "20", in: app)
         let error = element(app, "plan.error"); reveal(error, in: app); XCTAssertTrue(error.exists)
         switchGoalUnit("%", in: app)
-        XCTAssertEqual(app.segmentedControls["plan.unit"].buttons["Time"].value as? String, "1")
+        XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
         let teaching = app.textFields["categories.target.teaching"]; reveal(teaching, in: app)
         XCTAssertEqual(teaching.value as? String, "20")
         setPlanNumber("categories.target.teaching", to: "4", in: app)
