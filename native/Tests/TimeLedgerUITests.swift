@@ -1219,7 +1219,9 @@ final class TimeLedgerUITests: XCTestCase {
         let name = app.textFields["category-name.field"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap(); name.typeText("Hygiene"); app.buttons["category-name.save"].tap()
         XCTAssertFalse(app.buttons["plan.selection-done"].exists)
-        let arrow = app.buttons["plan.children.work"]; reveal(arrow, in: app); arrow.tap()
+        let arrow = app.buttons["plan.children.work"]; reveal(arrow, in: app)
+        // Creating a child already reveals the branch. Do not collapse it.
+        if arrow.label.hasPrefix("Expand ") { arrow.tap() }
         selectPlanCategory("teaching", in: app)
         recordScreen("CategorySelectionActions", in: app)
         app.buttons["plan.view-logs"].tap()
