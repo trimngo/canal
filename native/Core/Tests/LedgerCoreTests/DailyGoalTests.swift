@@ -53,8 +53,9 @@ final class DailyGoalTests: XCTestCase {
         try ledger.saveSample(at: date("2026-10-22T09:00:00+02:00"), activity: "Direct work", categoryIDs: ["work"], writer: "test", now: now)
         try ledger.saveSample(at: date("2026-10-22T10:00:00+02:00"), activity: "Split work and music", categoryIDs: ["teaching", "music"], writer: "test", now: now)
         let report = try XCTUnwrap(ledger.dailyGoals(now: now, calendar: calendar))
-        XCTAssertEqual(Set(report.goals.map(\.id)), ["teaching", "music"])
-        XCTAssertEqual(report.goals.reduce(0) { $0 + $1.targetMinutes }, 180)
+        XCTAssertEqual(Set(report.goals.map(\.id)), ["work", "teaching", "music", "food"])
+        XCTAssertTrue(try XCTUnwrap(report.goals.first { $0.id == "work" }).isRollup)
+        XCTAssertEqual(report.commitments.reduce(0) { $0 + $1.targetMinutes }, 180)
         let actual = ledger.allocation(on: now, now: now, calendar: calendar)
         let split = actual.directMinutes["music"]!
         XCTAssertEqual(report.goals.first { $0.id == "teaching" }?.actualMinutes, split)
@@ -90,14 +91,14 @@ final class DailyGoalTests: XCTestCase {
         XCTAssertEqual(report.window.remainingMinutes, 60)
         XCTAssertEqual(report.shortfallMinutes, 390)
         XCTAssertEqual(report.otherMinutes, 0)
-        XCTAssertEqual(report.barMinutes, report.neededMinutes)
+        XCTAssertEqual(report.dayBarSegments.reduce(0) { $0 + $1.minutes }, report.window.minutes)
         try ledger.saveSample(at: date("2026-10-22T08:00:00+02:00"), activity: "Music", categoryIDs: ["music"], writer: "test", now: now)
         try ledger.saveSample(at: date("2026-10-22T20:00:00+02:00"), activity: "Teaching", categoryIDs: ["teaching"], writer: "test", now: now)
         report = try XCTUnwrap(ledger.dailyGoals(now: now, calendar: calendar))
         XCTAssertEqual(report.neededMinutes, 0)
         XCTAssertEqual(report.otherMinutes, 60)
         XCTAssertEqual(report.shortfallMinutes, 0)
-        XCTAssertEqual(report.barMinutes, 60)
+        XCTAssertEqual(report.dayBarSegments.reduce(0) { $0 + $1.minutes }, report.window.minutes)
     }
 
     func testUncategorizedTimeIsReportedAndNotInventedAsGoalProgress() throws {
@@ -153,5 +154,59 @@ final class DailyGoalTests: XCTestCase {
         XCTAssertEqual(restored.entries, watch.entries)
         XCTAssertEqual(restored.dailyGoals(now: now, calendar: calendar), watch.dailyGoals(now: now, calendar: calendar))
         XCTAssertEqual(restored.goalAllocationReference(now: now, calendar: calendar).dailyMinutes(for: 25), 195)
+    }
+
+    func testGoalWidthsAreProportionalAndProgressLivesInsideTheTarget() throws {
+        var ledger = try fixture()
+        let now = date("2026-10-22T17:30:00+02:00")
+        try ledger.saveAllocationGoals(["music": 10, "teaching": 20], effectiveAt: date("2026-01-01T00:00:00Z"), writer: "test")
+        let report = try XCTUnwrap(ledger.dailyGoals(now: now, calendar: calendar))
+        let music = try XCTUnwrap(report.goals.first { $0.id == "music" })
+        let teaching = try XCTUnwrap(report.goals.first { $0.id == "teaching" })
+        XCTAssertEqual(report.goalWidthFraction(teaching), 2 * report.goalWidthFraction(music))
+        XCTAssertEqual(teaching.fraction, 0)
+        XCTAssertEqual(report.goalWidthFraction(teaching) * teaching.fraction, 0)
+        XCTAssertEqual(teaching.targetMinutes, 180)
+        XCTAssertEqual(music.targetMinutes, 90)
+    }
+
+    func testWholeDayBarIncludesElapsedGoalsAndOtherWithoutChangingScale() throws {
+        var ledger = try fixture()
+        let now = date("2026-10-22T17:30:00+02:00")
+        try ledger.saveAllocationGoals(["music": 10, "teaching": 10], effectiveAt: date("2026-01-01T00:00:00Z"), writer: "test")
+        let report = try XCTUnwrap(ledger.dailyGoals(now: now, calendar: calendar))
+        XCTAssertEqual(report.dayBarSegments.first?.kind, .elapsed)
+        XCTAssertEqual(report.dayBarSegments.first?.minutes, 630)
+        XCTAssertEqual(report.dayBarSegments.filter { if case .goal = $0.kind { return true }; return false }.reduce(0) { $0 + $1.minutes }, 180)
+        XCTAssertEqual(report.dayBarSegments.last?.kind, .other)
+        XCTAssertEqual(report.dayBarSegments.last?.minutes, 90)
+        XCTAssertEqual(report.dayBarSegments.reduce(0) { $0 + $1.minutes }, 900)
+        XCTAssertEqual(report.shortfallMinutes, 0)
+    }
+
+    func testOverflowNeverShrinksElapsedTimeOrPretendsGoalsFit() throws {
+        var ledger = try fixture()
+        try ledger.saveAllocationGoals(["music": 50, "teaching": 50], effectiveAt: date("2026-01-01T00:00:00Z"), writer: "test")
+        let now = date("2026-10-22T21:00:00+02:00")
+        let report = try XCTUnwrap(ledger.dailyGoals(now: now, calendar: calendar))
+        XCTAssertEqual(report.dayBarSegments.first?.minutes, 840)
+        XCTAssertEqual(report.dayBarSegments.reduce(0) { $0 + $1.minutes }, 900)
+        XCTAssertEqual(report.shortfallMinutes, 840)
+        XCTAssertFalse(report.dayBarSegments.contains { $0.kind == .other })
+        XCTAssertEqual(report.commitments.reduce(0) { $0 + $1.remainingMinutes }, 900)
+    }
+
+    func testCompletedZeroAndParentGoalsStayVisibleButBlankGoalsDoNot() throws {
+        var ledger = try fixture()
+        try ledger.saveAllocationGoals(["music": 0, "teaching": 1], effectiveAt: date("2026-01-01T00:00:00Z"), writer: "test")
+        let now = date("2026-10-22T17:30:00+02:00")
+        try ledger.saveSample(at: now.addingTimeInterval(-3600), activity: "Teaching", categoryIDs: ["teaching"], writer: "test", now: now)
+        let report = try XCTUnwrap(ledger.dailyGoals(now: now, calendar: calendar))
+        XCTAssertEqual(Set(report.goals.map(\.id)), ["work", "teaching", "music"])
+        XCTAssertTrue(report.goals.allSatisfy(\.isMet))
+        XCTAssertEqual(report.goals.first { $0.id == "teaching" }?.depth, 1)
+        XCTAssertEqual(report.goalWidthFraction(try XCTUnwrap(report.goals.first { $0.id == "music" })), 0)
+        XCTAssertEqual(report.neededMinutes, 0)
+        XCTAssertEqual(report.dayBarSegments.last?.kind, .other)
     }
 }

@@ -1676,11 +1676,52 @@ final class TimeLedgerUITests: XCTestCase {
         let music = element(app, "goals.progress.music")
         XCTAssertEqual(music.value as? String, "1h 0m of 3h 0m today. 2h 0m remaining")
         XCTAssertTrue(element(app, "goals.progress.teaching").exists)
-        XCTAssertFalse(element(app, "goals.progress.work").exists)
+        XCTAssertTrue(element(app, "goals.progress.work").exists)
         XCTAssertFalse(element(app, "goals.progress.food").exists)
         XCTAssertFalse(app.segmentedControls["plan.unit"].exists)
         XCTAssertFalse(app.buttons["plan.sort.today"].exists)
         recordScreen("DailyGoalsTimeAndProgress", in: app)
+    }
+
+    func testGoalBarsShareOneScaleAndParentAndZeroGoalsStayListed() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-proportional"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        let music = element(app, "goals.target-bar.music"), teaching = element(app, "goals.target-bar.teaching")
+        XCTAssertTrue(music.waitForExistence(timeout: 5)); XCTAssertTrue(teaching.exists)
+        XCTAssertEqual(teaching.frame.width, music.frame.width * 2, accuracy: 2)
+        XCTAssertTrue((element(app, "goals.progress.work").value as? String ?? "").contains("parent total"))
+        XCTAssertTrue(element(app, "goals.progress.food").exists)
+        XCTAssertEqual(element(app, "goals.needed").label, "1h 30m left across your goals")
+        recordScreen("ProportionalGoalBarsAndParents", in: app)
+    }
+
+    func testDayBarShowsElapsedAndRemainingOnTheWholeWindowScale() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        let bar = element(app, "goals.capacity-bar"), elapsed = element(app, "goals.day-segment.elapsed")
+        let music = element(app, "goals.day-segment.goal:music"), teaching = element(app, "goals.day-segment.goal:teaching")
+        let other = element(app, "goals.day-segment.other")
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 5))
+        XCTAssertEqual(elapsed.frame.width / bar.frame.width, 0.7, accuracy: 0.01)
+        XCTAssertEqual(music.frame.width, teaching.frame.width * 2, accuracy: 2)
+        XCTAssertEqual(other.frame.width / bar.frame.width, 0.1, accuracy: 0.01)
+        XCTAssertEqual(elapsed.frame.width + music.frame.width + teaching.frame.width + other.frame.width, bar.frame.width, accuracy: 2)
+        XCTAssertTrue(app.staticTexts["Now"].exists)
+        recordScreen("WholeDayElapsedAndRemainingGoals", in: app)
+    }
+
+    func testCompletedGoalsRemainVisibleWithoutOpeningAnotherSection() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-completed"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        for id in ["music", "teaching", "food", "work"] {
+            let row = element(app, "goals.progress.\(id)")
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertTrue((row.value as? String ?? "").contains("Goal met"))
+        }
+        XCTAssertFalse(element(app, "goals.met").exists)
+        XCTAssertEqual(element(app, "goals.needed").label, "0m left across your goals")
+        XCTAssertTrue(element(app, "goals.day-segment.other").exists)
+        recordScreen("CompletedGoalsStayInList", in: app)
     }
 
     func testDailyGoalsMakesShortfallExplicit() {

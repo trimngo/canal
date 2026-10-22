@@ -65,8 +65,12 @@ final class LedgerStore: ObservableObject {
                 for (minute, id) in [(427.5, "music"), (480.0, "teaching"), (600.0, "food"), (1042.5, "food")] {
                     try fixture.saveSample(at: day.addingTimeInterval(minute * 60), activity: "\(id) observation", categoryIDs: [id], writer: "fixture", now: now)
                 }
-                let goals = ProcessInfo.processInfo.arguments.contains("--ui-daily-goals-overflow")
-                    ? ["music": 50.0, "teaching": 50.0] : ["music": 20.0, "teaching": 20.0]
+                let args = ProcessInfo.processInfo.arguments
+                let goals: [String: Double]
+                if args.contains("--ui-daily-goals-overflow") { goals = ["music": 50, "teaching": 50] }
+                else if args.contains("--ui-daily-goals-proportional") { goals = ["music": 10, "teaching": 20, "food": 0] }
+                else if args.contains("--ui-daily-goals-completed") { goals = ["music": 5, "teaching": 10, "food": 0] }
+                else { goals = ["music": 20, "teaching": 20] }
                 try fixture.saveAllocationGoals(goals, effectiveAt: day.addingTimeInterval(-86400), writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }

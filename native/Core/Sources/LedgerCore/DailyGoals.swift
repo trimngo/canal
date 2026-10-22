@@ -13,22 +13,56 @@ public struct DailyGoalProgress: Identifiable, Equatable, Sendable {
     public let category: LedgerCategory
     public let targetMinutes: Double
     public let actualMinutes: Double
+    public let depth: Int
+    public let isRollup: Bool
     public var id: String { category.id }
     public var remainingMinutes: Double { max(0, targetMinutes - actualMinutes) }
     public var fraction: Double { targetMinutes > 0 ? min(1, actualMinutes / targetMinutes) : 1 }
     public var isMet: Bool { remainingMinutes < 0.0000001 }
 }
 
+public struct GoalDayBarSegment: Identifiable, Equatable, Sendable {
+    public enum Kind: Equatable, Sendable { case elapsed, goal(String), other }
+    public let kind: Kind
+    public let minutes: Double
+    public var id: String {
+        switch kind {
+        case .elapsed: return "elapsed"
+        case .goal(let id): return "goal:\(id)"
+        case .other: return "other"
+        }
+    }
+}
+
 public struct DailyGoalsReport: Equatable, Sendable {
     public let window: GoalDayWindow
     public let goals: [DailyGoalProgress]
     public let uncategorizedMinutes: Double
-    public var neededMinutes: Double { goals.reduce(0) { $0 + $1.remainingMinutes } }
+    public var commitments: [DailyGoalProgress] { goals.filter { !$0.isRollup } }
+    public var neededMinutes: Double { commitments.reduce(0) { $0 + $1.remainingMinutes } }
     public var otherMinutes: Double { max(0, window.remainingMinutes - neededMinutes) }
     public var shortfallMinutes: Double { max(0, neededMinutes - window.remainingMinutes) }
-    /// A common scale for the remaining-goal segments and the unassigned space.
-    /// When over capacity, the amount beyond the clock time remains explicit.
-    public var barMinutes: Double { max(window.remainingMinutes, neededMinutes) }
+    /// Every row uses the same ruler, including parent totals. Fill is actual
+    /// progress inside this target width, rather than a second normalized bar.
+    public var goalScaleMinutes: Double { goals.map(\.targetMinutes).max() ?? 0 }
+    public func goalWidthFraction(_ goal: DailyGoalProgress) -> Double {
+        goalScaleMinutes > 0 ? goal.targetMinutes / goalScaleMinutes : 0
+    }
+    /// The entire configured day, never rescaled to just the remaining goals.
+    /// Show only what fits after Now; shortfallMinutes reports overflow instead
+    /// of shrinking time to make an overfull plan appear feasible.
+    public var dayBarSegments: [GoalDayBarSegment] {
+        var result: [GoalDayBarSegment] = []
+        if window.elapsedMinutes > 0 { result.append(GoalDayBarSegment(kind: .elapsed, minutes: window.elapsedMinutes)) }
+        var available = window.remainingMinutes
+        for goal in commitments where goal.remainingMinutes > 0 {
+            let fitted = min(available, goal.remainingMinutes)
+            if fitted > 0 { result.append(GoalDayBarSegment(kind: .goal(goal.id), minutes: fitted)) }
+            available -= fitted
+        }
+        if available > 0 { result.append(GoalDayBarSegment(kind: .other, minutes: available)) }
+        return result
+    }
 }
 
 extension Ledger {
@@ -50,14 +84,17 @@ extension Ledger {
         // Deliberately no clippingTo: early/late entries still count. Keep the
         // existing midpoint/carry-forward and equal-share category accounting.
         let actual = allocation(on: now, now: now, calendar: calendar)
-        let goals = editableAllocationGoals(at: now)
-        // Parents sum their leaves. Listing leaves only means neither time nor
-        // required effort is counted again through a calculated parent goal.
-        let progress = orderedCategories.compactMap { category -> DailyGoalProgress? in
-            guard let percentage = goals[category.id], percentage.isFinite, percentage > 0 else { return nil }
-            return DailyGoalProgress(category: category, targetMinutes: window.minutes * percentage / 100,
-                                     actualMinutes: actual.total(for: category.id, ledger: self))
+        let goals = currentGoals(at: now)
+        var progress: [DailyGoalProgress] = []
+        func append(_ category: LedgerCategory, depth: Int) {
+            let children = children(of: category.id)
+            if let percentage = goals[category.id], percentage.isFinite, percentage >= 0 {
+                progress.append(DailyGoalProgress(category: category, targetMinutes: window.minutes * percentage / 100,
+                    actualMinutes: actual.total(for: category.id, ledger: self), depth: depth, isRollup: !children.isEmpty))
+            }
+            for child in children { append(child, depth: depth + 1) }
         }
+        for root in children(of: nil) { append(root, depth: 0) }
         return DailyGoalsReport(window: window, goals: progress,
                                 uncategorizedMinutes: actual.directMinutes["uncategorized", default: 0])
     }
