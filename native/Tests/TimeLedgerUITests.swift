@@ -1656,6 +1656,26 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.buttons[label].tap()
     }
 
+    func testGoalDirectionArrowsUseExistingFeedbackInBothColumnsAndUnits() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-goal-hours-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        let todayMusic = element(app, "plan.actual.today.music"), weekMusic = element(app, "plan.actual.week.music")
+        let weekWork = element(app, "plan.actual.week.work")
+        XCTAssertTrue(todayMusic.waitForExistence(timeout: 5))
+        XCTAssertEqual(todayMusic.value as? String, "Up toward goal")
+        XCTAssertEqual(weekMusic.value as? String, "Up toward goal")
+        XCTAssertEqual(weekWork.value as? String, "Down toward goal")
+        recordScreen("GoalDirectionArrowsPercent", in: app)
+        switchGoalUnit("Time", in: app)
+        XCTAssertEqual(todayMusic.value as? String, "Up toward goal")
+        XCTAssertEqual(weekMusic.value as? String, "Up toward goal")
+        XCTAssertEqual(weekWork.value as? String, "Down toward goal")
+        app.buttons["plan.hide-blank-goals"].tap()
+        let food = element(app, "plan.actual.week.food"); reveal(food, in: app)
+        XCTAssertFalse((food.value as? String ?? "").contains("toward goal"))
+        recordScreen("GoalDirectionArrowsTime", in: app)
+    }
+
     func testCommitmentsColumnHeadingsSortAndReverseWithinTheHierarchy() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-sort-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
