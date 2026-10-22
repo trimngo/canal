@@ -46,7 +46,7 @@ struct CategorySelectionList: View {
     @State private var showingHelp = false
     var body: some View {
         List {
-            if let mood {
+            if let mood, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("Mood (optional)") { MoodSelectionView(selection: mood) }
             }
             Button("Uncategorized") { selection = []; query = "" }
