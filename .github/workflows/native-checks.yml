@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   watch-ui:
+    if: false # Watch code is unchanged; both simulator apps still build.
     runs-on: macos-15
     timeout-minutes: 30
     steps:
