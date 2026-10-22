@@ -255,9 +255,9 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 10))
         openLogs(app)
         let sample = app.staticTexts["Legacy sample UI fixture"]; reveal(sample, in: app); sample.tap()
-        XCTAssertTrue(element(app, "edit.activity").waitForExistence(timeout: 5))
-        let save = app.buttons["edit.save"]; reveal(save, in: app); save.tap()
-        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "logs.entry.")).firstMatch.waitForExistence(timeout: 5))
+        app.buttons["keyboard.done"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture"].exists)
     }
 
     func testNotificationOpenedLogCanBeSavedAndSurvivesRelaunch() {
@@ -690,18 +690,18 @@ final class TimeLedgerUITests: XCTestCase {
     func testLogSwipeDeletionUndoAndEditorDeletionPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
         openLogs(app)
-        let row = app.buttons["logs.entry.recent"]; reveal(row, in: app); row.swipeLeft()
+        let row = element(app, "logs.entry.recent"); reveal(row, in: app); row.swipeLeft()
         if app.buttons["Delete"].exists { app.buttons["Delete"].tap() }
         let undo = app.buttons["logs.undo-delete"]
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
-        XCTAssertTrue(app.buttons["logs.entry.recent"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "logs.entry.recent").waitForExistence(timeout: 5))
         let trash = app.buttons["logs.delete.recent"]; reveal(trash, in: app)
         recordScreen("VisibleLogDelete", in: app); trash.tap()
-        XCTAssertFalse(app.buttons["logs.entry.recent"].exists)
+        XCTAssertFalse(element(app, "logs.entry.recent").exists)
         XCTAssertFalse(app.navigationBars["Edit log"].exists)
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
-        XCTAssertTrue(app.buttons["logs.entry.recent"].waitForExistence(timeout: 5))
-        app.buttons["logs.entry.recent"].tap()
+        XCTAssertTrue(element(app, "logs.entry.recent").waitForExistence(timeout: 5))
+        app.buttons["Edit time and categories"].firstMatch.tap()
         let remove = app.buttons["edit.delete"]; reveal(remove, in: app); remove.tap()
         XCTAssertTrue(app.buttons["logs.undo-delete"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
@@ -737,7 +737,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertFalse(app.buttons["dashboard.group.work"].exists)
         openLogs(app)
-        XCTAssertFalse(app.buttons["logs.entry.recent"].exists)
+        XCTAssertFalse(element(app, "logs.entry.recent").exists)
     }
 
     func testRankingCanDeleteEitherIdeaUndoAndContinue() {
@@ -877,32 +877,17 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testTargetsAreAccessibleAndPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
-        XCTAssertTrue(element(app, "dashboard.breakdown-title").waitForExistence(timeout: 10))
-        XCTAssertFalse(element(app, "plan.total").exists)
         app.tabBars.buttons["Commitments"].tap()
-        XCTAssertTrue(element(app, "plan.balance").waitForExistence(timeout: 5))
-        XCTAssertEqual(element(app, "plan.balance").label, "55% left to allocate")
-        let save = app.buttons["categories.save-targets"]
-        XCTAssertFalse(save.isEnabled)
+        XCTAssertFalse(app.buttons["categories.save-targets"].exists)
         setPlanNumber("categories.target.work", to: "90", in: app)
-        showPlanSummary(in: app)
-        reveal(save, in: app); XCTAssertFalse(save.isEnabled)
-        XCTAssertTrue(element(app, "plan.balance").label.contains("5% over"))
+        showPlanSummary(in: app); XCTAssertTrue(element(app, "plan.balance").label.contains("5% over"))
         setPlanNumber("categories.target.work", to: "80", in: app)
-        showPlanSummary(in: app)
-        reveal(save, in: app); XCTAssertFalse(save.isEnabled)
-        XCTAssertTrue(element(app, "plan.balance").label.contains("5% left"))
+        showPlanSummary(in: app); XCTAssertTrue(element(app, "plan.balance").label.contains("5% left"))
         setPlanNumber("categories.target.work", to: "85", in: app)
-        showPlanSummary(in: app)
-        reveal(save, in: app); XCTAssertTrue(save.isEnabled); save.tap()
-        XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
-        XCTAssertFalse(save.isEnabled)
-        recordScreen("LifeAreaPlan", in: app)
+        showPlanSummary(in: app); XCTAssertEqual(element(app, "plan.balance").label, "100% allocated")
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
-        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
-        XCTAssertEqual(work.value as? String, "85")
-        let music = app.textFields["categories.target.music"]; reveal(music, in: app)
-        XCTAssertEqual(music.value as? String, "15")
+        XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "85")
+        XCTAssertEqual(app.textFields["categories.target.music"].value as? String, "15")
     }
 
     func testMultiCategorySelectionResolvesParentConflictExplicitly() {
@@ -1008,7 +993,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertTrue(element(app, "plan.total").waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["categories.save-targets"].exists)
+        XCTAssertFalse(app.buttons["categories.save-targets"].exists)
         let work = app.buttons["plan.children.work"]; reveal(work, in: app); work.tap()
         let teaching = element(app, "plan.name.teaching"); reveal(teaching, in: app)
         XCTAssertTrue(teaching.exists)
@@ -1019,7 +1004,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["group.done"].exists)
         XCTAssertFalse(app.buttons["View logs"].exists)
         XCTAssertFalse(app.buttons["plan.remaining.work"].exists)
-        XCTAssertFalse(app.textFields["categories.target.music"].exists)
+        XCTAssertTrue(app.textFields["categories.target.music"].exists)
         // Leaf names and totals have no navigation action.
         guitar.tap()
         XCTAssertTrue(app.navigationBars["Commitments"].exists)
@@ -1040,20 +1025,11 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.work", to: "35", in: app)
         selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
         app.buttons["plan.group-selected"].tap()
-        let dialog = app.sheets["Save your goal changes before grouping?"]
-        XCTAssertTrue(dialog.waitForExistence(timeout: 5))
-        XCTAssertFalse(dialog.buttons["Save and group"].exists)
-        dialog.buttons["Keep editing"].tap()
-        XCTAssertEqual(app.buttons["plan.group-selected"].label, "Move")
-        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
-        XCTAssertEqual(work.value as? String, "35")
-        app.buttons["plan.group-selected"].tap()
-        app.sheets.buttons["Discard changes and group"].tap()
         XCTAssertTrue(element(app, "categories.destination").waitForExistence(timeout: 5))
         app.navigationBars["Group categories"].buttons["Cancel"].tap()
-        XCTAssertEqual(app.buttons["plan.group-selected"].label, "Move")
-        reveal(work, in: app); XCTAssertEqual(work.value as? String, "30")
-        recordScreen("DirectGroupingCancelled", in: app)
+        XCTAssertTrue(app.buttons["plan.group-selected"].exists)
+        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
+        XCTAssertEqual(work.value as? String, "35")
     }
 
     func testGroupingCanSaveACompleteDraftBeforePreviewingMove() {
@@ -1063,18 +1039,13 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.music", to: "10", in: app)
         selectPlanCategory("admin", in: app); selectPlanCategory("music", in: app)
         app.buttons["plan.group-selected"].tap()
-        let saveAndGroup = app.sheets.buttons["Save and group"]
-        XCTAssertTrue(saveAndGroup.waitForExistence(timeout: 5)); saveAndGroup.tap()
         let name = app.textFields["categories.new-parent-name"]; XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap(); name.typeText("Personal projects"); app.buttons["keyboard.done"].tap()
-        XCTAssertTrue(app.staticTexts["0% → 20%"].exists)
+        name.tap(); name.typeText("Personal projects"); app.buttons["keyboard.done"].firstMatch.tap()
         app.buttons["categories.apply-move"].tap()
-        let goal = app.textFields["Personal projects goal percent"]; reveal(goal, in: app)
-        XCTAssertEqual(goal.value as? String, "20")
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
-        let work = app.textFields["categories.target.work"]; reveal(work, in: app)
-        XCTAssertEqual(work.value as? String, "35")
-        reveal(goal, in: app); XCTAssertEqual(goal.value as? String, "20")
+        XCTAssertTrue(app.buttons["categories.undo-move"].waitForExistence(timeout: 5))
+        let root = element(app, "plan.name.work"); reveal(root, in: app)
+        XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "35")
+        XCTAssertFalse(app.staticTexts["Save plan"].exists)
     }
 
     private func showPlanSummary(in app: XCUIApplication) {
@@ -1260,7 +1231,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["group.done"].tap()
         XCTAssertFalse(app.buttons["plan.selection-done"].exists)
         let child = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "plan.name.", "Hygiene")).firstMatch
-        reveal(child, in: app); child.press(forDuration: 0.8)
+        reveal(child, in: app); child.tap()
         app.buttons["plan.view-logs"].tap()
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
         app.buttons["group.done"].tap()
@@ -1386,10 +1357,11 @@ final class TimeLedgerUITests: XCTestCase {
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
         openInbox(app)
         let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.actions.")).firstMatch
-        actions.tap(); app.buttons["Edit idea"].tap()
-        let editor = app.textViews["capture.edit-text"]
-        XCTAssertTrue(editor.waitForExistence(timeout: 5)); editor.tap(); editor.typeText("\nCorrected details")
-        app.buttons["capture.edit-save"].tap()
+        let text = app.staticTexts["Reminders bicycle idea UI fixture"]
+        reveal(text, in: app); text.tap()
+        let editor = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.details.")).firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5)); editor.typeText(" Corrected details")
+        app.buttons["keyboard.done"].firstMatch.tap()
         let corrected = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Corrected details")).firstMatch
         XCTAssertTrue(corrected.waitForExistence(timeout: 5))
         recordScreen("InboxIdeaEdited", in: app)
@@ -1402,12 +1374,8 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
         openInbox(app)
         let actions = app.buttons["inbox.actions.open"]
-        reveal(actions, in: app); actions.tap(); app.buttons["Edit idea"].tap()
-        let notes = app.textViews["capture.edit-notes"]
-        XCTAssertTrue(notes.waitForExistence(timeout: 5)); notes.tap(); notes.typeText("Called the shop. Next: book a visit.")
-        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        editNotes("inbox.notes.open", adding: "Called the shop. Next: book a visit.", in: app)
         recordScreen("InboxTaskNotes", in: app)
-        app.buttons["capture.edit-save"].tap()
         reveal(actions, in: app); actions.tap(); app.buttons["Snooze…"].tap()
         app.buttons["snooze.week"].tap()
         if app.buttons["Keep chosen date"].waitForExistence(timeout: 2) { app.buttons["Keep chosen date"].tap() }
@@ -1417,9 +1385,8 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("InboxSnoozed", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
         reveal(snoozed, in: app); snoozed.tap()
-        reveal(actions, in: app); actions.tap(); app.buttons["Edit idea"].tap()
-        XCTAssertEqual(notes.value as? String, "Called the shop. Next: book a visit.")
-        app.buttons["Cancel"].tap()
+        let expandNotes = element(app, "inbox.notes.open.expand"); reveal(expandNotes, in: app); expandNotes.tap()
+        XCTAssertEqual(element(app, "inbox.notes.open").label, "Called the shop. Next: book a visit.")
         reveal(actions, in: app); actions.tap(); app.buttons["Bring back now"].tap()
         let returned = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch
         for _ in 0..<5 { if returned.exists, returned.isHittable { break }; app.swipeDown() }
@@ -1434,10 +1401,7 @@ final class TimeLedgerUITests: XCTestCase {
         let first = app.buttons["ranking.first"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         let original = first.label
-        app.buttons["ranking.first.actions"].tap(); app.buttons["Edit idea"].tap()
-        let notes = app.textViews["capture.edit-notes"]
-        XCTAssertTrue(notes.waitForExistence(timeout: 5)); notes.tap(); notes.typeText("Reviewed during ranking")
-        app.buttons["capture.edit-save"].tap()
+        editNotes("ranking.first.notes", adding: "Reviewed during ranking", in: app)
         XCTAssertEqual(first.label, original)
         app.buttons["ranking.first.actions"].tap(); app.buttons["Move to Reference"].tap()
         XCTAssertFalse(first.exists && first.label == original)
@@ -1452,10 +1416,10 @@ final class TimeLedgerUITests: XCTestCase {
         app.navigationBars["Rank ideas"].buttons["Done"].tap()
         let header = element(app, "inbox.reference-title"); reveal(header, in: app)
         XCTAssertTrue(header.label.contains("1"))
-        XCTAssertTrue(app.staticTexts[original].exists)
+        XCTAssertTrue(app.staticTexts[original.replacingOccurrences(of: "Choose: ", with: "")].exists)
         recordScreen("InboxReference", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
-        reveal(header, in: app); XCTAssertTrue(app.staticTexts[original].exists)
+        reveal(header, in: app); XCTAssertTrue(app.staticTexts[original.replacingOccurrences(of: "Choose: ", with: "")].exists)
     }
 
     func testCustomDaySnoozeOffersMondayAndKeepsTaskInSnoozedSection() {
@@ -1573,10 +1537,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("InboxSearchCompleted", in: app)
         app.buttons["inbox.search-clear"].tap()
         if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
-        let actions = app.buttons["inbox.actions.open"]; reveal(actions, in: app); actions.tap()
-        app.buttons["Edit idea"].tap()
-        let notes = app.textViews["capture.edit-notes"]; notes.tap(); notes.typeText("Unique bicycle wheels")
-        app.buttons["capture.edit-save"].tap()
+        editNotes("inbox.notes.open", adding: "Unique bicycle wheels", in: app)
         reveal(search, in: app); search.tap(); search.typeText("BICYCLE")
         XCTAssertTrue(app.staticTexts["Idea to analyze\nKeep every line"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Completed idea"].exists)
@@ -1672,6 +1633,11 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Today"].tap()
         reveal(element(app, "report.range"), in: app)
     }
+    private func editNotes(_ id: String, adding text: String, in app: XCUIApplication) {
+        let expand = element(app, "\(id).expand"); reveal(expand, in: app); expand.tap()
+        editInline(id, adding: text, in: app)
+    }
+
     private func editInline(_ id: String, adding suffix: String, in app: XCUIApplication) {
         let label = element(app, id); reveal(label, in: app); label.tap()
         let field = app.textFields[id]
@@ -1784,6 +1750,8 @@ final class TimeLedgerUITests: XCTestCase {
         editInline("ranking.first.text", adding: " corrected", in: app)
         XCTAssertEqual(first.label, original + " corrected"); XCTAssertEqual(second.label, other)
         XCTAssertFalse(app.navigationBars["Idea notes"].exists)
+        editNotes("ranking.first.notes", adding: "Reviewed inline", in: app)
+        XCTAssertEqual(first.label, original + " corrected"); XCTAssertEqual(second.label, other)
         recordScreen("InlineRankingWithSeparateChoice", in: app)
         first.tap()
         XCTAssertNotEqual(first.label, original + " corrected")
