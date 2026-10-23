@@ -3,11 +3,11 @@ import UIKit
 import LedgerCore
 
 private enum CategoryActionRequest: Identifiable {
-    case name(LedgerCategory?, parent: String?), logs(LedgerCategory), move([String])
+    case name(LedgerCategory?, parent: String?), detail(LedgerCategory), move([String])
     var id: String {
         switch self {
         case .name(let category, let parent): return "name:\(category?.id ?? "new"):\(parent ?? "root")"
-        case .logs(let category): return "logs:\(category.id)"
+        case .detail(let category): return "detail:\(category.id)"
         case .move(let ids): return "move:\(ids.joined(separator: ","))"
         }
     }
@@ -134,8 +134,8 @@ struct GoalEditorView: View {
                         if let parent { expanded.insert(parent) }
                     }
                 }
-            case .logs(let category):
-                GroupEntriesView(day: Date(), groupID: category.id, initialName: category.name, allTime: true)
+            case .detail(let category):
+                CategoryDetailView(request: CategoryDetailRequest(id: category.id, name: category.name))
                     .onAppear { finishSelection() }
             }
         }
@@ -197,6 +197,7 @@ struct GoalEditorView: View {
                 Text("Leave goals blank for activities you only want to observe. Goals save individually when you finish editing.")
                 Text("Edit goals on categories without children. Each parent adds up its children’s goals. Direct time counts toward the parent’s actual time without a separate goal.")
                 Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children. Use 7 days copies measured shares into fixed goals.")
+                Text("Favorite adds a goal to the main Commitments screen. Favoriting a parent adds its current child goals. Unfavorite hides the goal there without changing its percentage or logged time.")
                 Text("Red is below goal, green is at goal, amber is above goal. In Time mode, today’s accumulated time is compared with the daily goal equivalent; in % mode, proportions are compared.")
             }.font(.subheadline).padding()
         }.frame(width: 300, height: 350).presentationCompactAdaptation(.popover)
@@ -381,7 +382,7 @@ struct GoalEditorView: View {
                     .accessibilityLabel("\(expanded.contains(category.id) ? "Collapse" : "Expand") \(category.name)")
                     .accessibilityIdentifier("plan.children.\(category.id)")
             } else { Color.clear.frame(width: 28, height: 1).accessibilityHidden(true) }
-                Text(item.direct ? "Direct" : category.name)
+                Text(item.direct ? "Direct" : (category.isFavorite == true ? "★ " + category.name : category.name))
                     .foregroundStyle(item.direct ? Color.secondary : Color.primary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                     .onTapGesture {
@@ -490,10 +491,20 @@ struct GoalEditorView: View {
                 }
             }
             HStack(spacing: 0) {
+                if !selected.isEmpty {
+                    let targets = store.ledger.favoriteSelectionIDs(selected)
+                    let removing = !targets.isEmpty && targets.isSubset(of: store.ledger.favoriteCategoryIDs)
+                    actionButton(removing ? "Unfavorite" : "Favorite", icon: removing ? "star.slash" : "star", id: "plan.favorite") {
+                        endGoalEditing()
+                        guard dirtyGoals.isEmpty else { return }
+                        do { try store.setCategoryFavorites(selected, favorite: !removing); finishSelection() }
+                        catch { self.error = error.localizedDescription }
+                    }
+                }
                 if let category = singleSelection {
                     actionButton("Rename", icon: "pencil", id: "plan.rename") { actionRequest = .name(category, parent: categoryIndex.parents[category.id]) }
                     actionButton("Add child", icon: "plus", id: "plan.create-child") { actionRequest = .name(nil, parent: category.id) }
-                    actionButton("Logs", icon: "list.bullet", id: "plan.view-logs") { actionRequest = .logs(category) }
+                    actionButton("Open", icon: "tray", id: "plan.open-category") { actionRequest = .detail(category) }
                 }
                 actionButton("Move", icon: "folder", id: "plan.group-selected") { groupSelected() }.disabled(selected.isEmpty)
                 if let category = singleSelection {

@@ -46,7 +46,8 @@ struct CategoryHeatmapView: View {
                                 Text("Category").font(.caption.bold()).frame(height: rowHeight)
                                 ForEach(grid.rows) { row in
                                     if row.hasChildren {
-                                        rowLabel(row).fontWeight(.semibold).accessibilityAddTraits(.isHeader)
+                                        Button { select(row) } label: { rowLabel(row).fontWeight(.semibold) }
+                                            .buttonStyle(.plain).accessibilityAddTraits(.isHeader)
                                             .accessibilityIdentifier("report.heatmap.heading.\(row.id)")
                                     } else {
                                         Button { select(row) } label: { rowLabel(row) }

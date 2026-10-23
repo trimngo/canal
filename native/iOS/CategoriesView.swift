@@ -11,6 +11,7 @@ struct CategoriesView: View {
     @State private var creating = false
     @State private var moving = false
     @State private var reviewingUncategorized = false
+    @State private var detail: CategoryDetailRequest?
     @State private var error: String?
 
     private var visible: [LedgerCategory] {
@@ -30,14 +31,15 @@ struct CategoriesView: View {
         return count
     }
     var body: some View {
+        let counts = Dictionary(uniqueKeysWithValues: store.ledger.inboxCategorySummaries(ranked: store.inbox.ranked).map { ($0.id, $0.count) })
         List {
             Section {
-                Text(selecting ? "Select categories, then group them under an existing or new parent." : "Use Select to group several categories at once. Tap a name to rename it or view its logs.")
+                Text(selecting ? "Select categories, then group them under an existing or new parent." : "Use Select to group several categories at once. Tap a name for its inbox items and logs.")
                     .font(.subheadline).foregroundStyle(.secondary)
-                ForEach(visible) { category in row(category) }
+                ForEach(visible) { category in row(category, inboxCount: counts[category.id, default: 0]) }
                 Button("Create category", systemImage: "plus") { creating = true }.accessibilityIdentifier("categories.create")
                 if !selecting {
-                    Button("Uncategorized · \(store.ledger.groupEntryCounts()["uncategorized", default: 0]) logs") { reviewingUncategorized = true }
+                    Button("Uncategorized · \(counts["uncategorized", default: 0]) ideas") { reviewingUncategorized = true }
                         .accessibilityIdentifier("groups.open.uncategorized")
                 }
             } footer: {
@@ -62,12 +64,13 @@ struct CategoriesView: View {
                 }
             }
             .sheet(item: $editing) { CategoryEditView(category: $0) }
+            .sheet(item: $detail) { CategoryDetailView(request: $0) }
             .sheet(isPresented: $creating) { CategoryEditView(category: nil) }
             .sheet(isPresented: $moving) { CategoryMoveView(ids: selected.sorted()) { selected = [] } }
-            .sheet(isPresented: $reviewingUncategorized) { GroupEntriesView(day: Date(), groupID: "uncategorized", initialName: "Uncategorized", allTime: true) }
+            .sheet(isPresented: $reviewingUncategorized) { CategoryDetailView(request: CategoryDetailRequest(id: "uncategorized", name: "Uncategorized")) }
             .onChange(of: store.ledger.categories.map(\.id)) { _, ids in selected.formIntersection(ids) }
     }
-    private func row(_ category: LedgerCategory) -> some View {
+    private func row(_ category: LedgerCategory, inboxCount: Int) -> some View {
         let children = store.ledger.children(of: category.id)
         return HStack(spacing: 8) {
             if selecting {
@@ -82,10 +85,10 @@ struct CategoriesView: View {
                 }.buttonStyle(.borderless).accessibilityIdentifier("categories.select.\(category.id)")
                     .accessibilityAddTraits(selected.contains(category.id) ? .isSelected : [])
             } else {
-                Button { editing = category } label: {
+                Button { detail = CategoryDetailRequest(id: category.id, name: category.name) } label: {
                     HStack(spacing: 5) {
                         Text(category.name)
-                        Text("\(store.ledger.groupEntryCounts()[category.id, default: 0])").font(.caption).foregroundStyle(.secondary)
+                        Text("\(inboxCount) ideas").font(.caption).foregroundStyle(.secondary)
                         Spacer()
                     }.contentShape(Rectangle())
                 }.buttonStyle(.plain).foregroundStyle(.primary).accessibilityIdentifier("groups.open.\(category.id)")
@@ -94,6 +97,11 @@ struct CategoriesView: View {
                         Button("Move up") { reorder(category, direction: -1) }
                         Button("Move down") { reorder(category, direction: 1) }
                     }
+            }
+            if !selecting {
+                Button { editing = category } label: { Image(systemName: "pencil").frame(width: 36, height: 44) }
+                    .buttonStyle(.borderless).accessibilityLabel("Edit \(category.name)")
+                    .accessibilityIdentifier("categories.edit.\(category.id)")
             }
             if !children.isEmpty {
                 Button { if !collapsed.insert(category.id).inserted { collapsed.remove(category.id) } } label: {

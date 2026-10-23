@@ -72,6 +72,7 @@ final class LedgerStore: ObservableObject {
                 else if args.contains("--ui-daily-goals-completed") { goals = ["music": 5, "teaching": 10, "food": 0] }
                 else { goals = ["music": 20, "teaching": 20] }
                 try fixture.saveAllocationGoals(goals, effectiveAt: day.addingTimeInterval(-86400), writer: "fixture")
+                try fixture.setCategoryFavorites(Set(goals.keys), favorite: true, writer: "fixture")
                 if args.contains("--ui-daily-goals-large-editor") {
                     for group in 0..<10 {
                         let parent = "area-\(group)"
@@ -91,6 +92,29 @@ final class LedgerStore: ObservableObject {
                         }
                     }
                 }
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-category-workspace") {
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"),
+                    LedgerCategory(id: "admin", name: "Admin"), LedgerCategory(id: "music", name: "Music")]
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                try fixture.moveCategory("admin", to: "work", writer: "fixture")
+                let now = Date(), day = Calendar.current.startOfDay(for: now)
+                try fixture.saveSample(id: "teaching-log", at: min(now, day.addingTimeInterval(60)), activity: "Preparing classes", categoryIDs: ["teaching"], writer: "fixture", now: now)
+                try fixture.saveSample(id: "music-log", at: now.addingTimeInterval(-1), activity: "Playing music", categoryIDs: ["music"], writer: "fixture", now: now)
+                try fixture.saveAllocationGoals(["music": 20, "teaching": 20, "admin": 0], effectiveAt: now.addingTimeInterval(-86400), writer: "fixture")
+                for (i, pair) in [("uncategorized", "Newest uncategorized idea"), ("unseen", "New music idea"),
+                                  ("first", "Important music idea"), ("second", "Prepare a class"),
+                                  ("reference", "Music reference note"), ("completed", "Completed music idea")].enumerated() {
+                    try fixture.addCapture(text: pair.1, id: pair.0, writer: "fixture", now: now.addingTimeInterval(Double(-i * 60)))
+                }
+                for id in ["first", "unseen", "reference", "completed"] { try fixture.categorizeCapture(id: id, categoryIDs: ["music"], writer: "fixture") }
+                try fixture.categorizeCapture(id: "second", categoryIDs: ["teaching"], writer: "fixture")
+                fixture.setCaptureDone(id: "completed", done: true, writer: "fixture")
+                fixture.setCaptureReference("reference", reference: true, writer: "fixture")
+                var ranking = InboxRanking(); ranking.ordered = ["first", "second"]
+                ranking.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranking
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
@@ -476,6 +500,10 @@ final class LedgerStore: ObservableObject {
     }
     func updateAllocationGoal(categoryID: String, percentage: Double?) throws {
         var draft = ledger; try draft.updateAllocationGoal(categoryID: categoryID, percentage: percentage, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
+    func setCategoryFavorites(_ ids: Set<String>, favorite: Bool) throws {
+        var draft = ledger; try draft.setCategoryFavorites(ids, favorite: favorite, writer: writer)
         if draft != ledger { try commit(draft) }
     }
     func saveAllocationGoals(_ values: [String: Double]) throws {

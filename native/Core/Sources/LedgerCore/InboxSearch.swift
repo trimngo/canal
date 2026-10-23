@@ -12,10 +12,17 @@ extension Capture {
 }
 
 extension Ledger {
-    public func searchInbox(_ query: String, categoryID: String? = nil) -> [Capture] {
-        let ranks = Dictionary(uniqueKeysWithValues: inboxSnapshot.ranked.enumerated().map { ($0.element.id, $0.offset) })
+    public func searchInbox(_ query: String, categoryID: String? = nil, ranked: [Capture]? = nil) -> [Capture] {
+        let ranks = Dictionary(uniqueKeysWithValues: (ranked ?? inboxSnapshot.ranked).enumerated().map { ($0.element.id, $0.offset) })
+        let known = Set(categories.map(\.id))
+        let family = categoryID.map { Set([$0] + descendants(of: $0).map(\.id)) }
+        let emptyQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return captures.filter { idea in
-            guard idea.deletedAt == nil, capture(idea, matchesCategory: categoryID) else { return false }
+            guard idea.deletedAt == nil else { return false }
+            let assigned = (idea.categoryIDs ?? []).filter(known.contains)
+            if categoryID == "uncategorized" { guard assigned.isEmpty else { return false } }
+            else if let family, !assigned.contains(where: family.contains) { return false }
+            if emptyQuery { return true }
             var searchable = idea
             searchable.notes = (idea.notes ?? "") + "\n" + categoryIDs(for: idea).map { categoryPath($0) }.joined(separator: "\n")
             return searchable.matchesInboxSearch(query)

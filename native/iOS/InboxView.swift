@@ -13,6 +13,8 @@ struct InboxView: View {
     @State private var categoryFilter: String?
     @State private var showDone = false
     @State private var ranking = false
+    @State private var categorizing: CaptureCategoryReviewRequest?
+    @State private var showingCategories = false
     @State private var showBacklog = false
     @State private var showSnoozed = false
     @State private var snoozing: Capture?
@@ -39,6 +41,16 @@ struct InboxView: View {
                         .accessibilityIdentifier("inbox.save")
                 }
                 Section {
+                    HStack {
+                        Menu("Categorize ideas", systemImage: "tag") {
+                            categoryReviewButton("Uncategorized", uncategorizedOnly: true)
+                            categoryReviewButton("All ideas", uncategorizedOnly: false)
+                        }.accessibilityIdentifier("inbox.categorize")
+                        Spacer()
+                        Button("Categories", systemImage: "folder") {
+                            endInput(); showingCategories = true
+                        }.accessibilityIdentifier("inbox.categories")
+                    }
                     Button("Review ideas", systemImage: "arrow.left.arrow.right") { review() }
                         .accessibilityIdentifier("inbox.review")
                         .disabled(store.ledger.activeCaptures.isEmpty || !store.storageAvailable)
@@ -172,6 +184,8 @@ struct InboxView: View {
                     if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
                 }
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
+                .sheet(item: $categorizing) { CaptureCategoryReviewView(captureIDs: $0.captureIDs) }
+                .sheet(isPresented: $showingCategories) { InboxCategoriesView() }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         if !showDone, !searching, !waiting.isEmpty {
@@ -215,6 +229,14 @@ struct InboxView: View {
                 }
         }
     }
+    private func endInput() { focused = false; searchFocused = false; UIApplication.shared.dismissLedgerKeyboard() }
+    private func categoryReviewButton(_ title: String, uncategorizedOnly: Bool) -> some View {
+        let ids = store.ledger.inboxCategorizationIDs(uncategorizedOnly: uncategorizedOnly)
+        return Button("\(title) (\(ids.count))") {
+            endInput(); categorizing = CaptureCategoryReviewRequest(captureIDs: ids)
+        }.disabled(ids.isEmpty || !store.storageAvailable)
+            .accessibilityIdentifier(uncategorizedOnly ? "inbox.categorize-uncategorized" : "inbox.categorize-all")
+    }
     private func review() {
         do { try store.prepareRanking(); focused = false; searchFocused = false; ranking = true } catch { store.report(error) }
     }
@@ -225,6 +247,26 @@ struct InboxView: View {
             "New ideas reviewed. Backlog review is optional; this list isn't a verified ranking of every idea."
     }
     private func captureRow(_ capture: Capture) -> some View {
+        InboxCaptureRow(capture: capture, onRank: { ranking = true }, onSnooze: {
+            focused = false; searchFocused = false; snoozing = $0
+        })
+    }
+    private func copyIdeas() {
+        let export = store.ledger.inboxExport
+        guard export.count > 0 else { return }
+        UIPasteboard.general.string = export.text
+        copiedIdeaCount = export.count
+        focused = false; searchFocused = false
+    }
+
+}
+
+struct InboxCaptureRow: View {
+    @EnvironmentObject private var store: LedgerStore
+    let capture: Capture
+    let onRank: () -> Void
+    let onSnooze: (Capture) -> Void
+    var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Button {
                 do { try store.setCaptureDone(capture, done: !capture.isDone) } catch { store.report(error) }
@@ -234,7 +276,7 @@ struct InboxView: View {
                 InlineEntryText(text: capture.text, identifier: "inbox.details.\(capture.id)") {
                     try store.updateCaptureText(capture, text: $0)
                 }
-                Text(metadata(capture)).font(.caption).foregroundStyle(.secondary)
+                Text(metadata).font(.caption).foregroundStyle(.secondary)
                 CaptureCategoryButton(capture: capture, identifier: "inbox.category.\(capture.id)")
                 InlineCaptureNotes(capture: capture, identifier: "inbox.notes.\(capture.id)")
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -247,10 +289,10 @@ struct InboxView: View {
                         if capture.isSnoozed(at: Date()) {
                             Button("Bring back now") { bringBack(capture) }
                         }
-                        Button(capture.isSnoozed(at: Date()) ? "Change return date…" : "Snooze…") { focused = false; snoozing = capture }
+                        Button(capture.isSnoozed(at: Date()) ? "Change return date…" : "Snooze…") { onSnooze(capture) }
                         if !capture.isSnoozed(at: Date()) {
                             Button("Re-rank this idea") {
-                                do { try store.rerankCapture(capture.id); ranking = true } catch { store.report(error) }
+                                do { try store.rerankCapture(capture.id); onRank() } catch { store.report(error) }
                             }
                         }
                     }
@@ -266,35 +308,27 @@ struct InboxView: View {
                     if capture.isSnoozed(at: Date()) {
                         Button("Bring back", systemImage: "arrow.uturn.backward") { bringBack(capture) }.tint(.teal)
                     } else {
-                        Button("Snooze", systemImage: "moon.zzz") { focused = false; snoozing = capture }.tint(.indigo)
+                        Button("Snooze", systemImage: "moon.zzz") { onSnooze(capture) }.tint(.indigo)
                     }
                 }
             }
-    }
-    private func copyIdeas() {
-        let export = store.ledger.inboxExport
-        guard export.count > 0 else { return }
-        UIPasteboard.general.string = export.text
-        copiedIdeaCount = export.count
-        focused = false; searchFocused = false
     }
     private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
     private func bringBack(_ capture: Capture) { do { try store.bringBackCapture(capture) } catch { store.report(error) } }
     private func moveReference(_ capture: Capture, reference: Bool) {
         do { try store.setCaptureReference(capture, reference: reference) } catch { store.report(error) }
     }
-    private func metadata(_ capture: Capture) -> String {
+    private var metadata: String {
         let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
         let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
         if capture.isDone { return "Completed · \(origin)\(date)" }
         if capture.isReference == true { return "Reference · \(origin)\(date)" }
         if let due = capture.snoozeReturnDate(), !capture.isDone {
             if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .omitted)) at \(store.time(due))" }
-            if waiting.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
+            if store.inbox.unseen.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
         }
         if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { return "#\(rank + 1) · \(origin)\(date)" }
-        if showDone { return origin + date }
-        let status = backlog.contains { $0.id == capture.id } ? "Backlog" : inProgress.contains { $0.id == capture.id } ? "In progress" : "Unseen"
+        let status = store.inbox.backlog.contains { $0.id == capture.id } ? "Backlog" : store.inbox.inProgress.contains { $0.id == capture.id } ? "In progress" : "Unseen"
         return "\(origin)\(status) · \(date)"
     }
 }
@@ -324,7 +358,7 @@ private struct InlineCaptureNotes: View {
     }
 }
 
-private struct CaptureSnoozeView: View {
+struct CaptureSnoozeView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     let capture: Capture
@@ -384,7 +418,7 @@ private struct CaptureSnoozeView: View {
     }
 }
 
-private struct RankingView: View {
+struct RankingView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     @State private var snoozing: Capture?

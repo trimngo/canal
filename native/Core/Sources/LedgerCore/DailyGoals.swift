@@ -79,7 +79,7 @@ extension Ledger {
         return GoalDayWindow(interval: DateInterval(start: from, end: to), now: now)
     }
 
-    public func dailyGoals(now: Date = Date(), calendar: Calendar = .current) -> DailyGoalsReport? {
+    public func dailyGoals(now: Date = Date(), calendar: Calendar = .current, favoritesOnly: Bool = false) -> DailyGoalsReport? {
         guard let window = goalDayWindow(on: now, now: now, calendar: calendar) else { return nil }
         // Deliberately no clippingTo: early/late entries still count. Keep the
         // existing midpoint/carry-forward and equal-share category accounting.
@@ -90,7 +90,8 @@ extension Ledger {
         var progress: [DailyGoalProgress] = []
         func append(_ category: LedgerCategory, depth: Int) {
             let children = index.children(of: category.id)
-            if let percentage = goals[category.id], percentage.isFinite, percentage >= 0 {
+            if (!favoritesOnly || (category.isFavorite == true && children.isEmpty)),
+               let percentage = goals[category.id], percentage.isFinite, percentage >= 0 {
                 progress.append(DailyGoalProgress(category: category, targetMinutes: window.minutes * percentage / 100,
                     actualMinutes: totals[category.id, default: 0], depth: depth, isRollup: !children.isEmpty))
             }

@@ -7,24 +7,24 @@ struct CommitmentsView: View {
     @State private var editingGoals = false
     @State private var editingWindow = false
     @State private var showingExplanation = false
-    @State private var expandedGoal: String?
+    @State private var categoryDetail: CategoryDetailRequest?
     @State private var reviewing: LogReviewRequest?
     private let colors: [Color] = [.teal, .indigo, .orange, .pink, .blue, .purple, .mint]
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
             let now = reportDate(context.date)
-            if let report = store.ledger.dailyGoals(now: now) {
+            if let report = store.ledger.dailyGoals(now: now, favoritesOnly: true) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
                         timeLeft(report)
                         if report.commitments.isEmpty {
                             ContentUnavailableView {
-                                Label("What do you want time for?", systemImage: "clock")
+                                Label("Choose your commitments", systemImage: "star")
                             } description: {
-                                Text("Set goals for the categories you want to focus on.")
+                                Text("Favorite goals in Edit goals to show them here. Your other goals stay saved.")
                             } actions: {
-                                Button("Set goals") { editingGoals = true }.buttonStyle(.borderedProminent)
+                                Button("Choose favorites") { editingGoals = true }.buttonStyle(.borderedProminent)
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 22) {
@@ -67,6 +67,7 @@ struct CommitmentsView: View {
             }
         }
         .sheet(isPresented: $editingWindow) { NavigationStack { DayWindowSettingsView() } }
+        .sheet(item: $categoryDetail) { CategoryDetailView(request: $0) }
         .sheet(item: $reviewing) { request in LogReviewView(entryIDs: request.entryIDs) }
     }
 
@@ -105,8 +106,8 @@ struct CommitmentsView: View {
                         ScrollView { VStack(alignment: .leading, spacing: 12) {
                             Text("Time left today").font(.headline)
                             Text("The upper bar is the entire configured day. Dark gray is elapsed clock time. The Now marker separates elapsed from remaining time. Colored sections after Now are time still needed for goals; light gray is left for other activities. These amounts are not an activity schedule or calendar availability.")
-                            Text("Categories with their own goals stay listed, including goals already met and 0% goals. Parent totals are available in Edit goals and are not counted again here.")
-                            Text("Goal bar lengths share one scale: a two-hour goal is twice as long as a one-hour goal. Filled color is logged progress inside that goal. Tap a row for its logged and target times. If goals do not fit, their colored time stops at the day’s end and the shortfall shows the extra time needed.")
+                            Text("Favorite goals appear here. Select rows in Edit goals to favorite or unfavorite them; selecting a parent applies to its current children. Remaining goal time covers these favorites. Other goals and logged time stay saved.")
+                            Text("Goal bar lengths share one scale: a two-hour goal is twice as long as a one-hour goal. Filled color is logged progress inside that goal. Tap a category for its inbox items and logs. If goals do not fit, their colored time stops at the day’s end and the shortfall shows the extra time needed.")
                             Text("Daily goal hours are your fixed percentages of this window. All of today’s logs count, including outside it. Unrecorded or uncategorized activity can make progress look lower.")
                             Text("Changing the shared window also changes check-in hours when All day notifications are off. It never blocks logging.")
                         }.font(.subheadline).padding() }.frame(width: 300, height: 390)
@@ -201,13 +202,13 @@ struct CommitmentsView: View {
                 Text(goal.isMet ? "Met" : "\(store.duration(goal.remainingMinutes)) left")
                     .font(.subheadline.weight(.medium)).monospacedDigit()
             }.contentShape(Rectangle())
-                .onTapGesture { toggleDetail(goal.id) }
+                .onTapGesture { categoryDetail = CategoryDetailRequest(id: goal.id, name: goal.category.name) }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(goal.category.name)
                 .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today. \(goal.isMet ? "Goal met" : "\(store.duration(goal.remainingMinutes)) remaining")")
-                .accessibilityHint("Tap to show or hide logged and goal times")
+                .accessibilityHint("Open inbox items and logs for this category")
                 .accessibilityAddTraits(.isButton)
-                .accessibilityAction { toggleDetail(goal.id) }
+                .accessibilityAction { categoryDetail = CategoryDetailRequest(id: goal.id, name: goal.category.name) }
                 .accessibilityIdentifier("goals.progress.\(goal.id)")
             GeometryReader { proxy in
                 let width = proxy.size.width * report.goalWidthFraction(goal)
@@ -220,12 +221,8 @@ struct CommitmentsView: View {
                     .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes))")
                     .accessibilityIdentifier("goals.target-bar.\(goal.id)")
             }.frame(height: 10)
-            if expandedGoal == goal.id {
-                Text("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+
         }
     }
 
-    private func toggleDetail(_ id: String) { expandedGoal = expandedGoal == id ? nil : id }
 }

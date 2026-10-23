@@ -97,7 +97,8 @@ struct HistoryPanel: View {
                     .accessibilityIdentifier("dashboard.children.\(item.row.id)")
             } else { Color.clear.frame(width: 28, height: 1).accessibilityHidden(true) }
             if item.direct {
-                breakdownValue(item).accessibilityIdentifier("dashboard.direct.\(item.row.id)")
+                Button { selectDirect(item.row) } label: { breakdownValue(item) }
+                    .buttonStyle(.plain).accessibilityIdentifier("dashboard.direct.\(item.row.id)")
             } else {
                 Button { select(item.row) } label: { breakdownValue(item) }
                     .buttonStyle(.plain).accessibilityIdentifier("dashboard.group.\(item.row.id)")

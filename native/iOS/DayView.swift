@@ -2,14 +2,6 @@ import SwiftUI
 import Combine
 import LedgerCore
 
-private struct SelectedGroup: Identifiable {
-    var id: String
-    var name: String
-    var start: Date?
-    var end: Date?
-    var directOnly = false
-}
-
 struct DayView: View {
     var body: some View { AllocationHistoryView() }
 }
@@ -18,7 +10,7 @@ struct AllocationHistoryView: View {
     @EnvironmentObject var store: LedgerStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var now = Date()
-    @State private var selectedGroup: SelectedGroup?
+    @State private var selectedGroup: CategoryDetailRequest?
     @State private var managingGroups = false
     @State private var reviewing: LogReviewRequest?
     @State private var range: HistoryRange = .today
@@ -50,7 +42,7 @@ struct AllocationHistoryView: View {
             }
             .sheet(isPresented: $managingGroups, onDismiss: { now = Date() }) { GroupManagerView() }
             .sheet(item: $selectedGroup, onDismiss: { now = Date() }) { group in
-                GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end, directOnly: group.directOnly)
+                CategoryDetailView(request: group)
             }
             .sheet(item: $reviewing, onDismiss: { now = Date() }) { request in LogReviewView(entryIDs: request.entryIDs) }
 
@@ -89,9 +81,9 @@ struct AllocationHistoryView: View {
             }.padding(.horizontal, 20).padding(.vertical, 8)
             Divider()
             HistoryPanel(report: report, hideZeroTime: hideZeroTime, selectDirect: { row in
-                selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end, directOnly: true)
+                selectedGroup = CategoryDetailRequest(id: row.id, name: row.name, start: report.start, end: report.end, directOnly: true, allTime: false)
             }) { row in
-                selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
+                selectedGroup = CategoryDetailRequest(id: row.id, name: row.name, start: report.start, end: report.end, allTime: false)
             }.padding(.top, 12)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }

@@ -29,6 +29,8 @@ public struct Revision: Codable, Equatable, Comparable, Sendable {
 }
 
 public struct LedgerCategory: Codable, Identifiable, Equatable, Sendable {
+    /// Nil in older ledgers. Favorites affect the dashboard, not goal values.
+    public var isFavorite: Bool? = nil
     public var parentID: String?
     public var sortOrder: Int?
     public var automaticRole: String?

@@ -83,6 +83,18 @@ final class TimeLedgerUITests: XCTestCase {
         return target
     }
 
+    private func openCategoryLogs(in app: XCUIApplication) {
+        let logs = app.buttons["category-detail.logs"]
+        XCTAssertTrue(logs.waitForExistence(timeout: 5)); reveal(logs, in: app); logs.tap()
+        XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5))
+    }
+
+    private func closeCategoryLogs(in app: XCUIApplication) {
+        app.buttons["group.done"].tap()
+        let close = app.buttons["category-detail.close"]
+        if close.waitForExistence(timeout: 1), close.isHittable { close.tap() }
+    }
+
     private func openGoalEditor(in app: XCUIApplication) {
         app.tabBars.buttons["Commitments"].tap()
         let edit = app.buttons["goals.edit"]
@@ -155,19 +167,21 @@ final class TimeLedgerUITests: XCTestCase {
     func testDashboardCategorizesAnUnknownActivityAndSupportsUndo() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let review = dashboardGroup("uncategorized", in: app); reveal(review, in: app); review.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
         app.buttons["Choose group"].tap(); tapCategory("social", in: app); app.buttons["group-selection.done"].tap()
         let undo = app.buttons["group.undo"]
         XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
         XCTAssertTrue(app.staticTexts["Quokka activity fixture"].waitForExistence(timeout: 5))
         app.buttons["Choose group"].tap(); tapCategory("social", in: app); app.buttons["group-selection.done"].tap()
-        app.buttons["Done"].tap()
+        closeCategoryLogs(in: app)
         XCTAssertTrue(dashboardGroup("social", in: app).waitForExistence(timeout: 5))
     }
 
     func testGroupPickerKeepsMultipleSelectionsWhileCreatingAndCanCancel() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let review = dashboardGroup("uncategorized", in: app); reveal(review, in: app); review.tap()
+        openCategoryLogs(in: app)
         app.buttons["Choose group"].tap()
         let context = element(app, "category-context.activity")
         XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains("Quokka activity fixture"))
@@ -189,8 +203,9 @@ final class TimeLedgerUITests: XCTestCase {
         reveal(personal, in: app); XCTAssertEqual(personal.value as? String, "Selected")
         recordScreen("MultiGroupPickerWithNewGroup", in: app)
         app.buttons["group-selection.done"].tap()
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         let row = dashboardGroup("work", in: app); reveal(row, in: app); row.tap()
+        openCategoryLogs(in: app)
         let choose = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "group.choose.")).firstMatch
         reveal(choose, in: app); choose.tap()
         XCTAssertEqual(work.value as? String, "Selected")
@@ -207,15 +222,17 @@ final class TimeLedgerUITests: XCTestCase {
     func testDashboardCreatesAndRenamesANewGroup() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let review = dashboardGroup("uncategorized", in: app); reveal(review, in: app); review.tap()
+        openCategoryLogs(in: app)
         app.buttons["Choose group"].tap(); app.buttons["Create new group…"].tap()
         let field = app.alerts.textFields["Group name"]
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Creative Practice")
         app.alerts.buttons["Create"].tap()
         app.buttons["group-selection.done"].tap()
-        app.buttons["Done"].tap(); app.buttons["dashboard.groups"].tap()
+        closeCategoryLogs(in: app); app.buttons["dashboard.groups"].tap()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.open.", "Creative Practice")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let groupID = String(row.identifier.dropFirst("groups.open.".count)); reveal(row, in: app); row.tap()
+        let groupID = String(row.identifier.dropFirst("groups.open.".count))
+        let edit = app.buttons["categories.edit.\(groupID)"]; reveal(edit, in: app); edit.tap()
         recordScreen("CategoryEditorAfterTap", in: app)
         let rename = app.textFields["categories.name"]
         XCTAssertTrue(rename.waitForExistence(timeout: 5)); rename.tap()
@@ -240,8 +257,9 @@ final class TimeLedgerUITests: XCTestCase {
         let period = element(app, "report.range"); period.tap(); app.buttons["Past 7 days"].tap()
         let social = dashboardGroup("social", in: app)
         XCTAssertTrue(social.waitForExistence(timeout: 5)); social.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["After former bedtime"].waitForExistence(timeout: 5))
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         recordScreen("AllClockTimesInDashboard", in: app)
         let calendar = app.buttons["dashboard.calendar"]; reveal(calendar, in: app); calendar.tap()
         XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
@@ -605,7 +623,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dashboard.calendar"].isHittable)
         recordScreen("FullScreenHeatmapHours", in: app)
         work.tap()
-        XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5)); app.buttons["group.done"].tap()
+        openCategoryLogs(in: app)
+        XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5)); closeCategoryLogs(in: app)
         app.buttons["dashboard.calendar"].tap()
         XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
     }
@@ -638,12 +657,14 @@ final class TimeLedgerUITests: XCTestCase {
         units.buttons["Hours"].tap()
         recordScreen("ExpandedHeatmapHours", in: app)
         direct.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "group.log.today-parent-direct").exists)
         XCTAssertFalse(element(app, "group.log.today-teaching").exists)
         XCTAssertFalse(element(app, "group.log.today-guitar").exists)
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         reveal(guitar, in: app); guitar.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(element(app, "group.log.today-guitar").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "group.log.today-parent-direct").exists)
     }
@@ -652,23 +673,121 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
         app.buttons["dashboard.groups"].tap()
         let group = app.buttons["groups.open.work"]; reveal(group, in: app)
-        XCTAssertTrue(group.staticTexts["2"].exists); recordScreen("CategoryCounts", in: app); group.tap()
+        XCTAssertTrue(group.staticTexts["0 ideas"].exists); recordScreen("CategoryCounts", in: app)
+        app.buttons["categories.edit.work"].tap()
         app.buttons["View all logs (2)"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         app.buttons["group.delete"].tap(); app.sheets.buttons["Cancel"].firstMatch.tap()
         XCTAssertTrue(app.textFields["categories.name"].exists)
         app.buttons["group.delete"].tap()
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Delete category", "group.delete")).firstMatch.tap()
         XCTAssertFalse(app.buttons["groups.open.work"].exists)
         let uncategorized = app.buttons["groups.open.uncategorized"]; reveal(uncategorized, in: app); uncategorized.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
         app.terminate(); app.launchArguments = []; app.launch(); app.buttons["dashboard.groups"].tap()
         XCTAssertFalse(app.buttons["groups.open.work"].exists)
         reveal(uncategorized, in: app); uncategorized.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
+    }
+
+    func testInboxCategorizationIsIndependentAndSavesAcrossRestart() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-category-workspace"]; app.launch()
+        openInbox(app)
+        app.buttons["inbox.categorize"].tap()
+        app.buttons["inbox.categorize-uncategorized"].tap()
+        XCTAssertEqual(element(app, "category-context.activity").label, "Newest uncategorized idea")
+        XCTAssertEqual(element(app, "idea-review.position").label, "1 of 1")
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        tapCategory("teaching", in: app)
+        recordScreen("InboxIndependentCategorization", in: app)
+        app.buttons["idea-review.save-next"].tap()
+        XCTAssertTrue(app.buttons["inbox.categorize"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Review complete"].exists)
+        app.buttons["inbox.categorize"].tap(); app.buttons["inbox.categorize-all"].tap()
+        XCTAssertEqual(element(app, "idea-review.position").label, "1 of 6")
+        XCTAssertEqual(app.buttons["category-select.teaching"].value as? String, "Selected")
+        app.buttons["idea-review.save-next"].tap()
+        XCTAssertEqual(element(app, "category-context.activity").label, "New music idea")
+        XCTAssertEqual(element(app, "idea-review.position").label, "2 of 6")
+        app.buttons["idea-review.close"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        app.buttons["inbox.categories"].tap(); app.buttons["inbox.categories.teaching"].tap()
+        XCTAssertEqual(element(app, "category-detail.count").label, "2 inbox items")
+        XCTAssertTrue(element(app, "inbox.details.second").exists)
+        XCTAssertTrue(element(app, "inbox.details.uncategorized").exists)
+    }
+
+    func testSharedCategoryPageShowsRankedAndUnrankedItemsBeforeLogs() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-category-workspace"]; app.launch()
+        openInbox(app); app.buttons["inbox.categories"].tap()
+        let music = app.buttons["inbox.categories.music"]
+        XCTAssertTrue(music.waitForExistence(timeout: 5))
+        XCTAssertTrue(music.label.contains("4")); XCTAssertTrue(music.label.contains("#1"))
+        recordScreen("InboxCategoryCounts", in: app); music.tap()
+        XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
+        let ranked = element(app, "inbox.details.first"), unranked = element(app, "inbox.details.unseen")
+        XCTAssertTrue(ranked.exists); XCTAssertTrue(unranked.exists)
+        XCTAssertLessThan(ranked.frame.minY, unranked.frame.minY)
+        XCTAssertFalse(app.staticTexts["Playing music"].exists)
+        XCTAssertFalse(app.buttons["group.done"].exists)
+        recordScreen("CategoryInboxFirst", in: app)
+        openCategoryLogs(in: app)
+        XCTAssertTrue(element(app, "group.log.music-log").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "group.log.teaching-log").exists)
+        closeCategoryLogs(in: app)
+        app.navigationBars["Inbox categories"].buttons["Close"].tap()
+        app.tabBars.buttons["Today"].tap()
+        dashboardGroup("music", in: app).tap()
+        XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
+        let other = element(app, "category-detail.other-lists"); reveal(other, in: app); other.tap()
+        XCTAssertTrue(element(app, "inbox.details.reference").exists)
+        XCTAssertTrue(element(app, "inbox.details.completed").exists)
+        let menu = app.buttons["inbox.actions.unseen"]; reveal(menu, in: app); menu.tap()
+        app.buttons["Delete idea"].tap()
+        XCTAssertEqual(element(app, "category-detail.count").label, "3 inbox items")
+        let undo = app.buttons["inbox.undo-delete"]; reveal(undo, in: app); undo.tap()
+        XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
+    }
+
+    func testCommitmentFavoritesIncludeChildGoalsAndPersist() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-category-workspace"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(app.buttons["Choose favorites"].waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "goals.progress.music").exists)
+        openGoalEditor(in: app)
+        selectPlanCategory("music", in: app); app.buttons["plan.favorite"].tap()
+        XCTAssertFalse(app.buttons["plan.selection-done"].exists)
+        app.navigationBars["Edit goals"].buttons["Close"].tap()
+        XCTAssertTrue(element(app, "goals.progress.music").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "goals.progress.teaching").exists)
+        element(app, "goals.progress.music").tap()
+        XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
+        XCTAssertTrue(element(app, "inbox.details.first").exists)
+        app.buttons["category-detail.close"].tap()
+        openGoalEditor(in: app)
+        selectPlanCategory("work", in: app); app.buttons["plan.favorite"].tap()
+        app.navigationBars["Edit goals"].buttons["Close"].tap()
+        XCTAssertTrue(element(app, "goals.progress.teaching").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "goals.progress.admin").exists)
+        XCTAssertFalse(element(app, "goals.progress.work").exists)
+        recordScreen("FavoriteCommitments", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(element(app, "goals.progress.music").waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "goals.progress.teaching").exists)
+        openGoalEditor(in: app)
+        let arrow = app.buttons["plan.children.work"]; reveal(arrow, in: app)
+        if arrow.label.hasPrefix("Expand ") { arrow.tap() }
+        selectPlanCategory("teaching", in: app)
+        XCTAssertEqual(app.buttons["plan.favorite"].label, "Unfavorite")
+        app.buttons["plan.favorite"].tap()
+        app.navigationBars["Edit goals"].buttons["Close"].tap()
+        XCTAssertFalse(element(app, "goals.progress.teaching").exists)
+        XCTAssertTrue(element(app, "goals.progress.music").exists)
     }
 
     func testInboxRankingResumesAfterRelaunchAndNewIdeasWaitToBeRanked() {
@@ -750,7 +869,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
         app.tabBars.buttons["Today"].tap(); app.buttons["dashboard.groups"].tap()
-        let work = app.buttons["groups.open.work"]; reveal(work, in: app); work.tap()
+        let work = app.buttons["categories.edit.work"]; reveal(work, in: app); work.tap()
         app.buttons["View all logs (1)"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
@@ -759,6 +878,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testCategoryLogDeleteButtonUpdatesDashboardAndCanUndo() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
         dashboardGroup("work", in: app).tap()
+        openCategoryLogs(in: app)
         let trash = app.buttons["group.delete-log.recent"]
         XCTAssertTrue(trash.waitForExistence(timeout: 5))
         recordScreen("CategoryLogDelete", in: app); trash.tap()
@@ -773,7 +893,7 @@ final class TimeLedgerUITests: XCTestCase {
         }
         undo.tap()
         XCTAssertTrue(app.staticTexts["Recent work observation"].waitForExistence(timeout: 5))
-        trash.tap(); app.buttons["group.done"].tap()
+        trash.tap(); closeCategoryLogs(in: app)
         XCTAssertFalse(app.buttons["dashboard.group.work"].exists)
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertFalse(app.buttons["dashboard.group.work"].exists)
@@ -1109,6 +1229,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Review complete"].exists)
         XCTAssertFalse(app.buttons["log-review.close"].exists)
         let group = dashboardGroup("work", in: app); reveal(group, in: app); group.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Mood: 4/5"].waitForExistence(timeout: 5))
         let change = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "group.choose.")).firstMatch
         reveal(change, in: app); change.tap()
@@ -1116,7 +1237,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(selectedMood.value as? String, "Selected")
         app.buttons["mood.clear"].tap(); app.buttons["group-selection.done"].tap()
         XCTAssertFalse(app.staticTexts["Mood: 4/5"].exists)
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
         app.tabBars.buttons["Log"].tap()
@@ -1136,9 +1257,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dashboard.group.guitar"].waitForExistence(timeout: 5))
         recordScreen("DashboardCategoryTree", in: app)
         let teaching = app.buttons["dashboard.group.teaching"]; reveal(teaching, in: app); teaching.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Guitar practice"].exists)
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         reveal(work, in: app); work.tap()
         XCTAssertFalse(app.buttons["dashboard.group.teaching"].exists)
         XCTAssertFalse(app.buttons["dashboard.group.guitar"].exists)
@@ -1200,6 +1322,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("InlineLogReview", in: app)
         app.buttons["log-review.save-next"].tap()
         let group = dashboardGroup("work", in: app); reveal(group, in: app); group.tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "corrected")).firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Mood: 4/5"].exists)
     }
@@ -1207,12 +1330,13 @@ final class TimeLedgerUITests: XCTestCase {
     func testCategoryAssignmentCanEditTextOrCancelWithoutLosingDraftChoices() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-grouping-ledger"]; app.launch()
         let group = dashboardGroup("uncategorized", in: app); reveal(group, in: app); group.tap()
+        openCategoryLogs(in: app)
         app.buttons["Choose group"].tap()
         app.buttons["mood.3"].tap(); tapCategory("work", in: app)
         editInline("category-context.activity", adding: " corrected", in: app)
         XCTAssertTrue(element(app, "category-context.activity").label.contains("corrected"))
         XCTAssertTrue(app.buttons["category-tag.work"].exists)
-        app.buttons["group-selection.done"].tap(); app.buttons["group.done"].tap()
+        app.buttons["group-selection.done"].tap(); closeCategoryLogs(in: app)
         XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 5))
     }
 
@@ -1262,7 +1386,8 @@ final class TimeLedgerUITests: XCTestCase {
         if arrow.label.hasPrefix("Expand ") { arrow.tap() }
         selectPlanCategory("teaching", in: app)
         recordScreen("CategorySelectionActions", in: app)
-        app.buttons["plan.view-logs"].tap()
+        app.buttons["plan.open-category"].tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
         app.buttons["group.select"].tap()
         element(app, "group.log.today-teaching").tap()
@@ -1270,13 +1395,14 @@ final class TimeLedgerUITests: XCTestCase {
         let destination = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "log-move.", "Hygiene")).firstMatch
         XCTAssertTrue(destination.waitForExistence(timeout: 5)); destination.tap()
         XCTAssertTrue(app.staticTexts["There are no logs in this group for this view."].waitForExistence(timeout: 5))
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         XCTAssertFalse(app.buttons["plan.selection-done"].exists)
         let child = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "plan.name.", "Hygiene")).firstMatch
         reveal(child, in: app); child.tap()
-        app.buttons["plan.view-logs"].tap()
+        app.buttons["plan.open-category"].tap()
+        openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
-        app.buttons["group.done"].tap()
+        closeCategoryLogs(in: app)
         XCUIDevice.shared.press(.home); app.activate()
         XCTAssertTrue(app.navigationBars["Edit goals"].exists)
         recordScreen("CategoryOutlineAfterMove", in: app)
@@ -1290,7 +1416,7 @@ final class TimeLedgerUITests: XCTestCase {
         selectPlanCategory("work", in: app); selectPlanCategory("teaching", in: app)
         XCTAssertTrue(app.buttons["plan.group-selected"].exists)
         XCTAssertFalse(app.buttons["plan.delete"].exists); XCTAssertFalse(app.buttons["plan.rename"].exists)
-        XCTAssertFalse(app.buttons["plan.create-child"].exists); XCTAssertFalse(app.buttons["plan.view-logs"].exists)
+        XCTAssertFalse(app.buttons["plan.create-child"].exists); XCTAssertFalse(app.buttons["plan.open-category"].exists)
         app.buttons["plan.selection-done"].tap()
         XCTAssertFalse(app.buttons["plan.group-selected"].exists)
     }
@@ -1827,7 +1953,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testDailyGoalsWithoutHistoryUsesConfiguredWindowForGoalEditing() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
-        XCTAssertTrue(app.buttons["Set goals"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Choose favorites"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "goals.time-left").exists)
         app.buttons["goals.edit"].tap()
         app.buttons["plan.hide-blank-goals"].tap()
@@ -1835,6 +1961,7 @@ final class TimeLedgerUITests: XCTestCase {
         setPlanNumber("categories.target.work", to: "3", in: app)
         switchGoalUnit("%", in: app)
         XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "20")
+        selectPlanCategory("work", in: app); app.buttons["plan.favorite"].tap()
         app.buttons["Close"].tap()
         XCTAssertTrue(element(app, "goals.progress.work").waitForExistence(timeout: 5))
     }
