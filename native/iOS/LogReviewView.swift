@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import LedgerCore
 
 struct LogReviewRequest: Identifiable {
@@ -50,7 +51,7 @@ private struct LogReviewEntryView: View {
     @State private var loaded = false
     var body: some View {
         CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood,
-                              saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) })
+                              saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) }, showsKeyboardDone: false)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 6) {
                     if let error { Text(error).font(.caption).foregroundStyle(.red) }
@@ -58,6 +59,7 @@ private struct LogReviewEntryView: View {
                         Text("\(position) of \(count)").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("log-review.position")
                         Spacer()
                         Button("Save & next") {
+                            UIApplication.shared.dismissLedgerKeyboard()
                             do { try store.categorize(entry, categoryIDs: categories, mood: mood); didSave() }
                             catch { self.error = error.localizedDescription }
                         }.buttonStyle(.borderedProminent).disabled(!store.storageAvailable)

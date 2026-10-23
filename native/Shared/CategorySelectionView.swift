@@ -34,6 +34,7 @@ struct CategorySelectionList: View {
     var timestamp: Date? = nil
     var mood: Binding<Int?>? = nil
     var saveActivity: ((String) throws -> Void)? = nil
+    var showsKeyboardDone = true
     var selectionHelp = "Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected."
     @State private var query = ""
     #if os(iOS)
@@ -130,7 +131,7 @@ struct CategorySelectionList: View {
                 }
             }
             #if os(iOS)
-            .ledgerInputDismissal(preservingKeyboard: true)
+            .ledgerInputDismissal(preservingKeyboard: true, showsKeyboardDone: showsKeyboardDone)
             #endif
     }
     private func dismissSearchKeyboard() {

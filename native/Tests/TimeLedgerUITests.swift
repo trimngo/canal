@@ -703,7 +703,12 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(element(app, "category-context.activity").label, "Newest uncategorized idea")
         XCTAssertEqual(element(app, "idea-review.position").label, "1 of 1")
         XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        let search = app.textFields["category-search.field"]; search.tap(); search.typeText("teaching")
         tapCategory("teaching", in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        XCTAssertTrue(app.buttons["idea-review.save-next"].isHittable)
+        XCTAssertLessThanOrEqual(app.buttons["idea-review.save-next"].frame.maxY, app.keyboards.firstMatch.frame.minY)
+        XCTAssertFalse(app.buttons.matching(identifier: "keyboard.done").allElementsBoundByIndex.contains { $0.isHittable })
         recordScreen("InboxIndependentCategorization", in: app)
         app.buttons["idea-review.save-next"].tap()
         XCTAssertTrue(app.buttons["inbox.categorize"].waitForExistence(timeout: 5))
@@ -1833,7 +1838,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText(suffix)
         let done = app.buttons["keyboard.done"].firstMatch
-        XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+        if done.exists && done.isHittable { done.tap() }
+        else { app.navigationBars.firstMatch.tap() }
         XCTAssertFalse(app.navigationBars["Edit idea"].exists)
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
@@ -2300,10 +2306,41 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("PinnedTagsWithKeyboard", in: app)
         app.buttons["category-tag.work"].tap()
         XCTAssertFalse(app.buttons["category-tag.work"].exists)
-        app.buttons["keyboard.done"].firstMatch.tap()
-        app.buttons["log-review.save-next"].tap()
+        let save = app.buttons["log-review.save-next"]
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(identifier: "keyboard.done").allElementsBoundByIndex.contains { $0.isHittable })
+        XCTAssertTrue(save.isHittable)
+        XCTAssertLessThanOrEqual(save.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        recordScreen("LogReviewSingleSaveWithKeyboard", in: app)
+        save.tap()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
         XCTAssertTrue(dashboardGroup("social", in: app).exists)
+    }
+
+    func testLogReviewSavesInlineTextCategoriesAndMoodWithOneTapThenAdvances() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-review-range-fixture"]; app.launch()
+        element(app, "report.range").tap(); app.buttons["All time"].tap()
+        let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
+        XCTAssertEqual(element(app, "log-review.position").label, "1 of 2")
+        app.buttons["mood.4"].tap(); tapCategory("work", in: app)
+        let activity = element(app, "category-context.activity"); activity.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        element(app, "category-context.activity").typeText(" corrected")
+        let save = app.buttons["log-review.save-next"]
+        XCTAssertTrue(save.isHittable)
+        XCTAssertLessThanOrEqual(save.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        XCTAssertFalse(app.buttons.matching(identifier: "keyboard.done").allElementsBoundByIndex.contains { $0.isHittable })
+        recordScreen("LogReviewSaveInlineEditDirectly", in: app)
+        save.tap()
+        XCTAssertEqual(element(app, "log-review.position").label, "2 of 2")
+        XCTAssertEqual(element(app, "category-context.activity").label, "Older ungrouped observation")
+        tapCategory("social", in: app); save.tap()
+        XCTAssertFalse(app.buttons["log-review.close"].exists)
+        XCTAssertFalse(app.staticTexts["Review complete"].exists)
+        app.terminate(); app.launchArguments = []; app.launch()
+        dashboardGroup("work", in: app).tap(); openCategoryLogs(in: app)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "corrected")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Mood: 4/5"].exists)
     }
 
     func testInboxUsesSamePinnedTagsAndInlineTextEditing() {

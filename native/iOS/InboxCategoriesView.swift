@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import LedgerCore
 
 struct CaptureCategoryReviewRequest: Identifiable {
@@ -108,6 +109,7 @@ private struct CaptureCategoryReviewEntry: View {
     var body: some View {
         CategorySelectionList(selection: $categories, activity: capture.text, timestamp: capture.createdAt,
             saveActivity: { try store.updateCaptureText(capture, text: $0) },
+            showsKeyboardDone: false,
             selectionHelp: "These are the same categories as your logs. Categorization does not change ranking or add logged time.")
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 6) {
@@ -116,6 +118,7 @@ private struct CaptureCategoryReviewEntry: View {
                         Text("\(position) of \(count)").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("idea-review.position")
                         Spacer()
                         Button("Save & next") {
+                            UIApplication.shared.dismissLedgerKeyboard()
                             do { try store.categorizeCapture(capture, categoryIDs: categories); didSave() }
                             catch { self.error = error.localizedDescription }
                         }.buttonStyle(.borderedProminent).disabled(!store.storageAvailable)
