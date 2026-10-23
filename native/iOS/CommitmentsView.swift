@@ -382,7 +382,7 @@ struct GoalEditorView: View {
                     .accessibilityLabel("\(expanded.contains(category.id) ? "Collapse" : "Expand") \(category.name)")
                     .accessibilityIdentifier("plan.children.\(category.id)")
             } else { Color.clear.frame(width: 28, height: 1).accessibilityHidden(true) }
-                Text(item.direct ? "Direct" : (category.isFavorite == true ? "★ " + category.name : category.name))
+                Text(item.direct ? "Direct" : (category.isFavorite == true && !hasChildren ? "★ " + category.name : category.name))
                     .foregroundStyle(item.direct ? Color.secondary : Color.primary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                     .onTapGesture {

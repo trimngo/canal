@@ -41,10 +41,9 @@ struct CategoryDetailView: View {
                 Section("Ranked ideas (\(priorities.count))") {
                     if priorities.isEmpty { Text("No ranked priority yet.").foregroundStyle(.secondary) }
                     ForEach(priorities) { ideaRow($0) }
-                }.accessibilityIdentifier("category-detail.ranked")
+                }
                 if !unranked.isEmpty {
                     Section("Unranked ideas (\(unranked.count))") { ForEach(unranked) { ideaRow($0) } }
-                        .accessibilityIdentifier("category-detail.unranked")
                 }
                 if !other.isEmpty {
                     Section {
@@ -77,6 +76,5 @@ struct CategoryDetailView: View {
     }
     private func ideaRow(_ capture: Capture) -> some View {
         InboxCaptureRow(capture: capture, onRank: { ranking = true }, onSnooze: { snoozing = $0 })
-            .accessibilityIdentifier("category-detail.idea.\(capture.id)")
     }
 }
