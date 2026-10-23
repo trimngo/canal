@@ -172,9 +172,9 @@ final class LedgerStore: ObservableObject {
                 var fixture = Ledger(); fixture.settings.reportingTimeZoneIdentifier = "UTC"
                 let now = Date()
                 let goal = try fixture.saveDatedGoal(name: "Prepare DIGS lecture", categoryID: "work", targetMinutes: 240,
-                    startDate: now.addingTimeInterval(-3 * 86400), deadline: now.addingTimeInterval(2 * 86400), writer: "fixture")
+                    startDate: now.addingTimeInterval(-3 * 86400), deadline: now.addingTimeInterval(3 * 86400), writer: "fixture")
                 try fixture.saveDatedGoal(name: "Prepare SDES lecture", categoryID: "work", targetMinutes: 240,
-                    startDate: now.addingTimeInterval(-3 * 86400), deadline: now.addingTimeInterval(4 * 86400), writer: "fixture")
+                    startDate: now.addingTimeInterval(-3 * 86400), deadline: now.addingTimeInterval(5 * 86400), writer: "fixture")
                 let completed = CalendarEventSnapshot(id: "ui-completed", calendarID: "fixture", calendarName: "Classes", title: "DIGS preparation",
                     start: now.addingTimeInterval(-10800), end: now.addingTimeInterval(-7200))
                 let pending = CalendarEventSnapshot(id: "ui-pending", calendarID: "fixture", calendarName: "Classes", title: "Calendar lecture to confirm",
@@ -526,8 +526,9 @@ final class LedgerStore: ObservableObject {
         try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, goalID: goalID, writer: writer)
         try commit(draft)
     }
-    func reviewLog(_ entry: CheckIn, categoryIDs: [String], mood: Int?, goalID: String?) throws {
+    func reviewLog(_ entry: CheckIn, categoryIDs: [String], mood: Int?, goalID: String?, activity: String? = nil) throws {
         var draft = ledger
+        if let activity { try draft.updateLogActivity(id: entry.id, activity: activity, writer: writer) }
         try draft.confirmCategories(for: entry.id, categoryIDs: categoryIDs, writer: writer)
         try draft.setMood(for: entry.id, value: mood, writer: writer)
         try draft.assignGoal(goalID, to: entry.id, writer: writer)

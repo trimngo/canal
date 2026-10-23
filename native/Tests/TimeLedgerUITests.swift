@@ -2345,6 +2345,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(element(app, "log-review.position").label, "2 of 2")
         XCTAssertEqual(element(app, "category-context.activity").label, "Older ungrouped observation")
         tapCategory("social", in: app); save.tap()
+        XCTAssertTrue(app.navigationBars["Your time"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["log-review.close"].exists)
         XCTAssertFalse(app.staticTexts["Review complete"].exists)
         app.terminate(); app.launchArguments = []; app.launch()

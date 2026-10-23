@@ -148,4 +148,27 @@ final class NotificationTimingTests: XCTestCase {
         XCTAssertTrue(NotificationDelivery.automatic.schedulesLocally(onWatch: false))
         XCTAssertFalse(NotificationDelivery.automatic.schedulesLocally(onWatch: true))
     }
+    func testIncomingWatchDeliveryUpdatesAnUnrelatedUnsavedPhoneDraft() {
+        let old = Settings()
+        var draft = old; draft.regularNotificationInterval = 30
+        var incoming = old; incoming.notificationDelivery = .watch; incoming.notificationsEnabled = true
+        incoming.revision = Revision(counter: 2, writer: "watch")
+        let result = Settings.reconcileDraft(draft, previous: old, updated: incoming)
+        XCTAssertEqual(result.notificationDelivery, .watch)
+        XCTAssertTrue(result.notificationsEnabled)
+        XCTAssertEqual(result.regularNotificationInterval, 30)
+        XCTAssertEqual(result.revision, incoming.revision)
+        XCTAssertFalse(result.notificationDelivery.schedulesLocally(onWatch: false))
+        XCTAssertTrue(result.notificationDelivery.schedulesLocally(onWatch: true))
+    }
+
+    func testAnExplicitUnsavedDeliveryChoiceIsRetainedWhileOtherFieldsSync() {
+        let old = Settings()
+        var draft = old; draft.notificationDelivery = .watch
+        var incoming = old; incoming.startMinute = 480
+        let result = Settings.reconcileDraft(draft, previous: old, updated: incoming)
+        XCTAssertEqual(result.notificationDelivery, .watch)
+        XCTAssertEqual(result.startMinute, 480)
+    }
+
 }

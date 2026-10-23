@@ -188,15 +188,7 @@ struct SettingsView: View {
                 await notifications.refreshStatus()
             }
             .onChange(of: store.ledger.settings) { previous, updated in
-                // Follow incoming settings while preserving an unsaved draft.
-                var previousDraft = previous; previousDraft.revision = settings.revision
-                if settings == previousDraft { settings = updated }
-                else {
-                    // A window can be edited from its own screen while other
-                    // notification fields are still an unsaved local draft.
-                    if settings.startMinute == previous.startMinute { settings.startMinute = updated.startMinute }
-                    if settings.endMinute == previous.endMinute { settings.endMinute = updated.endMinute }
-                }
+                settings = Settings.reconcileDraft(settings, previous: previous, updated: updated)
             }
             .sheet(isPresented: $managingGroups) { GroupManagerView() }
     }

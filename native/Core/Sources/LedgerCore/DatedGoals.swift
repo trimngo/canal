@@ -106,9 +106,11 @@ extension Ledger {
         return ids.isEmpty ? 0 : Double(ids.filter { family.contains($0) }.count) / Double(ids.count)
     }
 
-    /// Fractional workdays use the goal's frozen day window, Monday–Friday.
-    /// All logged work, including weekends and outside this window, still counts.
-    public static func workdayUnits(from start: Date, to end: Date, goal: DatedGoal) -> Double {
+    /// Each included Monday–Friday counts as one planned workday. The baseline
+    /// advances within that day's portion before the deadline. Daily catch-up
+    /// uses the count of remaining dates, including today if time remains.
+    /// Logged work outside these planning windows still counts in full.
+    public static func workdayUnits(from start: Date, to end: Date, goal: DatedGoal, countDays: Bool = false) -> Double {
         guard end > start else { return 0 }
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: goal.timeZoneIdentifier) ?? TimeZone(secondsFromGMT: 0)!
@@ -120,7 +122,9 @@ extension Ledger {
             if (2...6).contains(weekday),
                let a = cal.date(bySettingHour: firstMinute / 60, minute: firstMinute % 60, second: 0, of: day),
                let b = cal.date(bySettingHour: lastMinute / 60, minute: lastMinute % 60, second: 0, of: day), b > a {
-                result += max(0, min(end, b).timeIntervalSince(max(start, a))) / b.timeIntervalSince(a)
+                let plannedStart = max(a, goal.startDate), plannedEnd = min(b, goal.deadline)
+                let overlap = min(end, plannedEnd).timeIntervalSince(max(start, plannedStart))
+                if plannedEnd > plannedStart, overlap > 0 { result += countDays ? 1 : overlap / plannedEnd.timeIntervalSince(plannedStart) }
             }
             guard let next = cal.date(byAdding: .day, value: 1, to: day), next > day else { break }
             day = next
@@ -161,6 +165,6 @@ extension Ledger {
         // explicitly shown without remaining workdays rather than dividing by zero.
         let fraction = total > 0 ? elapsed / total : max(0, min(1, now.timeIntervalSince(goal.startDate) / goal.deadline.timeIntervalSince(goal.startDate)))
         return DatedGoalProgress(goal: goal, actualMinutes: minutes, expectedMinutes: goal.targetMinutes * fraction,
-            remainingWorkdays: Self.workdayUnits(from: max(now, goal.startDate), to: goal.deadline, goal: goal))
+            remainingWorkdays: Self.workdayUnits(from: max(now, goal.startDate), to: goal.deadline, goal: goal, countDays: true))
     }
 }
