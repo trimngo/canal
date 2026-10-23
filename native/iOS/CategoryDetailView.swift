@@ -47,9 +47,17 @@ struct CategoryDetailView: View {
                 }
                 if !other.isEmpty {
                     Section {
-                        DisclosureGroup("Reference, snoozed & completed (\(other.count))", isExpanded: $showOtherLists) {
-                            ForEach(other) { ideaRow($0) }
-                        }.accessibilityIdentifier("category-detail.other-lists")
+                        Button {
+                            showOtherLists.toggle()
+                        } label: {
+                            HStack {
+                                Text("Reference, snoozed & completed (\(other.count))")
+                                Spacer()
+                                Image(systemName: showOtherLists ? "chevron.down" : "chevron.right").font(.caption)
+                            }.contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityValue(showOtherLists ? "Expanded" : "Collapsed")
+                            .accessibilityIdentifier("category-detail.other-lists")
+                        if showOtherLists { ForEach(other) { ideaRow($0) } }
                     }
                 }
                 Section {
