@@ -82,4 +82,13 @@ final class ConfirmedCalendarTests: XCTestCase {
         XCTAssertThrowsError(try phone.decideCalendarEvent(snapshot.id, confirm: true, writer: "p", now: date("2026-10-19T10:30:00Z")))
         XCTAssertEqual(phone, before)
     }
+    func testIdentitySurvivesDeviceCalendarIDsAndSeparatesRecurringOccurrences() {
+        let a = CalendarEventSnapshot.identityKey(calendarID: "phone-cal", itemID: "phone-id", externalID: "event-uid", occurrence: nil)
+        let b = CalendarEventSnapshot.identityKey(calendarID: "new-phone-cal", itemID: "new-phone-id", externalID: "event-uid", occurrence: nil)
+        XCTAssertEqual(a, b)
+        let monday = CalendarEventSnapshot.identityKey(calendarID: "c", itemID: "i", externalID: "series", occurrence: date("2026-10-19T10:00:00Z"))
+        let wednesday = CalendarEventSnapshot.identityKey(calendarID: "c", itemID: "i", externalID: "series", occurrence: date("2026-10-21T10:00:00Z"))
+        XCTAssertNotEqual(monday, wednesday)
+    }
+
 }

@@ -42,6 +42,9 @@ struct DatedGoalEditorView: View {
                     Button("Delete goal", role: .destructive) { deleting = true }.accessibilityIdentifier("dated-goal.delete")
                 }
             }.ledgerInputDismissal()
+                .onAppear {
+                    if let categoryID, !store.ledger.categories.contains(where: { $0.id == categoryID }) { self.categoryID = nil }
+                }
                 .navigationTitle(goal == nil ? "Add goal" : "Edit goal").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -72,9 +75,13 @@ struct LogGoalPicker: View {
     @Binding var goalID: String?
     @Binding var categoryIDs: [String]
     var body: some View {
-        if !store.ledger.activeDatedGoals.isEmpty {
+        if !store.ledger.activeDatedGoals.isEmpty || goalID != nil {
             Picker("Goal", selection: Binding(get: { goalID }, set: choose)) {
                 Text("No goal").tag(nil as String?)
+                if let goalID, !store.ledger.activeDatedGoals.contains(where: { $0.id == goalID }) {
+                    Text((store.ledger.datedGoals ?? []).first(where: { $0.id == goalID }).map { $0.name + " (deleted)" } ?? "Saved goal")
+                        .tag(Optional(goalID))
+                }
                 ForEach(store.ledger.activeDatedGoals) { Text($0.name).tag(Optional($0.id)) }
             }.pickerStyle(.menu).font(.subheadline).accessibilityIdentifier("log-review.goal")
         }

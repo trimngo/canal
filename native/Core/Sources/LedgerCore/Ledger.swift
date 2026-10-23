@@ -70,6 +70,8 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
     /// Present only for a user-confirmed calendar period. Samples remain instantaneous.
     public var intervalStart: Date?
     public var goalID: String?
+    /// Credit is fixed when assigned, so moving a goal does not erase past work.
+    public var goalShare: Double?
     /// Optional instantaneous self-report: 1 (low) through 5 (high).
     public var mood: Int?
     /// Nil in legacy files. categoryID remains a compatibility mirror of the first selection.
@@ -86,7 +88,7 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
         self.sampleID = sampleID
         self.end = end; self.activity = activity; self.categoryID = categoryID; self.revision = revision
     }
-    public var start: Date { end.addingTimeInterval(-900) }
+    public var start: Date { intervalStart ?? end.addingTimeInterval(-900) }
 }
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {

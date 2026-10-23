@@ -111,4 +111,58 @@ final class DatedGoalsTests: XCTestCase {
         XCTAssertEqual(ledger.datedGoalProgress(now: now, calendar: utc).first?.actualMinutes, 60)
         XCTAssertEqual(ledger.allocation(on: date("2026-10-19T12:00:00Z"), now: now, calendar: utc).directMinutes["uncategorized"], 60)
     }
+    func testMovingGoalKeepsPastCreditAndRecategorizingUpdatesItsShare() throws {
+        var ledger = Ledger(); let id = try goal(&ledger)
+        try period(&ledger, id: "p", start: "2026-10-19T08:00:00Z", end: "2026-10-19T09:00:00Z", goalID: id)
+        let now = date("2026-10-20T12:00:00Z")
+        let original = ledger.datedGoals!.first!
+        try ledger.saveDatedGoal(id: id, name: original.name, categoryID: "social", targetMinutes: original.targetMinutes,
+            startDate: original.startDate, deadline: original.deadline, writer: "phone")
+        XCTAssertEqual(ledger.datedGoalProgress(now: now, calendar: utc).first?.actualMinutes, 60)
+        XCTAssertEqual(ledger.entries.first?.categoryIDs, ["work"])
+        try ledger.confirmCategories(for: "calendar-p", categoryIDs: ["work", "social"], writer: "phone")
+        XCTAssertEqual(ledger.datedGoalProgress(now: now, calendar: utc).first?.actualMinutes, 30)
+    }
+
+    func testQuickSyncCarriesGoalCalendarAndLogReferences() throws {
+        var phone = Ledger(); let id = try goal(&phone)
+        try period(&phone, id: "p", start: "2026-10-19T08:00:00Z", end: "2026-10-19T09:00:00Z", goalID: id)
+        var delivery = CompanionQuickDelivery()
+        let data = try XCTUnwrap(delivery.prepare(phone, id: "packet"))
+        let packet = try JSONDecoder().decode(CompanionQuickPacket.self, from: data)
+        var watch = Ledger(); watch.merge(packet.ledger)
+        XCTAssertEqual(watch.datedGoals, phone.datedGoals)
+        XCTAssertEqual(watch.calendarEvents, phone.calendarEvents)
+        XCTAssertEqual(watch.entries, phone.entries)
+        XCTAssertTrue(delivery.finish(id: "packet", saved: true))
+        XCTAssertNil(try delivery.prepare(phone, id: "already-saved"))
+    }
+
+    func testWorkdayPaceAcrossDSTHasNoExtraOrMissingDay() throws {
+        var ledger = Ledger(); ledger.settings.reportingTimeZoneIdentifier = "Europe/Berlin"
+        let start = date("2026-10-23T05:00:00Z"), end = date("2026-10-26T21:00:00Z")
+        try ledger.saveDatedGoal(name: "Autumn", categoryID: nil, targetMinutes: 240, startDate: start, deadline: end, writer: "p")
+        let goal = ledger.activeDatedGoals[0]
+        XCTAssertEqual(Ledger.workdayUnits(from: start, to: end, goal: goal), 2, accuracy: 0.001)
+        let row = ledger.datedGoalProgress(now: date("2026-10-25T12:00:00Z"), calendar: utc)[0]
+        XCTAssertEqual(row.expectedMinutes, 120, accuracy: 0.001)
+        XCTAssertEqual(row.remainingWorkdays, 1, accuracy: 0.001)
+    }
+
+    func testDatedGoalNeverChangesPercentageTargetsAndDeletedGoalDoesNotBlockLogReview() throws {
+        var ledger = Ledger()
+        try ledger.saveAllocationGoals(["work": 30, "social": 20], writer: "p")
+        let budget = ledger.currentBudget()
+        let id = try goal(&ledger)
+        try period(&ledger, id: "p", start: "2026-10-19T08:00:00Z", end: "2026-10-19T09:00:00Z", goalID: id)
+        XCTAssertEqual(ledger.currentBudget(), budget)
+        ledger.deleteDatedGoal(id, writer: "p")
+        XCTAssertNoThrow(try ledger.assignGoal(id, to: "calendar-p", writer: "p"))
+        XCTAssertEqual(ledger.entries.first?.goalID, id)
+        try ledger.assignGoal(nil, to: "calendar-p", writer: "p")
+        XCTAssertNil(ledger.entries.first?.goalID)
+        XCTAssertNil(ledger.entries.first?.goalShare)
+        XCTAssertEqual(ledger.currentBudget(), budget)
+    }
+
 }

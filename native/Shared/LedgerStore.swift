@@ -760,7 +760,7 @@ final class LedgerStore: ObservableObject {
     private func commitCategorization(_ draft: Ledger) throws {
         let changed = draft.entries.compactMap { updated -> (before: CheckIn, after: CheckIn)? in
             guard let original = ledger.entries.first(where: { $0.id == updated.id }),
-                  original.categoryIDs != updated.categoryIDs || original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment || original.mood != updated.mood else { return nil }
+                  original.categoryIDs != updated.categoryIDs || original.categoryID != updated.categoryID || original.categoryAssignment != updated.categoryAssignment || original.mood != updated.mood || original.goalID != updated.goalID || original.goalShare != updated.goalShare else { return nil }
             return (original, updated)
         }
         try commit(draft)
@@ -778,6 +778,8 @@ final class LedgerStore: ObservableObject {
                 draft.entries[index].categoryID = change.before.categoryID
                 draft.entries[index].categoryAssignment = change.before.categoryAssignment
                 draft.entries[index].mood = change.before.mood
+                draft.entries[index].goalID = change.before.goalID
+                draft.entries[index].goalShare = change.before.goalShare
                 draft.entries[index].revision = revision
             }
             draft.prepareGroupSuggestions(writer: writer)

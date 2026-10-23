@@ -134,6 +134,7 @@ extension Ledger {
             entries[index].categoryID = ids.first
             entries[index].categoryIDs = ids
             entries[index].categoryAssignment = ids.isEmpty ? .automatic : .manual
+            if entries[index].goalID != nil { entries[index].goalShare = datedGoalShare(for: entries[index], goalID: entries[index].goalID) }
             entries[index].revision = Revision(counter: counter, writer: writer); counter += 1
         }
     }
