@@ -610,6 +610,44 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
     }
 
+    func testHeatmapExpandsChildrenAndDirectTimeWithoutShiftingGridColumns() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline", "--ui-heatmap-detail"]; app.launch()
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        app.buttons["Show heatmap"].tap()
+        let heading = element(app, "report.heatmap.heading.work")
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "report.heatmap.heading.music").exists)
+        let direct = app.buttons["report.heatmap.category.direct:work"]
+        let teaching = app.buttons["report.heatmap.category.teaching"], guitar = app.buttons["report.heatmap.category.guitar"]
+        XCTAssertTrue(direct.exists); XCTAssertTrue(teaching.exists); XCTAssertTrue(guitar.exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.heatmap.cell.work.")).firstMatch.exists)
+        let directCells = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.heatmap.cell.direct:work."))
+        let teachingCells = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.heatmap.cell.teaching."))
+        let guitarCells = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "report.heatmap.cell.guitar."))
+        XCTAssertEqual(directCells.count, 7); XCTAssertEqual(teachingCells.count, 7); XCTAssertEqual(guitarCells.count, 7)
+        for column in 0..<7 {
+            let a = directCells.element(boundBy: column).frame, b = teachingCells.element(boundBy: column).frame, c = guitarCells.element(boundBy: column).frame
+            XCTAssertEqual(a.minX, b.minX, accuracy: 1); XCTAssertEqual(a.minX, c.minX, accuracy: 1)
+            XCTAssertEqual(a.width, c.width, accuracy: 1); XCTAssertEqual(a.height, c.height, accuracy: 1)
+        }
+        let units = app.segmentedControls["report.heatmap.units"]
+        units.buttons["Percentages"].tap()
+        directCells.matching(NSPredicate(format: "value CONTAINS %@", "percent")).firstMatch.tap()
+        XCTAssertTrue(element(app, "report.heatmap.selection").label.contains("Work (direct)"))
+        recordScreen("ExpandedHeatmapAlignedColumns", in: app)
+        units.buttons["Hours"].tap()
+        recordScreen("ExpandedHeatmapHours", in: app)
+        direct.tap()
+        XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "group.log.today-parent-direct").exists)
+        XCTAssertFalse(element(app, "group.log.today-teaching").exists)
+        XCTAssertFalse(element(app, "group.log.today-guitar").exists)
+        app.buttons["group.done"].tap()
+        reveal(guitar, in: app); guitar.tap()
+        XCTAssertTrue(element(app, "group.log.today-guitar").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "group.log.today-parent-direct").exists)
+    }
+
     func testGroupCountsAndDeletionPreserveAllTimeLogsAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
         app.buttons["dashboard.groups"].tap()

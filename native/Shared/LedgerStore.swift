@@ -241,6 +241,13 @@ final class LedgerStore: ObservableObject {
                     fixture.categories.append(LedgerCategory(id: "guitar", name: "Guitar"))
                     try fixture.moveCategory("guitar", to: "music", writer: "fixture")
                 }
+                if ProcessInfo.processInfo.arguments.contains("--ui-heatmap-detail") {
+                    let span = max(0, now.timeIntervalSince(first))
+                    try fixture.saveSample(id: "today-guitar", at: min(now, first.addingTimeInterval(span * 0.35)),
+                        activity: "Practicing guitar", categoryIDs: ["guitar"], writer: "fixture", now: now)
+                    try fixture.saveSample(id: "today-parent-direct", at: min(now, first.addingTimeInterval(span * 0.65)),
+                        activity: "Work without a subcategory", categoryIDs: ["work"], writer: "fixture", now: now)
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-inbox-fixture") {

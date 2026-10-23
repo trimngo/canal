@@ -10,6 +10,7 @@ struct GroupEntriesView: View {
     let rangeStart: Date?
     let rangeEnd: Date?
     let management: Bool
+    let directOnly: Bool
     @State private var allDays: Bool
     @State private var categorizing: CheckIn?
     @State private var groupName = ""
@@ -20,10 +21,11 @@ struct GroupEntriesView: View {
     @State private var selecting = false
     @State private var selected = Set<String>()
     @State private var moving: LogMoveRequest?
-    init(day: Date, groupID: String, initialName: String, rangeStart: Date? = nil, rangeEnd: Date? = nil, allTime: Bool = false, management: Bool = false) {
+    init(day: Date, groupID: String, initialName: String, rangeStart: Date? = nil, rangeEnd: Date? = nil, allTime: Bool = false, management: Bool = false, directOnly: Bool = false) {
         self.day = day; self.groupID = groupID; self.initialName = initialName
         self.rangeStart = rangeStart; self.rangeEnd = rangeEnd
         self.management = management
+        self.directOnly = directOnly
         _allDays = State(initialValue: allTime || (groupID == "uncategorized" && rangeStart == nil))
     }
     private var entries: [CheckIn] {
@@ -31,11 +33,14 @@ struct GroupEntriesView: View {
         if allDays { source = store.ledger.activeEntries.sorted { $0.end > $1.end } }
         else if let rangeStart, let rangeEnd { source = store.ledger.activeEntries.filter { $0.end >= rangeStart && $0.end <= rangeEnd }.sorted { $0.end > $1.end } }
         else { source = store.ledger.entries(on: day) }
+        let categoryIDs = Set([groupID] + (directOnly ? [] : store.ledger.descendants(of: groupID).map(\.id)))
         return source.filter {
-            $0.end <= Date() && (groupID == "uncategorized" ? (store.ledger.confirmedCategoryID(for: $0) == nil || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")) : !Set(store.ledger.confirmedCategoryIDs(for: $0)).isDisjoint(with: Set([groupID] + store.ledger.descendants(of: groupID).map(\.id))))
+            $0.end <= Date() && (groupID == "uncategorized" ? (store.ledger.confirmedCategoryID(for: $0) == nil || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")) : !Set(store.ledger.confirmedCategoryIDs(for: $0)).isDisjoint(with: categoryIDs))
         }
     }
     var body: some View {
+        let entries = self.entries
+        let name = store.ledger.categories.first { $0.id == groupID }?.name ?? initialName
         NavigationStack {
             List {
                 if management {
@@ -72,7 +77,7 @@ struct GroupEntriesView: View {
                         .padding().frame(maxWidth: .infinity).background(.bar).accessibilityIdentifier("group.move-logs")
                 } else { LogDeletionUndoBar() }
             }
-                .navigationTitle(store.ledger.categories.first { $0.id == groupID }?.name ?? initialName)
+                .navigationTitle(directOnly ? "\(name) (direct)" : name)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("group.done") }

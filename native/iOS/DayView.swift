@@ -7,6 +7,7 @@ private struct SelectedGroup: Identifiable {
     var name: String
     var start: Date?
     var end: Date?
+    var directOnly = false
 }
 
 struct DayView: View {
@@ -49,7 +50,7 @@ struct AllocationHistoryView: View {
             }
             .sheet(isPresented: $managingGroups, onDismiss: { now = Date() }) { GroupManagerView() }
             .sheet(item: $selectedGroup, onDismiss: { now = Date() }) { group in
-                GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end)
+                GroupEntriesView(day: group.start ?? Date(), groupID: group.id, initialName: group.name, rangeStart: group.start, rangeEnd: group.end, directOnly: group.directOnly)
             }
             .sheet(item: $reviewing, onDismiss: { now = Date() }) { request in LogReviewView(entryIDs: request.entryIDs) }
 
@@ -87,7 +88,9 @@ struct AllocationHistoryView: View {
                 }
             }.padding(.horizontal, 20).padding(.vertical, 8)
             Divider()
-            HistoryPanel(report: report, hideZeroTime: hideZeroTime) { row in
+            HistoryPanel(report: report, hideZeroTime: hideZeroTime, selectDirect: { row in
+                selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end, directOnly: true)
+            }) { row in
                 selectedGroup = SelectedGroup(id: row.id, name: row.name, start: report.start, end: report.end)
             }.padding(.top, 12)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)

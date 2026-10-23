@@ -30,6 +30,9 @@ public struct HistoryReport: Sendable {
     /// Direct shares, before rolling descendants into their parents. Kept in
     /// the report so expanding a row never re-estimates or double counts logs.
     public var directMinutes: [String: Double] = [:]
+    /// Daily direct shares for the heatmap. The existing dailyTotals retain
+    /// their parent rollups for the other charts.
+    public var directDailyTotals: [DailyTotal] = []
 
     public func categoryOutline(in ledger: Ledger, expanded: Set<String>, hideZeroTime: Bool = false) -> [HistoryCategoryRow] {
         let period = AllocationPeriod(trackedMinutes: trackedMinutes, directMinutes: directMinutes)
@@ -58,7 +61,7 @@ public struct HistoryReport: Sendable {
     }
 }
 
-public struct HistoryCategoryRow: Identifiable, Sendable {
+public struct HistoryCategoryRow: Identifiable, Equatable, Sendable {
     public var row: BreakdownRow
     public var depth: Int
     public var direct: Bool
@@ -121,8 +124,14 @@ extension Ledger {
         // Zero means a represented day with no time in this category. A date
         // with no usable logs is a gap, not an invented zero-activity day.
         var previous: Date?, segment = lower
+        var directDaily: [DailyTotal] = []
+        let directIDs = directMinutes.keys.filter { directMinutes[$0, default: 0] > 0 }.sorted()
         for (day, period) in periods {
             if previous == nil || cal.date(byAdding: .day, value: 1, to: previous!) != day { segment = day }
+            for id in directIDs {
+                directDaily.append(DailyTotal(day: day, categoryID: id, name: names[id] ?? "Uncategorized",
+                    minutes: period.directMinutes[id, default: 0], dayMinutes: period.trackedMinutes, segmentStart: segment))
+            }
             for row in rows {
                 let minutes = row.id == "uncategorized" ? period.directMinutes[row.id, default: 0] : period.total(for: row.id, ledger: self)
                 daily.append(DailyTotal(day: day, categoryID: row.id, name: row.name, minutes: minutes,
@@ -130,6 +139,7 @@ extension Ledger {
             }
             previous = day
         }
-        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked, directMinutes: directMinutes)
+        return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked,
+                             directMinutes: directMinutes, directDailyTotals: directDaily)
     }
 }

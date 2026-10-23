@@ -6,6 +6,7 @@ struct HistoryPanel: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
     var hideZeroTime = true
+    let selectDirect: (BreakdownRow) -> Void
     let select: (BreakdownRow) -> Void
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
@@ -37,7 +38,10 @@ struct HistoryPanel: View {
                         CategoryTrendView(report: report, isVisible: page == 2, chartHeight: max(220, min(360, geometry.size.height * 0.45)))
                             .padding(.horizontal, 20)
                             .frame(width: geometry.size.width, height: geometry.size.height).id(2)
-                        CategoryHeatmapView(report: report, select: select).padding(.horizontal, 20)
+                        CategoryHeatmapView(report: report) { item in
+                            if item.direct { selectDirect(item.row) }
+                            else { select(item.row) }
+                        }.padding(.horizontal, 20)
                             .frame(width: geometry.size.width, height: geometry.size.height).id(3)
                     }.scrollTargetLayout()
                 }.scrollTargetBehavior(.paging).scrollPosition(id: $page).scrollIndicators(.hidden)

@@ -5,7 +5,7 @@ import LedgerCore
 struct CategoryHeatmapView: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
-    let select: (BreakdownRow) -> Void
+    let select: (HistoryCategoryRow) -> Void
     @AppStorage("history.heatmap.percent") private var percent = true
     @ScaledMetric private var rowHeight = 44
     @State private var selectedDay: Date?
@@ -14,7 +14,7 @@ struct CategoryHeatmapView: View {
     private var calendar: Calendar { store.ledger.reportingCalendar() }
 
     var body: some View {
-        let grid = HistoryHeatmap(report: report, calendar: calendar)
+        let grid = HistoryHeatmap(report: report, ledger: store.ledger, calendar: calendar)
         GeometryReader { geometry in
             let labelWidth = min(140, geometry.size.width * 0.32)
             let columnWidth = max(32, (geometry.size.width - labelWidth - 8) / CGFloat(max(1, min(7, grid.days.count))))
@@ -45,11 +45,13 @@ struct CategoryHeatmapView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Category").font(.caption.bold()).frame(height: rowHeight)
                                 ForEach(grid.rows) { row in
-                                    Button { select(row) } label: {
-                                        Text(row.name).font(.subheadline).foregroundStyle(.primary)
-                                            .lineLimit(2).frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
-                                            .contentShape(Rectangle())
-                                    }.buttonStyle(.plain).accessibilityIdentifier("report.heatmap.category.\(row.id)")
+                                    if row.hasChildren {
+                                        rowLabel(row).fontWeight(.semibold).accessibilityAddTraits(.isHeader)
+                                            .accessibilityIdentifier("report.heatmap.heading.\(row.id)")
+                                    } else {
+                                        Button { select(row) } label: { rowLabel(row) }
+                                            .buttonStyle(.plain).accessibilityIdentifier("report.heatmap.category.\(row.id)")
+                                    }
                                 }
                             }.frame(width: labelWidth, alignment: .leading)
                             ScrollView(.horizontal) {
@@ -63,7 +65,11 @@ struct CategoryHeatmapView: View {
                                                 .foregroundStyle(calendar.isDate(day, inSameDayAs: report.end) && calendar.isDateInToday(day) ? Color.accentColor : .secondary)
                                                 .accessibilityLabel(store.dayLabel(day))
                                             ForEach(grid.rows) { row in
-                                                cell(point: grid.point(on: day, categoryID: row.id), day: day, row: row, maximum: grid.maximumMinutes)
+                                                if row.hasChildren {
+                                                    Color.clear.frame(height: rowHeight).accessibilityHidden(true)
+                                                } else {
+                                                    cell(point: grid.point(on: day, categoryID: row.id), day: day, row: row, maximum: grid.maximumMinutes)
+                                                }
                                             }
                                         }.frame(width: columnWidth)
                                     }
@@ -84,12 +90,19 @@ struct CategoryHeatmapView: View {
             .onChange(of: report.start) { _, _ in clearSelection() }
             .onChange(of: calendar.startOfDay(for: report.end)) { _, _ in clearSelection() }
             .onChange(of: calendar.timeZone.identifier) { _, _ in clearSelection() }
-            .onChange(of: report.rows.map(\.id)) { _, ids in
+            .onChange(of: grid.rows.map(\.id)) { _, ids in
                 if let selectedCategoryID, !ids.contains(selectedCategoryID) { clearSelection() }
             }
     }
 
-    private func cell(point: DailyTotal?, day: Date, row: BreakdownRow, maximum: Double) -> some View {
+    private func rowLabel(_ item: HistoryCategoryRow) -> some View {
+        Text(item.row.name).font(.subheadline).foregroundStyle(.primary).lineLimit(2).minimumScaleFactor(0.8)
+            .padding(.leading, CGFloat(item.depth) * 10)
+            .frame(maxWidth: .infinity, alignment: .leading).frame(height: rowHeight)
+            .contentShape(Rectangle())
+    }
+
+    private func cell(point: DailyTotal?, day: Date, row: HistoryCategoryRow, maximum: Double) -> some View {
         let value = point.map { percent ? $0.percent : $0.minutes }
         let intensity = value.map { min(1, max(0, $0 / max(1, percent ? 100 : maximum))) } ?? 0
         let isSelected = selectedDay == day && selectedCategoryID == row.id
@@ -104,7 +117,7 @@ struct CategoryHeatmapView: View {
             }.frame(height: rowHeight).padding(.horizontal, 2)
                 .overlay { if isSelected { RoundedRectangle(cornerRadius: 5).stroke(Color.primary, lineWidth: 2).padding(.horizontal, 2) } }
         }.buttonStyle(.plain)
-            .accessibilityLabel("\(row.name), \(store.dayLabel(day))")
+            .accessibilityLabel("\(row.row.name), \(store.dayLabel(day))")
             .accessibilityValue(point.map { "\($0.percent.formatted(.number.precision(.fractionLength(1)))) percent, \(store.duration($0.minutes))" } ?? "No data")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityIdentifier("report.heatmap.cell.\(row.id).\(Int(day.timeIntervalSince1970))")
@@ -112,7 +125,7 @@ struct CategoryHeatmapView: View {
 
     private func selectedValue(grid: HistoryHeatmap, day: Date, categoryID: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("\(grid.rows.first { $0.id == categoryID }?.name ?? "Category") · \(store.dayLabel(day))").font(.subheadline.bold())
+            Text("\(grid.rows.first { $0.id == categoryID }?.row.name ?? "Category") · \(store.dayLabel(day))").font(.subheadline.bold())
             if let point = grid.point(on: day, categoryID: categoryID) {
                 Text("\(point.percent, specifier: "%.1f")% · \(store.duration(point.minutes))")
             } else { Text("No data for this day.") }
