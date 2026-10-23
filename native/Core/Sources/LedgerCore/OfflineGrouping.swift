@@ -131,10 +131,11 @@ extension Ledger {
         }.map(\.id))
         var counter = nextRevision(writer: writer).counter
         for index in entries.indices where selected.contains(entries[index].id) {
+            let labelsChanged = Set(entries[index].categoryIDs ?? entries[index].categoryID.map { [$0] } ?? []) != Set(ids)
             entries[index].categoryID = ids.first
             entries[index].categoryIDs = ids
             entries[index].categoryAssignment = ids.isEmpty ? .automatic : .manual
-            if entries[index].goalID != nil { entries[index].goalShare = datedGoalShare(for: entries[index], goalID: entries[index].goalID) }
+            if entries[index].goalID != nil, labelsChanged { entries[index].goalShare = datedGoalShare(for: entries[index], goalID: entries[index].goalID) }
             entries[index].revision = Revision(counter: counter, writer: writer); counter += 1
         }
     }

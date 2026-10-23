@@ -135,7 +135,10 @@ extension Ledger {
         entry.goalShare = entries.first(where: { $0.id == sampleID })?.goalShare
         entry.intervalStart = entries.first(where: { $0.id == sampleID })?.intervalStart
         entry.categoryIDs = ids
-        if entry.goalID != nil { entry.goalShare = datedGoalShare(for: entry, goalID: entry.goalID) }
+        if entry.goalID != nil,
+           Set(ids) != Set(entries.first(where: { $0.id == sampleID })?.categoryIDs ?? entries.first(where: { $0.id == sampleID })?.categoryID.map { [$0] } ?? []) {
+            entry.goalShare = datedGoalShare(for: entry, goalID: entry.goalID)
+        }
         entries.removeAll { $0.id == sampleID }; entries.append(entry)
     }
     public mutating func moveCategory(_ id: String, to parent: String?, writer: String) throws {

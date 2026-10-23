@@ -120,6 +120,8 @@ final class DatedGoalsTests: XCTestCase {
             startDate: original.startDate, deadline: original.deadline, writer: "phone")
         XCTAssertEqual(ledger.datedGoalProgress(now: now, calendar: utc).first?.actualMinutes, 60)
         XCTAssertEqual(ledger.entries.first?.categoryIDs, ["work"])
+        try ledger.saveSample(id: "calendar-p", at: date("2026-10-19T09:00:00Z"), activity: "Corrected prep", categoryIDs: ["work"], writer: "p", now: now)
+        XCTAssertEqual(ledger.datedGoalProgress(now: now, calendar: utc).first?.actualMinutes, 60)
         try ledger.confirmCategories(for: "calendar-p", categoryIDs: ["work", "social"], writer: "phone")
         XCTAssertEqual(ledger.datedGoalProgress(now: now, calendar: utc).first?.actualMinutes, 30)
     }

@@ -75,6 +75,7 @@ extension Ledger {
 
     public mutating func assignGoal(_ goalID: String?, to entryID: String, writer: String) throws {
         guard let index = entries.firstIndex(where: { $0.id == entryID }), !isLogDeleted(entryID) else { throw LedgerError.deletedSample }
+        if goalID != nil, entries[index].goalID == goalID, entries[index].goalShare != nil { return }
         if let goalID {
             guard let goal = activeDatedGoals.first(where: { $0.id == goalID }) else {
                 // Keep historical links editable after deletion or while a
