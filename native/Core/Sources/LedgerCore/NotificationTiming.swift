@@ -96,3 +96,20 @@ extension Settings {
         return result
     }
 }
+
+extension Settings {
+    /// Incoming Watch changes must not be hidden by an unrelated unsaved phone
+    /// edit. Retain only fields that the user actually changed locally.
+    public static func reconcileDraft(_ draft: Settings, previous: Settings, updated: Settings) -> Settings {
+        var result = updated
+        func preserve<Value: Equatable>(_ key: WritableKeyPath<Settings, Value>) {
+            if draft[keyPath: key] != previous[keyPath: key] { result[keyPath: key] = draft[keyPath: key] }
+        }
+        preserve(\.notificationsEnabled); preserve(\.notificationDelivery)
+        preserve(\.notificationTiming); preserve(\.notificationsAllDay)
+        preserve(\.regularNotificationInterval); preserve(\.randomizedNotificationInterval)
+        preserve(\.startMinute); preserve(\.endMinute)
+        preserve(\.reportingTimeZoneIdentifier); preserve(\.use24HourTime); preserve(\.inferenceMethod)
+        return result
+    }
+}

@@ -34,6 +34,7 @@ struct CategorySelectionList: View {
     var timestamp: Date? = nil
     var mood: Binding<Int?>? = nil
     var saveActivity: ((String) throws -> Void)? = nil
+    var activityDraft: Binding<String>? = nil
     var showsKeyboardDone = true
     var selectionHelp = "Select one or more. Estimated time is divided equally. A parent and its subcategory cannot both be selected."
     @State private var query = ""
@@ -95,7 +96,7 @@ struct CategorySelectionList: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     if let activity, !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        CategoryEntryContext(activity: activity, timestamp: timestamp, saveActivity: saveActivity)
+                        CategoryEntryContext(activity: activity, timestamp: timestamp, saveActivity: saveActivity, activityDraft: activityDraft)
                     }
                     #if os(iOS)
                     CategorySelectedTags(selection: $selection)
@@ -252,6 +253,7 @@ private struct CategoryEntryContext: View {
     let activity: String
     let timestamp: Date?
     var saveActivity: ((String) throws -> Void)? = nil
+    var activityDraft: Binding<String>? = nil
     @State private var expanded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -291,7 +293,7 @@ private struct CategoryEntryContext: View {
     @ViewBuilder private var activityText: some View {
         #if os(iOS)
         if let saveActivity {
-            InlineEntryText(text: activity, identifier: "category-context.activity", maxLength: 500, save: saveActivity)
+            InlineEntryText(text: activity, identifier: "category-context.activity", maxLength: 500, draftText: activityDraft, save: saveActivity)
         } else { activityLabel }
         #else
         activityLabel

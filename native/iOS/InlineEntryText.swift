@@ -9,20 +9,21 @@ struct InlineEntryText: View {
     var font: Font = .body
     var maxLength: Int? = nil
     var allowEmpty = false
+    let draftText: Binding<String>?
     let save: (String) throws -> Void
     @State private var draft: String
     @State private var error: String?
     @State private var editing = false
     @FocusState private var focused: Bool
 
-    init(text: String, identifier: String, font: Font = .body, maxLength: Int? = nil, allowEmpty: Bool = false, save: @escaping (String) throws -> Void) {
-        self.text = text; self.identifier = identifier; self.font = font; self.maxLength = maxLength; self.allowEmpty = allowEmpty; self.save = save
+    init(text: String, identifier: String, font: Font = .body, maxLength: Int? = nil, allowEmpty: Bool = false, draftText: Binding<String>? = nil, save: @escaping (String) throws -> Void) {
+        self.text = text; self.identifier = identifier; self.font = font; self.maxLength = maxLength; self.allowEmpty = allowEmpty; self.draftText = draftText; self.save = save
         _draft = State(initialValue: text)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if editing {
-                TextField("Entry text", text: $draft, axis: .vertical)
+                TextField("Entry text", text: Binding(get: { draft }, set: { draft = $0; if let draftText { draftText.wrappedValue = $0 } }), axis: .vertical)
                     .font(font).lineLimit(1...12).focused($focused).submitLabel(.done)
                     .accessibilityIdentifier(identifier).accessibilityLabel("Edit entry text")
                     .onSubmit { if finish() { focused = false; editing = false } }

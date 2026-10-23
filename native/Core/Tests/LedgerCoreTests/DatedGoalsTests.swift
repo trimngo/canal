@@ -69,8 +69,8 @@ final class DatedGoalsTests: XCTestCase {
         var ledger = Ledger(); let id = try goal(&ledger, start: "2026-10-23T07:00:00Z", end: "2026-10-26T07:00:00Z")
         let row = ledger.datedGoalProgress(now: date("2026-10-23T14:30:00Z"), calendar: utc).first!
         XCTAssertEqual(row.expectedMinutes, 120)
-        XCTAssertEqual(row.remainingWorkdays, 0.5)
-        XCTAssertEqual(row.dailyMinutesNeeded, 480)
+        XCTAssertEqual(row.remainingWorkdays, 1)
+        XCTAssertEqual(row.dailyMinutesNeeded, 240)
         let weekend = try goal(&ledger, name: "Song", category: nil, start: "2026-10-24T07:00:00Z", end: "2026-10-25T22:00:00Z")
         let rows = ledger.datedGoalProgress(now: date("2026-10-25T12:00:00Z"), calendar: utc)
         XCTAssertNil(rows.first { $0.id == id }?.dailyMinutesNeeded)
@@ -163,6 +163,17 @@ final class DatedGoalsTests: XCTestCase {
         XCTAssertNil(ledger.entries.first?.goalID)
         XCTAssertNil(ledger.entries.first?.goalShare)
         XCTAssertEqual(ledger.currentBudget(), budget)
+    }
+
+    func testShortFirstAndLastDaysCountAsDatesForTheDailyAverage() throws {
+        var ledger = Ledger()
+        _ = try goal(&ledger, start: "2026-10-23T20:00:00Z", end: "2026-10-26T09:00:00Z")
+        let row = ledger.datedGoalProgress(now: date("2026-10-23T20:00:00Z"), calendar: utc)[0]
+        XCTAssertEqual(row.remainingWorkdays, 2)
+        XCTAssertEqual(row.dailyMinutesNeeded, 120)
+        XCTAssertEqual(row.expectedMinutes, 0)
+        let next = ledger.datedGoalProgress(now: date("2026-10-23T21:00:00Z"), calendar: utc)[0]
+        XCTAssertEqual(next.expectedMinutes, 60, accuracy: 0.001)
     }
 
 }
