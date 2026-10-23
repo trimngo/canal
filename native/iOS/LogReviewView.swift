@@ -29,7 +29,7 @@ struct LogReviewView: View {
                 if let entry = current {
                     CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood,
                         saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) },
-                        activityDraft: $activityDraft, showsKeyboardDone: false)
+                        activityDraft: Binding(get: { activityDraft }, set: { if current?.id == entry.id { activityDraft = $0 } }), showsKeyboardDone: false)
                         .id(entry.id)
                         .safeAreaInset(edge: .top, spacing: 0) {
                             LogGoalPicker(goalID: $goalID, categoryIDs: $categories).padding(.horizontal)
