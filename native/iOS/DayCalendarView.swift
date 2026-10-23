@@ -129,7 +129,7 @@ private struct CalendarActivityDetail: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Estimated activity") {
+                Section(block.confirmed ? "Confirmed calendar period" : "Estimated activity") {
                     Text(block.activity).font(.headline)
                     Text("\(store.time(block.start))–\(store.time(block.end)) · \(store.duration(block.end.timeIntervalSince(block.start) / 60))")
                     Text(block.categoryIDs.isEmpty ? "Uncategorized" : block.categoryIDs.map { store.ledger.categoryPath($0) }.joined(separator: " + ")).foregroundStyle(.secondary)
@@ -138,7 +138,7 @@ private struct CalendarActivityDetail: View {
                     ForEach(block.samples.filter { !store.ledger.isLogDeleted($0.id) }) { sample in
                         NavigationLink {
                             ScrollView { CheckInEditor(entry: sample) { dismiss() }.padding(24) }
-                                .navigationTitle("Edit sample").navigationBarTitleDisplayMode(.inline)
+                                .navigationTitle("Edit log").navigationBarTitleDisplayMode(.inline)
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(sample.activity)
@@ -150,8 +150,8 @@ private struct CalendarActivityDetail: View {
                             }
                         }
                     }
-                } header: { Text("Supporting samples") } footer: {
-                    Text("Tap a sample to change its activity, category, or time. The calendar is inferred from these observations.")
+                } header: { Text(block.confirmed ? "Calendar log" : "Supporting samples") } footer: {
+                    Text(block.confirmed ? "This period was confirmed from your calendar. Deleting it restores estimates from the original samples." : "Tap a sample to change its activity, category, or time. The calendar is inferred from these observations.")
                 }
             }.safeAreaInset(edge: .bottom, spacing: 0) { LogDeletionUndoBar() }
                 .navigationTitle("Activity").navigationBarTitleDisplayMode(.inline)

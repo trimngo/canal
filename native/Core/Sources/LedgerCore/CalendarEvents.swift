@@ -7,6 +7,10 @@ public struct CalendarEventSnapshot: Codable, Equatable, Sendable {
     public var title: String
     public var start: Date
     public var end: Date
+    public static func identityKey(calendarID: String, itemID: String, externalID: String?, occurrence: Date?) -> String {
+        let item = externalID.map { "external:" + $0 } ?? "local:" + calendarID + ":" + itemID
+        return item + (occurrence.map { ":" + String($0.timeIntervalSince1970) } ?? "")
+    }
     public init(id: String, calendarID: String, calendarName: String, title: String, start: Date, end: Date) {
         self.id = id; self.calendarID = calendarID; self.calendarName = calendarName
         self.title = title; self.start = start; self.end = end

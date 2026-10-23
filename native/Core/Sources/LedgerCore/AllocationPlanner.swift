@@ -125,14 +125,17 @@ extension Ledger {
         guard !text.isEmpty, text.count <= 500 else { throw LedgerError.invalidActivity }
         guard timestamp.timeIntervalSince1970.isFinite else { throw LedgerError.invalidSlot }
         guard timestamp <= now else { throw LedgerError.futureSlot }
+        if let id, let start = entries.first(where: { $0.id == id })?.intervalStart, timestamp <= start { throw LedgerError.invalidSlot }
         let ids = Array(Set(categoryIDs)).sorted()
         try validateCategories(ids)
         let revision = nextRevision(writer: writer), sampleID = id ?? UUID().uuidString
         var entry = CheckIn(end: timestamp, activity: text, categoryID: ids.first, revision: revision, sampleID: sampleID, categoryAssignment: ids.isEmpty ? .automatic : .manual)
         entry.mood = entries.first(where: { $0.id == sampleID })?.mood
         entry.goalID = entries.first(where: { $0.id == sampleID })?.goalID
+        entry.goalShare = entries.first(where: { $0.id == sampleID })?.goalShare
         entry.intervalStart = entries.first(where: { $0.id == sampleID })?.intervalStart
         entry.categoryIDs = ids
+        if entry.goalID != nil { entry.goalShare = datedGoalShare(for: entry, goalID: entry.goalID) }
         entries.removeAll { $0.id == sampleID }; entries.append(entry)
     }
     public mutating func moveCategory(_ id: String, to parent: String?, writer: String) throws {

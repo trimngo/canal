@@ -76,7 +76,12 @@ extension Ledger {
     public mutating func assignGoal(_ goalID: String?, to entryID: String, writer: String) throws {
         guard let index = entries.firstIndex(where: { $0.id == entryID }), !isLogDeleted(entryID) else { throw LedgerError.deletedSample }
         if let goalID {
-            guard let goal = activeDatedGoals.first(where: { $0.id == goalID }) else { throw DatedGoalError.missingGoal }
+            guard let goal = activeDatedGoals.first(where: { $0.id == goalID }) else {
+                // Keep historical links editable after deletion or while a
+                // newer log arrives before its goal through device sync.
+                if entries[index].goalID == goalID { return }
+                throw DatedGoalError.missingGoal
+            }
             if let category = goal.categoryID, categories.contains(where: { $0.id == category }) {
                 let family = Set([category] + descendants(of: category).map(\.id))
                 var ids = confirmedCategoryIDs(for: entries[index])
@@ -87,9 +92,18 @@ extension Ledger {
                 }
             }
         }
-        guard entries[index].goalID != goalID else { return }
+        let share = datedGoalShare(for: entries[index], goalID: goalID)
+        guard entries[index].goalID != goalID || entries[index].goalShare != share else { return }
         let revision = nextRevision(writer: writer)
-        entries[index].goalID = goalID; entries[index].revision = revision
+        entries[index].goalID = goalID; entries[index].goalShare = share; entries[index].revision = revision
+    }
+
+    func datedGoalShare(for entry: CheckIn, goalID: String?) -> Double? {
+        guard let goalID, let goal = (datedGoals ?? []).first(where: { $0.id == goalID }) else { return nil }
+        guard let category = goal.categoryID, categories.contains(where: { $0.id == category }) else { return 1 }
+        let family = Set([category] + descendants(of: category).map(\.id))
+        let ids = allocationCategoryIDs(for: entry)
+        return ids.isEmpty ? 0 : Double(ids.filter { family.contains($0) }.count) / Double(ids.count)
     }
 
     /// Fractional workdays use the goal's frozen day window, Monday–Friday.
@@ -129,8 +143,8 @@ extension Ledger {
             for segment in inferredSegments(on: day, now: now, calendar: cal) {
                 guard let entry = byID[segment.sampleID], let id = entry.goalID, let goal = goalByID[id] else { continue }
                 let minutes = max(0, min(now, segment.end).timeIntervalSince(max(goal.startDate, segment.start))) / 60
-                var share = 1.0
-                if let category = goal.categoryID, categories.contains(where: { $0.id == category }) {
+                var share = entry.goalShare ?? 1.0
+                if entry.goalShare == nil, let category = goal.categoryID, categories.contains(where: { $0.id == category }) {
                     let ids = allocationCategoryIDs(for: entry)
                     let family = Set([category] + descendants(of: category).map(\.id))
                     share = ids.isEmpty ? 0 : Double(ids.filter { family.contains($0) }.count) / Double(ids.count)

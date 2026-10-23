@@ -63,8 +63,9 @@ final class CalendarImport: ObservableObject {
         let snapshots = events.events(matching: predicate).filter { $0.endDate <= now && $0.status != .canceled }.map { event in
             // Occurrence date distinguishes repeating events even when titles match.
             let recurring = !(event.recurrenceRules ?? []).isEmpty || event.isDetached
-            let occurrence = recurring ? ":" + String((event.occurrenceDate ?? event.startDate).timeIntervalSince1970) : ""
-            let key = event.calendar.calendarIdentifier + ":" + (event.calendarItemExternalIdentifier ?? event.calendarItemIdentifier) + occurrence
+            let key = CalendarEventSnapshot.identityKey(calendarID: event.calendar.calendarIdentifier,
+                itemID: event.calendarItemIdentifier, externalID: event.calendarItemExternalIdentifier,
+                occurrence: recurring ? (event.occurrenceDate ?? event.startDate) : nil)
             let id = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
             let title = event.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return CalendarEventSnapshot(id: id, calendarID: event.calendar.calendarIdentifier, calendarName: event.calendar.title,

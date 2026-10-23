@@ -21,6 +21,7 @@ extension Ledger {
             draft.entries[index].categoryIDs = labels
             draft.entries[index].categoryID = labels.first { known.contains($0) }
             draft.entries[index].categoryAssignment = .manual
+            if original.goalID != nil { draft.entries[index].goalShare = draft.datedGoalShare(for: draft.entries[index], goalID: original.goalID) }
             draft.entries[index].revision = draft.nextRevision(writer: writer)
         }
         draft.prepareGroupSuggestions(writer: writer)
