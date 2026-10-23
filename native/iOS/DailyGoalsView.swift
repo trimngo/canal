@@ -2,7 +2,7 @@ import SwiftUI
 import LedgerCore
 
 /// The everyday view; detailed goal/category editing lives one level deeper.
-struct CommitmentsView: View {
+struct CategoryTargetsTodayView: View {
     @EnvironmentObject private var store: LedgerStore
     @State private var editingGoals = false
     @State private var editingWindow = false

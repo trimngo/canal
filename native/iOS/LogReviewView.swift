@@ -47,29 +47,37 @@ private struct LogReviewEntryView: View {
     let didSave: () -> Void
     @State private var categories: [String] = []
     @State private var mood: Int?
+    @State private var goalID: String?
     @State private var error: String?
     @State private var loaded = false
     var body: some View {
         CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood,
                               saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) }, showsKeyboardDone: false)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                LogGoalPicker(goalID: $goalID, categoryIDs: $categories).padding(.horizontal)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save & next") {
+                        UIApplication.shared.dismissLedgerKeyboard()
+                        do { try store.reviewLog(entry, categoryIDs: categories, mood: mood, goalID: goalID); didSave() }
+                        catch { self.error = error.localizedDescription }
+                    }.disabled(!store.storageAvailable).accessibilityIdentifier("log-review.save-next")
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 6) {
                     if let error { Text(error).font(.caption).foregroundStyle(.red) }
                     HStack {
                         Text("\(position) of \(count)").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("log-review.position")
                         Spacer()
-                        Button("Save & next") {
-                            UIApplication.shared.dismissLedgerKeyboard()
-                            do { try store.categorize(entry, categoryIDs: categories, mood: mood); didSave() }
-                            catch { self.error = error.localizedDescription }
-                        }.buttonStyle(.borderedProminent).disabled(!store.storageAvailable)
-                            .accessibilityIdentifier("log-review.save-next")
+                        if entry.intervalStart != nil { Text("Confirmed calendar period").font(.caption).foregroundStyle(.secondary) }
                     }
                 }.padding().background(.bar)
             }
             .onAppear {
                 guard !loaded else { return }
-                categories = store.ledger.confirmedCategoryIDs(for: entry); mood = entry.mood; loaded = true
+                categories = store.ledger.confirmedCategoryIDs(for: entry); mood = entry.mood; goalID = entry.goalID; loaded = true
             }
     }
 }

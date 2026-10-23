@@ -130,6 +130,8 @@ extension Ledger {
         let revision = nextRevision(writer: writer), sampleID = id ?? UUID().uuidString
         var entry = CheckIn(end: timestamp, activity: text, categoryID: ids.first, revision: revision, sampleID: sampleID, categoryAssignment: ids.isEmpty ? .automatic : .manual)
         entry.mood = entries.first(where: { $0.id == sampleID })?.mood
+        entry.goalID = entries.first(where: { $0.id == sampleID })?.goalID
+        entry.intervalStart = entries.first(where: { $0.id == sampleID })?.intervalStart
         entry.categoryIDs = ids
         entries.removeAll { $0.id == sampleID }; entries.append(entry)
     }
@@ -201,9 +203,9 @@ extension Ledger {
     }
     public func daySamples(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> [CheckIn] {
         guard let bounds = dayBounds(on: day, calendar: calendar) else { return [] }
-        return activeEntries.filter { $0.end >= bounds.start && $0.end < bounds.end && $0.end <= now }.sorted { $0.end == $1.end ? $0.id < $1.id : $0.end < $1.end }
+        return activeEntries.filter { $0.intervalStart == nil && $0.end >= bounds.start && $0.end < bounds.end && $0.end <= now }.sorted { $0.end == $1.end ? $0.id < $1.id : $0.end < $1.end }
     }
-    func daySegments(on day: Date, now: Date, calendar: Calendar, method: InferenceMethod?) -> [InferredSegment] {
+    func estimatedSampleSegments(on day: Date, now: Date, calendar: Calendar, method: InferenceMethod?) -> [InferredSegment] {
         guard let bounds = dayBounds(on: day, calendar: calendar), now > bounds.start else { return [] }
         let cutoff = min(bounds.end, now)
         let distinct = Dictionary(daySamples(on: day, now: now, calendar: calendar).map { ($0.end, $0) }, uniquingKeysWith: {
@@ -226,7 +228,7 @@ extension Ledger {
     public func allocation(on day: Date, now: Date = Date(), calendar: Calendar = .current, clippingTo interval: DateInterval? = nil) -> AllocationPeriod {
         let segments = inferredSegments(on: day, now: now, calendar: calendar)
         guard !segments.isEmpty else { return AllocationPeriod() }
-        let samples = Dictionary(daySamples(on: day, now: now, calendar: calendar).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let samples = Dictionary(activeEntries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var period = AllocationPeriod()
         for segment in segments {
             guard let sample = samples[segment.sampleID] else { continue }

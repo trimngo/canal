@@ -14,6 +14,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     static let shared = NotificationScheduler()
     @Published var status = "Not enabled"
     @Published private(set) var permissionGranted = false
+    @Published private(set) var pendingCheckIns = 0
+    @Published private(set) var nextCheckIn: Date?
     private let center = UNUserNotificationCenter.current()
     @Published private(set) var scheduleStatus = ""
     private var applyTask: Task<Void, Error>?
@@ -60,6 +62,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         case .denied: status = "Blocked in system notification settings"
         default: status = "Not enabled"
         }
+        if value.authorizationStatus == .provisional {
+            status = "Quiet delivery is enabled. Allow alerting notifications in system settings."
+        } else if permissionGranted, value.alertSetting == .disabled {
+            status = "Notification alerts are disabled in system settings."
+        }
+        let requests = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("checkin-") }
+        pendingCheckIns = requests.count
+        nextCheckIn = requests.compactMap { $0.trigger?.nextTriggerDate() }.min()
     }
 
     func apply(_ settings: Settings, force: Bool = false) async throws {
@@ -100,6 +110,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                     : "Check-ins are assigned to Apple Watch. Open Dash on your Watch to check notification permission."
             } else { scheduleStatus = "No check-ins scheduled. Allow notifications on this device to start." }
             lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = false
+            await refreshStatus()
             return
         }
         // Reserve a slot for the existing delivery-test notification, and respect
@@ -144,6 +155,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             }
             UserDefaults.standard.set(encoded, forKey: configurationKey)
             lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = queued
+            await refreshStatus()
         } catch {
             // Keep successfully queued alerts. A later refill reconciles them;
             // losing network/background time must never erase saved log entries.

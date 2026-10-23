@@ -46,6 +46,9 @@ struct GoalEditorView: View {
     @State private var showingHelp = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = Set<String>()
+    @State private var addingGoal = false
+    @State private var goalCategoryID: String?
+    @State private var editingDatedGoal: DatedGoal?
     @State private var actionRequest: CategoryActionRequest?
     @State private var moveSelection: [String] = []
     @State private var deleting: LedgerCategory?
@@ -93,7 +96,20 @@ struct GoalEditorView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) { displayControls }
         .safeAreaInset(edge: .bottom) {
-            if selecting { selectionActions.padding(.horizontal, 8).padding(.vertical, 6).background(.bar) }
+            VStack(spacing: 4) {
+                if selecting { selectionActions }
+                if selected.count <= 1 {
+                    HStack {
+                        Button(singleSelection == nil ? "Add category" : "Add child category", systemImage: "folder.badge.plus") {
+                            endGoalEditing(); actionRequest = .name(nil, parent: singleSelection?.id)
+                        }.accessibilityIdentifier(singleSelection == nil ? "plan.create-category" : "plan.create-child")
+                        Spacer()
+                        Button("Add goal", systemImage: "target") {
+                            endGoalEditing(); goalCategoryID = singleSelection?.id; addingGoal = true
+                        }.accessibilityIdentifier("plan.create-goal")
+                    }.font(.subheadline).frame(minHeight: 44)
+                }
+            }.padding(.horizontal, 12).padding(.vertical, 6).background(.bar)
         }
         .onAppear {
             if !loaded {
@@ -123,6 +139,8 @@ struct GoalEditorView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistGoals() } }
         .onDisappear { persistGoals() }
+        .sheet(isPresented: $addingGoal) { DatedGoalEditorView(categoryID: goalCategoryID) { finishSelection() } }
+        .sheet(item: $editingDatedGoal) { DatedGoalEditorView(goal: $0) }
         .sheet(item: $actionRequest) { request in
             switch request {
             case .move(let ids): CategoryMoveView(ids: ids) { finishSelection() }
@@ -151,6 +169,20 @@ struct GoalEditorView: View {
 
     private func planList(today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> some View {
         List {
+            if !store.ledger.activeDatedGoals.isEmpty {
+                Section("Time goals") {
+                    ForEach(store.ledger.activeDatedGoals) { goal in
+                        Button { editingDatedGoal = goal } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(goal.name).foregroundStyle(.primary)
+                                Text("\(store.duration(goal.targetMinutes)) · \(goal.deadline.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                if let category = goal.categoryID { Text(store.ledger.categoryPath(category)).font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }.accessibilityIdentifier("plan.dated-goal.\(goal.id)")
+                    }
+                }
+            }
             categoryOutline(today: today, week: week, goals: goals)
             if reportsLoading { ProgressView("Updating time totals…").accessibilityIdentifier("plan.loading") }
             CategoryMoveUndoSection()
@@ -240,9 +272,6 @@ struct GoalEditorView: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowBackground(SelectionRowBackground(selected: !item.direct && selected.contains(item.category.id)))
             }
-            Button("New top-level category", systemImage: "plus") { endGoalEditing(); actionRequest = .name(nil, parent: nil) }
-                .accessibilityIdentifier("plan.create-category")
-                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
         } header: {
             if typeSize.isAccessibilitySize {
                 HStack {
@@ -503,7 +532,6 @@ struct GoalEditorView: View {
                 }
                 if let category = singleSelection {
                     actionButton("Rename", icon: "pencil", id: "plan.rename") { actionRequest = .name(category, parent: categoryIndex.parents[category.id]) }
-                    actionButton("Add child", icon: "plus", id: "plan.create-child") { actionRequest = .name(nil, parent: category.id) }
                     actionButton("Open", icon: "tray", id: "plan.open-category") { actionRequest = .detail(category) }
                 }
                 actionButton("Move", icon: "folder", id: "plan.group-selected") { groupSelected() }.disabled(selected.isEmpty)

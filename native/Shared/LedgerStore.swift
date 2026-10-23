@@ -168,6 +168,23 @@ final class LedgerStore: ObservableObject {
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-dated-goals-fixture") {
+                var fixture = Ledger(); fixture.settings.reportingTimeZoneIdentifier = "UTC"
+                let now = Date()
+                let goal = try fixture.saveDatedGoal(name: "Prepare DIGS lecture", categoryID: "work", targetMinutes: 240,
+                    startDate: now.addingTimeInterval(-3 * 86400), deadline: now.addingTimeInterval(2 * 86400), writer: "fixture")
+                try fixture.saveDatedGoal(name: "Prepare SDES lecture", categoryID: "work", targetMinutes: 240,
+                    startDate: now.addingTimeInterval(-3 * 86400), deadline: now.addingTimeInterval(4 * 86400), writer: "fixture")
+                let completed = CalendarEventSnapshot(id: "ui-completed", calendarID: "fixture", calendarName: "Classes", title: "DIGS preparation",
+                    start: now.addingTimeInterval(-10800), end: now.addingTimeInterval(-7200))
+                let pending = CalendarEventSnapshot(id: "ui-pending", calendarID: "fixture", calendarName: "Classes", title: "Calendar lecture to confirm",
+                    start: now.addingTimeInterval(-5400), end: now.addingTimeInterval(-1800))
+                fixture.collectCalendarEvents([completed, pending], writer: "fixture", now: now)
+                try fixture.decideCalendarEvent(completed.id, confirm: true, goalID: goal, writer: "fixture", now: now)
+                try fixture.saveSample(id: "ui-goal-review", at: now.addingTimeInterval(-60), activity: "Preparing slides to categorize", categoryID: nil, writer: "fixture", now: now)
+                try fixture.saveAllocationGoals(["work": 20], writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }
@@ -491,6 +508,30 @@ final class LedgerStore: ObservableObject {
         var draft = ledger
         try draft.updateLogActivity(id: id, activity: activity, writer: writer)
         if draft != ledger { try commit(draft) }
+    }
+    func saveDatedGoal(id: String? = nil, name: String, categoryID: String?, targetMinutes: Double, startDate: Date, deadline: Date) throws {
+        var draft = ledger
+        try draft.saveDatedGoal(id: id, name: name, categoryID: categoryID, targetMinutes: targetMinutes, startDate: startDate, deadline: deadline, writer: writer)
+        try commit(draft)
+    }
+    func deleteDatedGoal(_ id: String) throws {
+        var draft = ledger; draft.deleteDatedGoal(id, writer: writer); try commit(draft)
+    }
+    func collectCalendarEvents(_ events: [CalendarEventSnapshot]) throws {
+        var draft = ledger; draft.collectCalendarEvents(events, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
+    func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String] = [], goalID: String? = nil) throws {
+        var draft = ledger
+        try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, goalID: goalID, writer: writer)
+        try commit(draft)
+    }
+    func reviewLog(_ entry: CheckIn, categoryIDs: [String], mood: Int?, goalID: String?) throws {
+        var draft = ledger
+        try draft.confirmCategories(for: entry.id, categoryIDs: categoryIDs, writer: writer)
+        try draft.setMood(for: entry.id, value: mood, writer: writer)
+        try draft.assignGoal(goalID, to: entry.id, writer: writer)
+        try commitCategorization(draft)
     }
     func saveTargets(_ values: [String: Double]) throws {
         var draft = ledger; try draft.saveTargets(values, writer: writer); try commit(draft)

@@ -22,7 +22,7 @@ struct AllocationHistoryView: View {
         content(now: now)
             .onAppear { now = Date() }
             .onReceive(store.$ledger.dropFirst()) { _ in now = Date() }
-            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0; Task { await CalendarImport.shared.refresh() } }
             .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
             .navigationTitle(range == .today ? "Today" : "Your time").navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -67,6 +67,11 @@ struct AllocationHistoryView: View {
                 if range == .custom {
                     DatePicker("From", selection: $start, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.from")
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
+                }
+                let pendingEvents = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.count
+                if pendingEvents > 0 {
+                    NavigationLink("Confirm calendar events (\(pendingEvents))") { CalendarEventReviewView() }
+                        .font(.subheadline).accessibilityIdentifier("dashboard.calendar-events")
                 }
                 if ungrouped > 0 {
                     Button {

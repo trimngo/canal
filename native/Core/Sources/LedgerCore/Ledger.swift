@@ -67,6 +67,9 @@ public struct ReminderTime: Equatable, Sendable {
 public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
 
 public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
+    /// Present only for a user-confirmed calendar period. Samples remain instantaneous.
+    public var intervalStart: Date?
+    public var goalID: String?
     /// Optional instantaneous self-report: 1 (low) through 5 (high).
     public var mood: Int?
     /// Nil in legacy files. categoryID remains a compatibility mirror of the first selection.
@@ -202,6 +205,8 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var datedGoals: [DatedGoal]?
+    public var calendarEvents: [CalendarEventRecord]?
     public var weeklyCommitments: [WeeklyCommitment]?
     public var targetBudgets: [TargetBudget]?
     public var reminderImports: [ReminderImportReceipt]?
@@ -217,6 +222,8 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func nextRevision(writer: String) -> Revision {
         var values = categories.map(\.revision.counter)
+        values.append(contentsOf: (datedGoals ?? []).map(\.revision.counter))
+        values.append(contentsOf: (calendarEvents ?? []).map(\.revision.counter))
         values.append(contentsOf: (weeklyCommitments ?? []).map(\.revision.counter))
         values.append(contentsOf: (targetBudgets ?? []).map(\.revision.counter))
         values.append(contentsOf: entries.map(\.revision.counter))
@@ -253,7 +260,10 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func entries(on day: Date, calendar: Calendar = .current) -> [CheckIn] {
         guard let bounds = calendar.dateInterval(of: .day, for: day) else { return [] }
-        return activeEntries.filter { $0.end >= bounds.start && $0.end < bounds.end }.sorted {
+        return activeEntries.filter { entry in
+            if let start = entry.intervalStart { return start < bounds.end && entry.end > bounds.start }
+            return entry.end >= bounds.start && entry.end < bounds.end
+        }.sorted {
             $0.end == $1.end ? $0.id < $1.id : $0.end > $1.end
         }
     }
@@ -366,6 +376,10 @@ public struct Ledger: Codable, Equatable, Sendable {
             return result.values.sorted { $0.id < $1.id }
         }
         categories = merged(categories, other.categories, revision: { $0.revision })
+        let goals = merged(datedGoals ?? [], other.datedGoals ?? [], revision: { $0.revision })
+        datedGoals = goals.isEmpty ? nil : goals
+        let events = merged(calendarEvents ?? [], other.calendarEvents ?? [], revision: { $0.revision })
+        calendarEvents = events.isEmpty ? nil : events
         let commitments = merged(weeklyCommitments ?? [], other.weeklyCommitments ?? [], revision: { $0.revision })
         weeklyCommitments = commitments.isEmpty ? nil : commitments
         let budgets = merged(targetBudgets ?? [], other.targetBudgets ?? [], revision: { $0.revision })

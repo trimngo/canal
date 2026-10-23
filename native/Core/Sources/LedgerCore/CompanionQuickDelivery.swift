@@ -21,6 +21,8 @@ public struct CompanionQuickDelivery {
     private func recent(_ source: Ledger) -> Ledger {
         var result = Ledger(); result.categories = []
         result.settings = source.settings
+        result.datedGoals = Array((source.datedGoals ?? []).sorted { $0.revision > $1.revision }.prefix(20))
+        result.calendarEvents = Array((source.calendarEvents ?? []).sorted { $0.revision > $1.revision }.prefix(20))
         result.entries = Array(source.entries.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
         result.captures = Array(source.captures.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
         result.logDeletions = Array((source.logDeletions ?? []).sorted { $0.revision > $1.revision }.prefix(20))
@@ -29,6 +31,8 @@ public struct CompanionQuickDelivery {
     private func revisions(_ ledger: Ledger, includingSettings: Bool = true) -> [String: Revision] {
         var result: [String: Revision] = [:]
         if includingSettings, ledger.settings.revision > Revision() { result["settings"] = ledger.settings.revision }
+        for goal in ledger.datedGoals ?? [] { result["goal:" + goal.id] = goal.revision }
+        for event in ledger.calendarEvents ?? [] { result["event:" + event.id] = event.revision }
         for entry in ledger.entries { result["log:" + entry.id] = entry.revision }
         for capture in ledger.captures { result["idea:" + capture.id] = capture.revision }
         for deletion in ledger.logDeletions ?? [] { result["deletion:" + deletion.id] = deletion.revision }
@@ -65,6 +69,14 @@ public struct CompanionQuickDelivery {
         for item in latest.logDeletions ?? [] where acknowledged["deletion:" + item.id] != item.revision {
             partial.logDeletions = (partial.logDeletions ?? []) + [item]
             if try !fits(partial) { partial.logDeletions?.removeLast() }
+        }
+        for item in latest.datedGoals ?? [] where acknowledged["goal:" + item.id] != item.revision {
+            partial.datedGoals = (partial.datedGoals ?? []) + [item]
+            if try !fits(partial) { partial.datedGoals?.removeLast() }
+        }
+        for item in latest.calendarEvents ?? [] where acknowledged["event:" + item.id] != item.revision {
+            partial.calendarEvents = (partial.calendarEvents ?? []) + [item]
+            if try !fits(partial) { partial.calendarEvents?.removeLast() }
         }
         guard !revisions(partial).isEmpty else { return nil }
         let packet = CompanionQuickPacket(id: id, ledger: partial)

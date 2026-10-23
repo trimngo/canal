@@ -23,6 +23,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
+                NavigationLink("Calendars") { CalendarConnectionView() }.accessibilityIdentifier("settings.calendars")
                 NavigationLink("Siri via Reminders") { ReminderInboxSetupView() }
                     .accessibilityIdentifier("settings.reminders")
             } footer: {

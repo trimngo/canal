@@ -31,7 +31,7 @@ struct GroupEntriesView: View {
     private var entries: [CheckIn] {
         let source: [CheckIn]
         if allDays { source = store.ledger.activeEntries.sorted { $0.end > $1.end } }
-        else if let rangeStart, let rangeEnd { source = store.ledger.activeEntries.filter { $0.end >= rangeStart && $0.end <= rangeEnd }.sorted { $0.end > $1.end } }
+        else if let rangeStart, let rangeEnd { source = store.ledger.activeEntries.filter { ($0.intervalStart ?? $0.end) <= rangeEnd && $0.end >= rangeStart }.sorted { $0.end > $1.end } }
         else { source = store.ledger.entries(on: day) }
         let categoryIDs = Set([groupID] + (directOnly ? [] : store.ledger.descendants(of: groupID).map(\.id)))
         return source.filter {

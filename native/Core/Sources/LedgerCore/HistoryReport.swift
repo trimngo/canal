@@ -79,7 +79,7 @@ extension Ledger {
         case .today: lower = today; last = today
         case .week: lower = cal.date(byAdding: .day, value: -6, to: today) ?? today; last = today
         case .allTime:
-            lower = activeEntries.filter { $0.end <= now }.map { reportingDay(containing: $0.end, calendar: cal) }.min() ?? today
+            lower = activeEntries.filter { $0.end <= now }.map { reportingDay(containing: $0.intervalStart ?? $0.end, calendar: cal) }.min() ?? today
             last = today
         case .custom:
             lower = min(today, cal.startOfDay(for: min(start, end)))
@@ -89,9 +89,10 @@ extension Ledger {
         // Keep every observation on the selected calendar dates, through now.
         let samples = activeEntries.filter {
             let day = reportingDay(containing: $0.end, calendar: cal)
+            if let intervalStart = $0.intervalStart { return intervalStart < upper && $0.end > lower && $0.end <= now }
             return day >= lower && day <= last && $0.end <= now
         }
-        let days = Set(samples.map { reportingDay(containing: $0.end, calendar: cal) }).sorted()
+        let days = activityDays(from: lower, through: upper, calendar: cal).filter { $0 <= last }
         var totals: [String: Double] = [:], daily: [DailyTotal] = []
         var tracked = 0.0, directMinutes: [String: Double] = [:]
         var periods: [(day: Date, period: AllocationPeriod)] = []

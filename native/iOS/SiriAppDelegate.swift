@@ -9,6 +9,7 @@ final class SiriAppDelegate: NSObject, UIApplicationDelegate {
         NotificationScheduler.shared.configureActions()
         NotificationScheduler.shared.registerBackgroundRefresh()
         ReminderInbox.shared.registerBackgroundRefresh()
+        CalendarImport.shared.registerBackgroundRefresh()
         return true
     }
     func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
