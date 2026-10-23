@@ -1330,8 +1330,8 @@ final class TimeLedgerUITests: XCTestCase {
         let review = app.buttons["dashboard.review.uncategorized"]; reveal(review, in: app); review.tap()
         app.buttons["mood.4"].tap(); tapCategory("work", in: app); tapCategory("social", in: app)
         let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
-        editInline("category-context.activity", adding: " corrected", in: app)
-        XCTAssertTrue(element(app, "category-context.activity").label.contains("corrected"))
+        editInline("category-context.activity", adding: " corrected", in: app, finishEditing: false)
+        XCTAssertTrue((app.textFields["category-context.activity"].value as? String ?? "").contains("corrected"))
         XCTAssertEqual(search.value as? String, "work")
         XCTAssertEqual(element(app, "log-review.position").label, "1 of 1")
         XCTAssertTrue(app.buttons["category-tag.work"].exists); XCTAssertTrue(app.buttons["category-tag.social"].exists)
@@ -1832,14 +1832,15 @@ final class TimeLedgerUITests: XCTestCase {
         editInline(id, adding: text, in: app)
     }
 
-    private func editInline(_ id: String, adding suffix: String, in app: XCUIApplication) {
+    private func editInline(_ id: String, adding suffix: String, in app: XCUIApplication, finishEditing: Bool = true) {
         let label = element(app, id); reveal(label, in: app); label.tap()
         let field = element(app, id)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText(suffix)
-        let done = app.buttons["keyboard.done"].firstMatch
-        if done.exists && done.isHittable { done.tap() }
-        else { app.navigationBars.firstMatch.tap() }
+        if finishEditing {
+            let done = app.buttons["keyboard.done"].firstMatch
+            XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+        }
         XCTAssertFalse(app.navigationBars["Edit idea"].exists)
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
