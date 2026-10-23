@@ -70,6 +70,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         let requests = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("checkin-") }
         pendingCheckIns = requests.count
         nextCheckIn = requests.compactMap { request -> Date? in
+            if let stamp = request.content.userInfo["scheduledAt"] as? Double {
+                let date = Date(timeIntervalSince1970: stamp)
+                return date > Date() ? date : nil
+            }
             if let trigger = request.trigger as? UNCalendarNotificationTrigger { return trigger.nextTriggerDate() }
             if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger { return trigger.nextTriggerDate() }
             return nil
