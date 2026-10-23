@@ -3,12 +3,13 @@ import UIKit
 import LedgerCore
 
 private enum CategoryActionRequest: Identifiable {
-    case name(LedgerCategory?, parent: String?), detail(LedgerCategory), move([String])
+    case name(LedgerCategory?, parent: String?), detail(LedgerCategory), move([String]), goal(parent: String?)
     var id: String {
         switch self {
         case .name(let category, let parent): return "name:\(category?.id ?? "new"):\(parent ?? "root")"
         case .detail(let category): return "detail:\(category.id)"
         case .move(let ids): return "move:\(ids.joined(separator: ","))"
+        case .goal(let parent): return "goal:" + (parent ?? "root")
         }
     }
 }
@@ -46,8 +47,6 @@ struct GoalEditorView: View {
     @State private var showingHelp = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = Set<String>()
-    @State private var addingGoal = false
-    @State private var goalCategoryID: String?
     @State private var editingDatedGoal: DatedGoal?
     @State private var actionRequest: CategoryActionRequest?
     @State private var moveSelection: [String] = []
@@ -105,7 +104,7 @@ struct GoalEditorView: View {
                         }.accessibilityIdentifier(singleSelection == nil ? "plan.create-category" : "plan.create-child")
                         Spacer()
                         Button("Add goal", systemImage: "target") {
-                            endGoalEditing(); goalCategoryID = singleSelection?.id; addingGoal = true
+                            endGoalEditing(); actionRequest = .goal(parent: singleSelection?.id)
                         }.accessibilityIdentifier("plan.create-goal")
                     }.font(.subheadline).frame(minHeight: 44)
                 }
@@ -139,10 +138,10 @@ struct GoalEditorView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistGoals() } }
         .onDisappear { persistGoals() }
-        .sheet(isPresented: $addingGoal) { DatedGoalEditorView(categoryID: goalCategoryID) { finishSelection() } }
         .sheet(item: $editingDatedGoal) { DatedGoalEditorView(goal: $0) }
         .sheet(item: $actionRequest) { request in
             switch request {
+            case .goal(let parent): DatedGoalEditorView(categoryID: parent) { finishSelection() }
             case .move(let ids): CategoryMoveView(ids: ids) { finishSelection() }
             case .name(let category, let parent):
                 CategoryNameView(category: category, parentID: parent) {
