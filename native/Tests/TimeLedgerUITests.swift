@@ -1327,6 +1327,10 @@ final class TimeLedgerUITests: XCTestCase {
         tapCategory("social", in: app); app.buttons["mood.5"].tap()
         app.buttons["log-review.save-next"].tap()
         XCTAssertTrue(app.navigationBars["Your time"].waitForExistence(timeout: 5))
+        if app.buttons["log-review.close"].exists {
+            recordScreen("ReviewAfterLastSave", in: app)
+            print("REVIEW AFTER LAST SAVE: \(app.debugDescription)")
+        }
         XCTAssertFalse(app.buttons["log-review.close"].exists)
         XCTAssertFalse(app.staticTexts["Review complete"].exists)
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
@@ -2346,6 +2350,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(element(app, "category-context.activity").label, "Older ungrouped observation")
         tapCategory("social", in: app); save.tap()
         XCTAssertTrue(app.navigationBars["Your time"].waitForExistence(timeout: 5))
+        if app.buttons["log-review.close"].exists {
+            recordScreen("ReviewAfterLastSave", in: app)
+            print("REVIEW AFTER LAST SAVE: \(app.debugDescription)")
+        }
         XCTAssertFalse(app.buttons["log-review.close"].exists)
         XCTAssertFalse(app.staticTexts["Review complete"].exists)
         app.terminate(); app.launchArguments = []; app.launch()
