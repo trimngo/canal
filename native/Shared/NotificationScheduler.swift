@@ -69,7 +69,11 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
         let requests = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("checkin-") }
         pendingCheckIns = requests.count
-        nextCheckIn = requests.compactMap { $0.trigger?.nextTriggerDate() }.min()
+        nextCheckIn = requests.compactMap { request -> Date? in
+            if let trigger = request.trigger as? UNCalendarNotificationTrigger { return trigger.nextTriggerDate() }
+            if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger { return trigger.nextTriggerDate() }
+            return nil
+        }.min()
     }
 
     func apply(_ settings: Settings, force: Bool = false) async throws {
