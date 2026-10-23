@@ -45,7 +45,9 @@ final class CalendarImport: ObservableObject {
         if enabled { selected.insert(id) } else { selected.remove(id) }
         defaults.set(Array(selected).sorted(), forKey: "calendar.sources")
         // Adding a source starts with today's events, never imports years of history.
-        defaults.set(Calendar.current.startOfDay(for: Date()), forKey: "calendar.scan-start")
+        let today = Calendar.current.startOfDay(for: Date())
+        let previous = defaults.object(forKey: "calendar.scan-start") as? Date
+        defaults.set(min(previous ?? today, today), forKey: "calendar.scan-start")
         await refresh()
     }
     func refresh() async {
@@ -60,7 +62,9 @@ final class CalendarImport: ObservableObject {
         let predicate = events.predicateForEvents(withStart: start, end: now, calendars: calendars)
         let snapshots = events.events(matching: predicate).filter { $0.endDate <= now && $0.status != .canceled }.map { event in
             // Occurrence date distinguishes repeating events even when titles match.
-            let key = event.calendar.calendarIdentifier + ":" + (event.calendarItemExternalIdentifier ?? event.calendarItemIdentifier) + ":" + String((event.occurrenceDate ?? event.startDate).timeIntervalSince1970)
+            let recurring = !(event.recurrenceRules ?? []).isEmpty || event.isDetached
+            let occurrence = recurring ? ":" + String((event.occurrenceDate ?? event.startDate).timeIntervalSince1970) : ""
+            let key = event.calendar.calendarIdentifier + ":" + (event.calendarItemExternalIdentifier ?? event.calendarItemIdentifier) + occurrence
             let id = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
             let title = event.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return CalendarEventSnapshot(id: id, calendarID: event.calendar.calendarIdentifier, calendarName: event.calendar.title,

@@ -193,6 +193,7 @@ struct GroupAssignmentView: View {
     let entry: CheckIn
     @State var selection: [String]
     @State private var mood: Int?
+    @State private var goalID: String?
     @State private var error: String?
     @State private var loaded = false
     private var currentEntry: CheckIn { store.ledger.activeEntries.first { $0.id == entry.id } ?? entry }
@@ -200,6 +201,7 @@ struct GroupAssignmentView: View {
         NavigationStack {
             CategorySelectionList(selection: $selection, activity: currentEntry.activity, timestamp: entry.end, mood: $mood,
                                   saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) })
+                .safeAreaInset(edge: .top, spacing: 0) { LogGoalPicker(goalID: $goalID, categoryIDs: $selection).padding(.horizontal) }
                 .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }
@@ -208,13 +210,13 @@ struct GroupAssignmentView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
-                            do { try store.categorize(entry, categoryIDs: selection, mood: mood); dismiss() }
+                            do { UIApplication.shared.dismissLedgerKeyboard(); try store.reviewLog(entry, categoryIDs: selection, mood: mood, goalID: goalID); dismiss() }
                             catch { self.error = error.localizedDescription }
                         }.accessibilityIdentifier("group-selection.done")
                     }
                 }
         }
-            .onAppear { if !loaded { mood = entry.mood; loaded = true } }
+            .onAppear { if !loaded { mood = entry.mood; goalID = entry.goalID; loaded = true } }
     }
 }
 

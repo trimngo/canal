@@ -87,11 +87,31 @@ final class WatchQuickLogUITests: XCTestCase {
         if app.alerts.buttons["Allow"].waitForExistence(timeout: 3) { app.alerts.buttons["Allow"].tap() }
         let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
         if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 3) { carousel.alerts.buttons["Allow"].tap() }
-        XCTAssertTrue(app.staticTexts["Test sent. Lower your wrist and check this Watch in 15 seconds."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Keep your iPhone unlocked, lower your wrist, and check this Watch in 15 seconds."].waitForExistence(timeout: 10))
         for _ in 0..<6 { if mode.isHittable { break }; app.swipeDown() }
         XCTAssertEqual(mode.label, "Delivery: Automatic")
         XCTAssertFalse(app.buttons["watch.notifications.enable"].exists)
         record("WatchAutomaticDeliverySettings", app)
+    }
+
+    func testWatchCanSwitchSharedDeliveryAndShowItsOwnSchedule() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-watch-automatic-notification-ledger"]; app.launch()
+        let alerts = app.buttons["watch.notifications"]
+        XCTAssertTrue(alerts.waitForExistence(timeout: 15)); alerts.tap()
+        let useWatch = app.buttons["watch.notifications.use-watch"]
+        for _ in 0..<5 { if useWatch.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(useWatch.exists); useWatch.tap()
+        if app.alerts.buttons["Allow"].waitForExistence(timeout: 3) { app.alerts.buttons["Allow"].tap() }
+        let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
+        if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 3) { carousel.alerts.buttons["Allow"].tap() }
+        let mode = app.staticTexts["watch.notifications.delivery-mode"]
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Delivery: Apple Watch"), object: mode)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 15), .completed)
+        let next = app.staticTexts["watch.notifications.next"]
+        for _ in 0..<8 { if next.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(next.exists)
+        XCTAssertTrue(app.staticTexts["watch.notifications.pending"].exists)
+        record("WatchDirectDeliverySchedule", app)
     }
 
     private func waitForInputButton(_ button: XCUIElement) {

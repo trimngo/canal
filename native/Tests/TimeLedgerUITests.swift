@@ -95,6 +95,13 @@ final class TimeLedgerUITests: XCTestCase {
         if close.waitForExistence(timeout: 1), close.isHittable { close.tap() }
     }
 
+    private func openCategoryTargets(in app: XCUIApplication) {
+        if !element(app, "goals.time-left").exists {
+            let link = app.buttons["dated-goals.category-targets"]
+            XCTAssertTrue(link.waitForExistence(timeout: 5)); link.tap()
+        }
+    }
+
     private func openGoalEditor(in app: XCUIApplication) {
         app.tabBars.buttons["Commitments"].tap()
         let edit = app.buttons["goals.edit"]
@@ -772,13 +779,13 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCommitmentFavoritesIncludeChildGoalsAndPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-category-workspace"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         XCTAssertTrue(app.buttons["Choose favorites"].waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "goals.progress.music").exists)
         openGoalEditor(in: app)
         selectPlanCategory("music", in: app); app.buttons["plan.favorite"].tap()
         XCTAssertFalse(app.buttons["plan.selection-done"].exists)
-        app.navigationBars["Edit goals"].buttons["Close"].tap()
+        app.navigationBars["Edit goals"].buttons["Close"].tap(); openCategoryTargets(in: app)
         XCTAssertTrue(element(app, "goals.progress.music").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "goals.progress.teaching").exists)
         element(app, "goals.progress.music").tap()
@@ -789,12 +796,12 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["category-detail.close"].tap()
         openGoalEditor(in: app)
         selectPlanCategory("work", in: app); app.buttons["plan.favorite"].tap()
-        app.navigationBars["Edit goals"].buttons["Close"].tap()
+        app.navigationBars["Edit goals"].buttons["Close"].tap(); openCategoryTargets(in: app)
         XCTAssertTrue(element(app, "goals.progress.teaching").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "goals.progress.admin").exists)
         XCTAssertFalse(element(app, "goals.progress.work").exists)
         recordScreen("FavoriteCommitments", in: app)
-        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         XCTAssertTrue(element(app, "goals.progress.music").waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "goals.progress.teaching").exists)
         openGoalEditor(in: app)
@@ -803,7 +810,7 @@ final class TimeLedgerUITests: XCTestCase {
         selectPlanCategory("teaching", in: app)
         XCTAssertEqual(app.buttons["plan.favorite"].label, "Unfavorite")
         app.buttons["plan.favorite"].tap()
-        app.navigationBars["Edit goals"].buttons["Close"].tap()
+        app.navigationBars["Edit goals"].buttons["Close"].tap(); openCategoryTargets(in: app)
         XCTAssertFalse(element(app, "goals.progress.teaching").exists)
         XCTAssertTrue(element(app, "goals.progress.music").exists)
     }
@@ -1852,7 +1859,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testDailyGoalsShowsTimeRemainingAndMatchingProgressWithoutTable() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         XCTAssertEqual(element(app, "goals.time-left").label, "4h 30m left today")
         XCTAssertEqual(element(app, "goals.needed").label, "3h 0m left across your goals")
         XCTAssertEqual(element(app, "goals.other-time").label, "1h 30m for other activities")
@@ -1869,7 +1876,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testGoalBarsShareOneScaleWithoutParentTotals() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-proportional"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         let music = element(app, "goals.target-bar.music"), teaching = element(app, "goals.target-bar.teaching")
         XCTAssertTrue(music.waitForExistence(timeout: 5)); XCTAssertTrue(teaching.exists)
         XCTAssertEqual(teaching.frame.width, music.frame.width * 2, accuracy: 2)
@@ -1881,7 +1888,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testDayBarShowsElapsedAndRemainingOnTheWholeWindowScale() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         let bar = element(app, "goals.capacity-bar"), elapsed = element(app, "goals.day-segment.elapsed")
         let music = element(app, "goals.day-segment.goal:music"), teaching = element(app, "goals.day-segment.goal:teaching")
         let other = element(app, "goals.day-segment.other")
@@ -1896,7 +1903,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCompletedGoalsRemainVisibleWithoutOpeningAnotherSection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-completed"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         for id in ["music", "teaching", "food"] {
             let row = element(app, "goals.progress.\(id)")
             XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -1911,7 +1918,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testDailyGoalsMakesShortfallExplicit() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-overflow"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         XCTAssertEqual(element(app, "goals.time-left").label, "4h 30m left today")
         XCTAssertEqual(element(app, "goals.needed").label, "12h 0m left across your goals")
         XCTAssertEqual(element(app, "goals.shortfall").label, "7h 30m more than the time left")
@@ -1921,7 +1928,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testDayWindowChangesGoalHoursWithoutClippingEarlierLogsOrAllDayAlerts() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-daily-goals-fixture"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         app.buttons["goals.day-window"].tap()
         element(app, "goals.window-start").tap()
         let eight = app.buttons["08:00"]; reveal(eight, in: app); eight.tap()
@@ -1943,7 +1950,7 @@ final class TimeLedgerUITests: XCTestCase {
         openGoalEditor(in: app)
         setPlanNumber("categories.target.music", to: "30", in: app)
         app.buttons["Close"].tap()
-        app.buttons["dated-goals.category-targets"].tap()
+        openCategoryTargets(in: app)
         let music = element(app, "goals.progress.music")
         XCTAssertTrue(music.waitForExistence(timeout: 5))
         XCTAssertEqual(music.value as? String, "1h 0m of 4h 30m today. 3h 30m remaining")
@@ -1973,7 +1980,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testDailyGoalsWithoutHistoryUsesConfiguredWindowForGoalEditing() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
-        app.tabBars.buttons["Commitments"].tap(); app.buttons["dated-goals.category-targets"].tap()
+        app.tabBars.buttons["Commitments"].tap(); openCategoryTargets(in: app)
         XCTAssertTrue(app.buttons["Choose favorites"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "goals.time-left").exists)
         app.buttons["goals.edit"].tap()
@@ -1984,7 +1991,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.textFields["categories.target.work"].value as? String, "20")
         selectPlanCategory("work", in: app); app.buttons["plan.favorite"].tap()
         app.buttons["Close"].tap()
-        app.buttons["dated-goals.category-targets"].tap()
+        openCategoryTargets(in: app)
         XCTAssertTrue(element(app, "goals.progress.work").waitForExistence(timeout: 5))
     }
 
