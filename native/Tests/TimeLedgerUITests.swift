@@ -750,14 +750,18 @@ final class TimeLedgerUITests: XCTestCase {
         dashboardGroup("music", in: app).tap()
         XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
         let other = element(app, "category-detail.other-lists"); reveal(other, in: app); other.tap()
+        XCTAssertEqual(other.value as? String, "Expanded")
+        recordScreen("CategoryOtherListsExpanded", in: app)
         reveal(element(app, "inbox.details.reference"), in: app)
         XCTAssertTrue(element(app, "inbox.details.reference").exists)
         reveal(element(app, "inbox.details.completed"), in: app)
         XCTAssertTrue(element(app, "inbox.details.completed").exists)
         let menu = app.buttons["inbox.actions.unseen"]; reveal(menu, in: app); menu.tap()
         app.buttons["Delete idea"].tap()
+        reveal(element(app, "category-detail.count"), in: app)
         XCTAssertEqual(element(app, "category-detail.count").label, "3 inbox items")
         let undo = app.buttons["inbox.undo-delete"]; reveal(undo, in: app); undo.tap()
+        reveal(element(app, "category-detail.count"), in: app)
         XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
     }
 
