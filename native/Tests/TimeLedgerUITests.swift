@@ -2473,6 +2473,11 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "dated-goals.progress.")).count == 2)
         XCTAssertFalse(app.buttons["dated-goals.category-targets"].exists)
         recordScreen("UnifiedCommitments", in: app)
+        app.buttons["commitments.target.work"].tap()
+        XCTAssertTrue(element(app, "category-detail.count").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["category-detail.logs"].exists)
+        app.buttons["category-detail.close"].tap()
+        XCTAssertTrue(app.navigationBars["Commitments"].exists)
         openGoalEditor(in: app)
         let add = app.buttons["plan.create-goal"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
@@ -2511,6 +2516,29 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["log-review.skip-event"].tap()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "awaiting category review")).firstMatch.exists)
+    }
+
+    func testIdeaCategorizationHasInlineDetailsDoneDeleteAndUndo() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-category-workspace"]; app.launch()
+        openInbox(app)
+        app.buttons["inbox.categorize"].tap(); app.buttons["inbox.categorize-all"].tap()
+        XCTAssertTrue(app.buttons["idea-review.done"].waitForExistence(timeout: 5))
+        app.buttons["idea-review.notes.expand"].tap()
+        element(app, "idea-review.notes").tap()
+        element(app, "idea-review.notes").typeText("Extra detail saved while categorizing")
+        XCTAssertTrue(app.buttons["idea-review.save-next"].isHittable)
+        recordScreen("IdeaReviewInlineDetails", in: app)
+        app.buttons["idea-review.save-next"].tap()
+        XCTAssertEqual(element(app, "idea-review.position").label, "2 of 6")
+        app.buttons["idea-review.done"].tap()
+        XCTAssertEqual(element(app, "idea-review.position").label, "3 of 6")
+        app.buttons["idea-review.delete"].tap()
+        XCTAssertTrue(app.buttons["idea-review.undo-delete"].waitForExistence(timeout: 5))
+        app.buttons["idea-review.undo-delete"].tap()
+        app.buttons["idea-review.close"].tap()
+        let search = app.textFields["inbox.search"]; reveal(search, in: app); search.tap(); search.typeText("Extra detail saved")
+        XCTAssertTrue(element(app, "inbox.details.uncategorized").waitForExistence(timeout: 5))
+        recordScreen("CompactInboxSearch", in: app)
     }
 
 }
