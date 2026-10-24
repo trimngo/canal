@@ -87,10 +87,11 @@ struct LogReviewView: View {
             .onAppear {
                 if !loaded {
                     queue = entryIDs.map(LogReviewItem.sample) + calendarIDs.map(LogReviewItem.calendar)
+                    let ledger = store.ledger
                     func date(_ item: LogReviewItem) -> Date {
                         switch item {
-                        case .sample(let id): return store.ledger.activeEntries.first { $0.id == id }?.end ?? .distantPast
-                        case .calendar(let id): return store.ledger.calendarEvents?.first { $0.id == id }?.snapshot.end ?? .distantPast
+                        case .sample(let id): return ledger.activeEntries.first { $0.id == id }?.end ?? .distantPast
+                        case .calendar(let id): return ledger.calendarEvents?.first { $0.id == id }?.snapshot.end ?? .distantPast
                         }
                     }
                     queue.sort { date($0) == date($1) ? $0.id < $1.id : date($0) > date($1) }
