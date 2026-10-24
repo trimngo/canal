@@ -55,7 +55,8 @@ struct LogReviewView: View {
                                 if let event {
                                     let end = store.ledger.calendarEventEnd(event.snapshot)
                                     Text("Did this happen? · \(event.snapshot.calendarName)").font(.subheadline.bold())
-                                    Text("\(event.snapshot.start.formatted(date: .abbreviated, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened)) · \(store.duration(max(0, end.timeIntervalSince(event.snapshot.start) / 60)))")
+                                    let endLabel = store.ledger.reportingCalendar().isDate(event.snapshot.start, inSameDayAs: end) ? store.time(end) : store.dayLabel(end) + " " + store.time(end)
+                                    Text("\(store.dayLabel(event.snapshot.start)) \(store.time(event.snapshot.start))–\(endLabel) · \(store.duration(max(0, end.timeIntervalSince(event.snapshot.start) / 60)))")
                                         .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("log-review.calendar-period")
                                     if end < event.snapshot.end { Text("Ends at your first overlapping log. That log takes over from there.").font(.caption).foregroundStyle(.secondary) }
                                 } else if let suggestion = entry.categorySuggestion {

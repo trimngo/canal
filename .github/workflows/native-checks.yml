@@ -70,7 +70,7 @@ jobs:
           xcrun simctl ui "$DEVICE_ID" appearance dark
           xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
-            -resultBundlePath build/UITests.xcresult -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxCategorizationIsIndependentAndSavesAcrossRestart -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUnifiedCommitmentsAndPinnedGoalActions -only-testing:TimeLedgerUITests/TimeLedgerUITests/testIdeaCategorizationHasInlineDetailsDoneDeleteAndUndo -only-testing:TimeLedgerUITests/TimeLedgerUITests/testLogReviewSavesInlineTextCategoriesAndMoodWithOneTapThenAdvances -only-testing:TimeLedgerUITests/TimeLedgerUITests/testReviewAssignsGoalAndSavesFromTopBarWithKeyboardOpen CODE_SIGNING_ALLOWED=NO test
+            -resultBundlePath build/UITests.xcresult -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUnifiedCommitmentsAndPinnedGoalActions -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDailyGoalsShowsTimeRemainingAndMatchingProgressWithoutTable -only-testing:TimeLedgerUITests/TimeLedgerUITests/testGoalBarsShareOneScaleWithoutParentTotals -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDayBarShowsElapsedAndRemainingOnTheWholeWindowScale -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDayWindowChangesGoalHoursWithoutClippingEarlierLogsOrAllDayAlerts -only-testing:TimeLedgerUITests/TimeLedgerUITests/testIdeaCategorizationHasInlineDetailsDoneDeleteAndUndo CODE_SIGNING_ALLOWED=NO test
       - name: Export compact interface review
         if: always()
         run: |

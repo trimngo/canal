@@ -56,7 +56,7 @@ struct HistoryPanel: View {
                     ForEach(pages.indices, id: \.self) { index in
                         Button { withAnimation { page = index } } label: {
                             Circle().fill(index == (page ?? 0) ? Color.accentColor : Color.secondary.opacity(0.3)).frame(width: 6, height: 6)
-                                .frame(width: 44, height: 44)
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityLabel("Show \(pages[index].lowercased())")
                             .accessibilityAddTraits(index == (page ?? 0) ? .isSelected : [])
                     }
