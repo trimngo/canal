@@ -3,7 +3,7 @@ import XCTest
 final class WatchQuickLogUITests: XCTestCase {
     func testTimerExpiryHasDirectDoneAndRestartAndKeepsQueueAfterRelaunch() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]
         app.launch()
         XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 30))
         allowTimerNotifications(app)
@@ -17,7 +17,7 @@ final class WatchQuickLogUITests: XCTestCase {
         let email = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Answer email"), object: app.staticTexts["timers.current"])
         XCTAssertEqual(XCTWaiter.wait(for: [email], timeout: 10), .completed)
         record("WatchTimerNextTask", app)
-        app.terminate(); app.launchArguments = ["--ui-timer-open"]; app.launch()
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 20))
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
         app.buttons["timers.pause-resume"].tap()
@@ -34,7 +34,7 @@ final class WatchQuickLogUITests: XCTestCase {
     }
     func testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-timer-system-input"]
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-timer-system-input", "--ui-quiet-timer-alerts"]
         app.launch()
         XCTAssertTrue(app.buttons["timers.dictate"].waitForExistence(timeout: 30))
         allowTimerNotifications(app)

@@ -54,7 +54,7 @@ struct TimerQueueView: View {
     private func watchTimers(at now: Date) -> some View {
         VStack(spacing: 4) {
           ScrollView {
-            LazyVStack(alignment: .leading, spacing: 6) {
+            LazyVStack(alignment: .leading, spacing: 4) {
                 if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(task.title).font(.headline).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
@@ -89,7 +89,9 @@ struct TimerQueueView: View {
                     Button("Start next task") { act("start") }.buttonStyle(CompactTimerButtonStyle(prominent: true)).accessibilityIdentifier("timers.start")
                 } else { Text("No timers yet").foregroundStyle(.secondary) }
                 let waiting = store.ledger.waitingTimers
-                Text("Up next · \(waiting.count)").font(.caption2).foregroundStyle(.secondary)
+                if waiting.isEmpty, store.ledger.currentTimer != nil {
+                    Text("No upcoming timers").font(.caption2).foregroundStyle(.secondary)
+                }
                 ForEach(waiting) { task in
                     HStack(spacing: 4) {
                         Text(task.title).font(.subheadline).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
