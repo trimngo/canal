@@ -1,7 +1,42 @@
 import XCTest
 
 final class WatchQuickLogUITests: XCTestCase {
+    func testTimerExpiryHasDirectDoneAndRestartAndKeepsQueueAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 30))
+        allowTimerNotifications(app)
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        record("WatchTimerExpired", app)
+        app.buttons["timers.restart"].tap()
+        XCTAssertTrue(app.buttons["timers.pause-resume"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        app.buttons["timers.done"].tap()
+        let email = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Answer email"), object: app.staticTexts["timers.current"])
+        XCTAssertEqual(XCTWaiter.wait(for: [email], timeout: 10), .completed)
+        record("WatchTimerNextTask", app)
+        app.terminate(); app.launchArguments = ["--ui-timer-open"]; app.launch()
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.buttons["timers.pause-resume"].tap()
+        XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 10))
+    }
+    func testTimerComplicationRouteQueuesDictatedTaskWithoutAnotherSave() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-open", "--ui-timer-dictation"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
+        allowTimerNotifications(app)
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        record("WatchTimerDictationSaved", app)
+    }
     override func setUpWithError() throws { continueAfterFailure = false }
+    private func allowTimerNotifications(_ app: XCUIApplication) {
+        let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
+        if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 2) { carousel.alerts.buttons["Allow"].tap() }
+        if app.alerts.buttons["Allow"].waitForExistence(timeout: 1) { app.alerts.buttons["Allow"].tap() }
+    }
     override func tearDownWithError() throws {
         if testRun?.hasSucceeded == false {
             let app = XCUIApplication()

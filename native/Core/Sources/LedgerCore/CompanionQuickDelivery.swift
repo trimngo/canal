@@ -21,6 +21,10 @@ public struct CompanionQuickDelivery {
     private func recent(_ source: Ledger) -> Ledger {
         var result = Ledger(); result.categories = []
         result.settings = source.settings
+        result.timerControl = source.timerControl
+        var timers = Array((source.queuedTimers ?? []).sorted { $0.revision > $1.revision }.prefix(20))
+        if let current = source.currentTimer, !timers.contains(where: { $0.id == current.id }) { timers.append(current) }
+        result.queuedTimers = timers.isEmpty ? nil : timers
         result.datedGoals = Array((source.datedGoals ?? []).sorted { $0.revision > $1.revision }.prefix(20))
         result.calendarEvents = Array((source.calendarEvents ?? []).sorted { $0.revision > $1.revision }.prefix(20))
         result.entries = Array(source.entries.sorted { $0.revision == $1.revision ? $0.id < $1.id : $0.revision > $1.revision }.prefix(20))
@@ -31,6 +35,8 @@ public struct CompanionQuickDelivery {
     private func revisions(_ ledger: Ledger, includingSettings: Bool = true) -> [String: Revision] {
         var result: [String: Revision] = [:]
         if includingSettings, ledger.settings.revision > Revision() { result["settings"] = ledger.settings.revision }
+        if let control = ledger.timerControl { result["timer-control"] = control.revision }
+        for timer in ledger.queuedTimers ?? [] { result["timer:" + timer.id] = timer.revision }
         for goal in ledger.datedGoals ?? [] { result["goal:" + goal.id] = goal.revision }
         for event in ledger.calendarEvents ?? [] { result["event:" + event.id] = event.revision }
         for entry in ledger.entries { result["log:" + entry.id] = entry.revision }
@@ -58,6 +64,17 @@ public struct CompanionQuickDelivery {
             if try !fits(partial) { partial.settings = Settings() }
         }
         // Send individual changes, never the full history ahead of a new reply.
+        // Timer control and its active task travel together, ahead of history.
+        if let control = latest.timerControl, acknowledged["timer-control"] != control.revision {
+            let before = partial
+            partial.timerControl = control
+            partial.queuedTimers = latest.currentTimer.map { [$0] }
+            if try !fits(partial) { partial = before }
+        }
+        for item in latest.queuedTimers ?? [] where acknowledged["timer:" + item.id] != item.revision && partial.queuedTimers?.contains(where: { $0.id == item.id }) != true {
+            partial.queuedTimers = (partial.queuedTimers ?? []) + [item]
+            if try !fits(partial) { partial.queuedTimers?.removeLast() }
+        }
         for entry in latest.entries where !hasReceived(entry) {
             partial.entries.append(entry)
             if try !fits(partial) { partial.entries.removeLast() }

@@ -93,6 +93,8 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {
+    /// Nil uses the offline suggestion. Explicit No date suppresses that suggestion.
+    public var timing: CaptureTiming?
     public var categorySuggestion: CategorySuggestion?
     /// Explicitly clearing labels is also a confirmed choice. Nil supports old files.
     public var categoriesReviewed: Bool?
@@ -138,6 +140,9 @@ public enum InferenceMethod: String, Codable, CaseIterable, Identifiable, Hashab
 }
 
 public struct Settings: Codable, Equatable, Sendable {
+    public var urgencyPhrases: [String]?
+    public var categoryMatchRules: [CategoryMatchRule]?
+    public var categoryMatching: CategoryMatching?
     public var reportingTimeZoneIdentifier: String?
     public var notificationsAllDay = false
     public var notificationsEnabled = false
@@ -156,9 +161,13 @@ public struct Settings: Codable, Equatable, Sendable {
         case reportingTimeZoneIdentifier = "wakingTimeZoneIdentifier"
         case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision
         case notificationTiming, notificationDelivery, regularNotificationInterval, randomizedNotificationInterval
+        case urgencyPhrases, categoryMatchRules, categoryMatching
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        urgencyPhrases = try values.decodeIfPresent([String].self, forKey: .urgencyPhrases)
+        categoryMatchRules = try values.decodeIfPresent([CategoryMatchRule].self, forKey: .categoryMatchRules)
+        categoryMatching = try values.decodeIfPresent(CategoryMatching.self, forKey: .categoryMatching)
         reportingTimeZoneIdentifier = try values.decodeIfPresent(String.self, forKey: .reportingTimeZoneIdentifier)
         notificationsAllDay = try values.decodeIfPresent(Bool.self, forKey: .notificationsAllDay) ?? false
         notificationsEnabled = try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
@@ -211,6 +220,8 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var queuedTimers: [QueuedTimer]?
+    public var timerControl: TimerQueueControl?
     public var datedGoals: [DatedGoal]?
     public var calendarEvents: [CalendarEventRecord]?
     public var weeklyCommitments: [WeeklyCommitment]?
@@ -228,6 +239,8 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func nextRevision(writer: String) -> Revision {
         var values = categories.map(\.revision.counter)
+        values.append(contentsOf: (queuedTimers ?? []).map(\.revision.counter))
+        values.append(timerControl?.revision.counter ?? 0)
         values.append(contentsOf: (datedGoals ?? []).map(\.revision.counter))
         values.append(contentsOf: (calendarEvents ?? []).map(\.revision.counter))
         values.append(contentsOf: (weeklyCommitments ?? []).map(\.revision.counter))
@@ -384,6 +397,9 @@ public struct Ledger: Codable, Equatable, Sendable {
             return result.values.sorted { $0.id < $1.id }
         }
         categories = merged(categories, other.categories, revision: { $0.revision })
+        let timers = merged(queuedTimers ?? [], other.queuedTimers ?? [], revision: { $0.revision })
+        queuedTimers = timers.isEmpty ? nil : timers
+        if let control = other.timerControl, timerControl == nil || timerControl!.revision < control.revision { timerControl = control }
         let goals = merged(datedGoals ?? [], other.datedGoals ?? [], revision: { $0.revision })
         datedGoals = goals.isEmpty ? nil : goals
         let events = merged(calendarEvents ?? [], other.calendarEvents ?? [], revision: { $0.revision })

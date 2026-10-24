@@ -45,7 +45,6 @@ private struct LogComplicationView: View {
     }
 }
 
-@main
 struct DashQuickLogWidget: Widget {
     let kind = "DashQuickLog"
     var body: some WidgetConfiguration {
@@ -53,5 +52,14 @@ struct DashQuickLogWidget: Widget {
             .configurationDisplayName("Log activity")
             .description("Dictate what you’re doing and save it when you tap Done.")
             .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryRectangular, .accessoryInline])
+    }
+}
+
+@main
+struct DashWidgets: WidgetBundle {
+    var body: some Widget {
+        DashQuickLogWidget()
+        DashAddTimerWidget()
+        DashCurrentTimerWidget()
     }
 }

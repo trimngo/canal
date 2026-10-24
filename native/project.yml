@@ -32,6 +32,8 @@ targets:
       - package: LedgerCore
       - target: TimeLedgerWatch
         embed: true
+      - target: TimeLedgerTimerWidgets
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger
@@ -65,6 +67,10 @@ targets:
         BGTaskSchedulerPermittedIdentifiers: [com.trimngo.TimeLedger.reminders-refresh, com.trimngo.TimeLedger.checkins-refresh, com.trimngo.TimeLedger.calendar-refresh]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.trimngo.TimeLedger.timers
+            CFBundleURLSchemes: [canal-dash]
         LedgerCloudEnabled: $(LEDGER_CLOUD_ENABLED)
         LedgerCloudContainer: $(LEDGER_CLOUD_CONTAINER)
         NSUbiquitousContainers:
@@ -113,7 +119,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.trimngo.TimeLedger
-        WKRunsIndependentlyOfCompanionApp: false
+        WKRunsIndependentlyOfCompanionApp: true
+        WKBackgroundModes: [alarm]
         CFBundleURLTypes:
           - CFBundleURLName: com.trimngo.TimeLedger.watchkitapp.quick-log
             CFBundleURLSchemes: [canal-dash]
@@ -133,7 +140,9 @@ targets:
   TimeLedgerWatchWidgets:
     type: app-extension
     platform: watchOS
-    sources: [WatchWidgets]
+    sources:
+      - WatchWidgets
+      - path: Shared/TimerWidgetStore.swift
     dependencies:
       - package: LedgerCore
     settings:
@@ -149,6 +158,34 @@ targets:
       path: Generated/WatchWidgets-Info.plist
       properties:
         CFBundleDisplayName: Dash Log
+        LedgerCaptureAccessGroup: $(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Generated/WatchWidgets.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)com.trimngo.TimeLedger.watchkitapp]
+  TimeLedgerTimerWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - TimerWidgets
+      - path: Shared/TimerLiveAttributes.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.timerwidgets
+        APPLICATION_EXTENSION_API_ONLY: YES
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(LEDGER_TIMER_WIDGETS_PROFILE_NAME)
+    info:
+      path: Generated/TimerWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: Dash Timer
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

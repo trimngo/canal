@@ -3,6 +3,7 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
+    case queuedTimer(QueuedTimer), timerControl(TimerQueueControl)
     case datedGoal(DatedGoal), calendarEvent(CalendarEventRecord)
     case inboxRanking(InboxRanking)
     case weeklyCommitment(WeeklyCommitment)
@@ -11,6 +12,8 @@ private enum CloudItem: Codable {
     case logDeletion(LogDeletion), category(LedgerCategory), groupDeletion(GroupDeletion), entry(CheckIn), capture(Capture), settings(Settings)
     var id: String {
         switch self {
+        case .queuedTimer(let item): return "queued-timer-\(item.id)"
+        case .timerControl: return "timer-control"
         case .datedGoal(let item): return "dated-goal-\(item.id)"
         case .calendarEvent(let item): return "calendar-event-\(item.id)"
         case .inboxRanking: return "inbox-ranking"
@@ -27,6 +30,8 @@ private enum CloudItem: Codable {
     }
     var revision: Revision {
         switch self {
+        case .queuedTimer(let item): return item.revision
+        case .timerControl(let item): return item.revision
         case .datedGoal(let item): return item.revision
         case .calendarEvent(let item): return item.revision
         case .inboxRanking(let item): return item.revision
@@ -44,6 +49,8 @@ private enum CloudItem: Codable {
     func apply(to ledger: inout Ledger) {
         var remote = Ledger(); remote.categories = []; remote.entries = []; remote.captures = []
         switch self {
+        case .queuedTimer(let item): remote.queuedTimers = [item]
+        case .timerControl(let item): remote.timerControl = item
         case .datedGoal(let item): remote.datedGoals = [item]
         case .calendarEvent(let item): remote.calendarEvents = [item]
         case .inboxRanking(let item): remote.inboxRanking = item
@@ -61,6 +68,8 @@ private enum CloudItem: Codable {
     }
     static func all(in ledger: Ledger) -> [CloudItem] {
         var items = ledger.categories.map(CloudItem.category)
+        items.append(contentsOf: (ledger.queuedTimers ?? []).map(CloudItem.queuedTimer))
+        if let control = ledger.timerControl { items.append(.timerControl(control)) }
         items.append(contentsOf: (ledger.datedGoals ?? []).map(CloudItem.datedGoal))
         items.append(contentsOf: (ledger.calendarEvents ?? []).map(CloudItem.calendarEvent))
         if let ranking = ledger.inboxRanking { items.append(.inboxRanking(ranking)) }

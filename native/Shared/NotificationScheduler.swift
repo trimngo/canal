@@ -19,6 +19,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     private let center = UNUserNotificationCenter.current()
     @Published private(set) var scheduleStatus = ""
     private var applyTask: Task<Void, Error>?
+    private var timerTask: Task<Void, Never>?
+    @Published private(set) var timerStatus = ""
     private let configurationKey = "notifications.schedule-configuration.v2"
     #if os(iOS)
     static let backgroundIdentifier = "com.trimngo.TimeLedger.checkins-refresh"
@@ -39,7 +41,10 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     func configureActions() {
         let reply = UNTextInputNotificationAction(identifier: "QUICK_LOG", title: "Dictate log", options: [],
             textInputButtonTitle: "Save", textInputPlaceholder: "What are you doing now?")
-        center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [reply], intentIdentifiers: [])])
+        let done = UNNotificationAction(identifier: "TIMER_DONE", title: "Done & Next", options: [.foreground])
+        let restart = UNNotificationAction(identifier: "TIMER_RESTART", title: "Restart", options: [.foreground])
+        center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [reply], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "TASK_TIMER", actions: [done, restart], intentIdentifiers: [])])
     }
 
     func permission() async throws -> Bool {
@@ -123,7 +128,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
         // Reserve a slot for the existing delivery-test notification, and respect
         // other pending requests rather than assuming all 64 belong to check-ins.
-        let capacity = max(0, 63 - (pending.count - checkIns.count))
+        let capacity = max(0, 62 - (pending.count - checkIns.count))
         let repeating = try settings.notificationSchedule()
         let queued = settings.usesQueuedNotifications || repeating.count > capacity
         let reusable = !changed && checkIns.allSatisfy { ($0.trigger?.repeats ?? false) != queued }
@@ -231,6 +236,50 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         // and completes without scheduling another refresh or any alerts.
     }
 
+    func applyTimer(_ ledger: Ledger, writer: String) async {
+        let previous = timerTask
+        let task = Task { @MainActor in
+            _ = await previous?.value
+            await self.applyTimerSerially(ledger, writer: writer)
+        }
+        timerTask = task; await task.value
+    }
+    private func applyTimerSerially(_ ledger: Ledger, writer: String) async {
+        configureActions()
+        let pending = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("task-timer-") }
+        let control = ledger.timerControl
+        let wanted = ledger.currentTimer != nil && control?.owner == writer && control?.dueAt != nil ? control?.token : nil
+        center.removePendingNotificationRequests(withIdentifiers: pending.filter { $0.identifier != wanted }.map(\.identifier))
+        let delivered = await center.deliveredNotifications().filter { $0.request.identifier.hasPrefix("task-timer-") && $0.request.identifier != wanted }
+        center.removeDeliveredNotifications(withIdentifiers: delivered.map { $0.request.identifier })
+        guard let current = ledger.currentTimer, let control, let due = control.dueAt, control.owner == writer else {
+            timerStatus = ledger.currentTimer == nil ? "" : control?.pausedRemaining != nil ? "Paused" : "Timer alerts on \(control?.onWatch == true ? "Apple Watch" : "iPhone")"
+            return
+        }
+        #if os(watchOS)
+        if WatchTimerAlarm.shared.isArmed(for: control.token) {
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier))
+            timerStatus = WatchTimerAlarm.shared.status; return
+        }
+        #endif
+        let permission = await center.notificationSettings().authorizationStatus
+        guard permission == .authorized || permission == .provisional else { timerStatus = "Allow notifications for timer alerts."; return }
+        guard !pending.contains(where: { $0.identifier == control.token }) else { timerStatus = "Timer alert scheduled"; return }
+        let key = "timers.last-notification"
+        guard due > Date() || UserDefaults.standard.string(forKey: key) != control.token else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "\(current.title) finished"
+        content.body = "Done & Next starts the next task. Restart repeats this timer."
+        content.sound = .default; content.categoryIdentifier = "TASK_TIMER"
+        content.threadIdentifier = "task-timer"; content.interruptionLevel = .timeSensitive
+        do {
+            try await center.add(UNNotificationRequest(identifier: control.token, content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, due.timeIntervalSinceNow), repeats: false)))
+            UserDefaults.standard.set(control.token, forKey: key)
+            timerStatus = "Timer alert scheduled"
+        } catch { timerStatus = "Timer alert could not be scheduled. Open the timer and try again." }
+    }
+
     func sendTest() async throws {
         guard try await permission() else { throw NotificationError.denied }
         let content = UNMutableNotificationContent()
@@ -252,6 +301,21 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.notification.request.content.categoryIdentifier == "TASK_TIMER" {
+            guard response.actionIdentifier != UNNotificationDismissActionIdentifier else { completionHandler(); return }
+            let action = response.actionIdentifier, token = response.notification.request.identifier
+            Task { @MainActor in
+                let store = LedgerStore.shared; store.start()
+                do {
+                    if action == "TIMER_DONE" { try store.changeTimer("done", expectedToken: token) }
+                    if action == "TIMER_RESTART" { try store.changeTimer("restart", expectedToken: token) }
+                    store.openTimers()
+                    await self.applyTimer(store.ledger, writer: store.writer)
+                } catch { store.report(error) }
+                completionHandler()
+            }
+            return
+        }
         guard response.notification.request.content.categoryIdentifier == "CHECKIN",
               response.actionIdentifier != UNNotificationDismissActionIdentifier else {
             completionHandler(); return

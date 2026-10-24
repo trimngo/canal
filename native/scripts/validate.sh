@@ -21,6 +21,10 @@ python3 scripts/validate-watch-complication.py --apps \
 python3 scripts/validate-healthkit.py --app \
   build/Build/Products/Debug-iphonesimulator/TimeLedger.app
 
+python3 scripts/validate-timer-support.py --apps \
+  build/Build/Products/Debug-iphonesimulator/TimeLedger.app \
+  build/Build/Products/Debug-watchsimulator/TimeLedgerWatch.app
+
 if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \

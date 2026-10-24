@@ -28,6 +28,8 @@ actor AutomaticCategories {
         // A cheap signature also lets ambiguous entries reuse an abstention
         // until confirmed examples or category names actually change.
         var hash = Hasher()
+        hash.combine(ledger.settings.effectiveCategoryMatching.rawValue)
+        for rule in ledger.settings.categoryMatchRules ?? [] { hash.combine(rule.phrase); hash.combine(rule.categoryID) }
         for category in ledger.categories { hash.combine(category.id); hash.combine(category.name); hash.combine(category.parentID) }
         for entry in ledger.activeEntries where entry.categoryAssignment != .automatic {
             hash.combine(entry.id); hash.combine(entry.activity); hash.combine(entry.categoryIDs); hash.combine(entry.categoryID)
@@ -37,7 +39,7 @@ actor AutomaticCategories {
         }
         let key = hash.finalize()
         if key != trainingKey {
-            learned = OfflineCategoryModel(ledger: ledger); trainingKey = key; results.removeAll(keepingCapacity: true)
+            learned = OfflineCategoryModel(ledger: ledger, matching: ledger.settings.effectiveCategoryMatching); trainingKey = key; results.removeAll(keepingCapacity: true)
         }
         guard let model = learned else { return ([:], [:]) }
         var examples: [(CategoryExample, [Double])] = []

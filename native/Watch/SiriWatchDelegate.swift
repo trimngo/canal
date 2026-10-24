@@ -1,6 +1,10 @@
 import WatchKit
 
 final class SiriWatchDelegate: NSObject, WKApplicationDelegate {
+    func handle(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        WatchTimerAlarm.shared.adopt(extendedRuntimeSession)
+        LedgerStore.shared.start()
+    }
     func applicationDidFinishLaunching() {
         LedgerStore.shared.start()
         NotificationScheduler.shared.configureActions()

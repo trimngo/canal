@@ -24,6 +24,7 @@ struct SettingsView: View {
         Form {
             Section {
                 NavigationLink("Calendars") { CalendarConnectionView() }.accessibilityIdentifier("settings.calendars")
+                NavigationLink("Automatic matching") { AutomaticMatchingView() }.accessibilityIdentifier("settings.matching")
                 NavigationLink("Siri via Reminders") { ReminderInboxSetupView() }
                     .accessibilityIdentifier("settings.reminders")
             } footer: {

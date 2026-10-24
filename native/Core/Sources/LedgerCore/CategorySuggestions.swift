@@ -32,11 +32,15 @@ public struct OfflineCategoryModel: Sendable {
     private let occurrences: [String: [String: Int]]
     private let acronyms: [String: Set<String>]
     private let labels: [String: [String]]
+    private let matching: CategoryMatching
+    private let rules: [CategoryMatchRule]
+    private let parents: [String: String]
     private static let stop = Set("a an and are as at be been by do doing for from go going have i in is it just me my of on or some that the then this to was were with you your need want still about work working task idea thing today tomorrow yesterday now".split(separator: " ").map(String.init))
     private static func tokens(_ text: String) -> Set<String> {
         Set(OfflineGrouping.normalized(text).split(separator: " ").map(String.init).filter { $0.count >= 3 && !stop.contains($0) })
     }
-    public init(ledger: Ledger) {
+    public init(ledger: Ledger, matching: CategoryMatching = .conservative) {
+        self.matching = matching; rules = ledger.settings.categoryMatchRules ?? []; parents = ledger.categoryParents
         categories = ledger.categories
         examples = ledger.activeEntries.compactMap { entry in
             let ids = ledger.confirmedCategoryIDs(for: entry)
@@ -59,11 +63,27 @@ public struct OfflineCategoryModel: Sendable {
     }
     public func suggest(_ text: String, semantic: [SemanticCategoryMatch] = []) -> CategorySuggestion? {
         let normalized = OfflineGrouping.normalized(text), query = Self.tokens(text)
-        guard !query.isEmpty else { return nil }
+        guard !normalized.isEmpty else { return nil }
         if Set(normalized.split(separator: " ").map(String.init)).isDisjoint(with: ["not", "never"]) == false { return nil }
         func result(_ ids: [String], _ reason: String) -> CategorySuggestion {
             CategorySuggestion(categoryIDs: ids, reason: reason, sourceText: text)
         }
+        let ruleMatches = rules.filter { rule in categories.contains { $0.id == rule.categoryID } && OfflineGrouping.matchesPhrase(rule.phrase, in: text) }
+        if !ruleMatches.isEmpty {
+            let selected = Set(ruleMatches.map(\.categoryID))
+            // More specific rules win over their ancestors; other matches split time normally.
+            let ids = selected.filter { id in
+                !selected.contains { child in
+                    var node = parents[child], visited = Set<String>()
+                    while let current = node, visited.insert(current).inserted {
+                        if current == id { return true }; node = parents[current]
+                    }
+                    return false
+                }
+            }.sorted()
+            return result(ids, "Your phrase rule: " + ruleMatches.map(\.phrase).sorted().joined(separator: ", "))
+        }
+        guard !query.isEmpty else { return nil }
         let exact = Set(examples.filter { OfflineGrouping.normalized($0.text) == normalized }.map { $0.categoryIDs.joined(separator: "|") })
         if exact.count == 1, let key = exact.first { return result(key.components(separatedBy: "|"), "Same as a confirmed entry") }
         if exact.count > 1 { return nil }
@@ -87,7 +107,7 @@ public struct OfflineCategoryModel: Sendable {
         }
         scores.sort { $0.1 > $1.1 }
         if let best = scores.first, scores.count == 1 || best.1 >= scores[1].1 + 2, let ids = labels[best.0] {
-            let distinctive = best.2.first { acronyms[best.0, default: []].contains($0) || ($0.count >= 5 && occurrences[best.0]?[$0] ?? 0 >= 2) }
+            let distinctive = best.2.sorted().first { acronyms[best.0, default: []].contains($0) || ($0.count >= (matching == .broader ? 4 : 5) && occurrences[best.0]?[$0] ?? 0 >= (matching == .broader ? 1 : 2)) }
             if best.1 >= 2 { return result(ids, "Matched confirmed vocabulary: " + best.2.sorted().prefix(2).joined(separator: ", ")) }
             if let word = distinctive { return result(ids, "Matched confirmed word: " + (acronyms[best.0, default: []].contains(word) ? word.uppercased() : word)) }
         }
@@ -96,8 +116,20 @@ public struct OfflineCategoryModel: Sendable {
             grouped[match.categoryIDs.sorted().joined(separator: "|"), default: -1] = max(grouped[match.categoryIDs.sorted().joined(separator: "|"), default: -1], match.similarity)
         }
         let ranked = grouped.sorted { $0.value > $1.value }
-        if let best = ranked.first, best.value >= 0.84, ranked.count == 1 || best.value - ranked[1].value >= 0.12 {
+        if let best = ranked.first, best.value >= (matching == .broader ? 0.70 : 0.84), ranked.count == 1 || best.value - ranked[1].value >= (matching == .broader ? 0.05 : 0.12) {
             return result(best.key.components(separatedBy: "|"), "Similar to confirmed entries")
+        }
+        if matching == .broader, scores.isEmpty, names.isEmpty {
+            let vocabulary: [(String, [String])] = [
+                ("music", ["guitar", "piano", "rehearsal", "rehearsing", "songwriting", "singing", "drumming"]),
+                ("teaching", ["lecture", "lecturing", "grading", "lesson planning", "preparing classes"]),
+                ("exercise", ["workout", "gym", "jogging", "running", "cycling", "walking"]),
+                ("coding", ["programming", "debugging", "writing code", "software development"])
+            ]
+            let candidates = vocabulary.flatMap { name, phrases in
+                categories.filter { OfflineGrouping.normalized($0.name) == name && phrases.contains { OfflineGrouping.matchesPhrase($0, in: text) } }.map(\.id)
+            }
+            if candidates.count == 1 { return result(candidates, "Matched activity vocabulary (broader suggestion)") }
         }
         // Seed vocabulary is a fallback, never a replacement for an ambiguous
         // learned or custom-category choice.

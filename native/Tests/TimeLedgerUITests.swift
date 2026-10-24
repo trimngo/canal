@@ -1,6 +1,83 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testUrgentInboxShowsUnrankedIdeasAndCorrectionPersistsWithoutRanking() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-urgent-inbox"]; app.launch()
+        openInbox(app)
+        let urgent = app.staticTexts["inbox.urgent-title"]
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent (3)")
+        let dismiss = app.buttons["inbox.urgent.dismiss.alan"]
+        reveal(dismiss, in: app); dismiss.tap()
+        XCTAssertEqual(urgent.label, "Urgent (2)")
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        recordScreen("InboxUrgentWithoutRanking", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent (2)")
+        XCTAssertFalse(app.buttons["inbox.urgent.dismiss.alan"].exists)
+        let title = app.staticTexts["inbox.ranked-title"]; reveal(title, in: app)
+        XCTAssertTrue(title.label.contains("(1)"))
+    }
+    func testAutomaticMatchingSettingsCanAddPhraseAndCategoryRule() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-urgent-inbox"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["settings.matching"].tap()
+        let test = element(app, "matching.test"); reveal(test, in: app)
+        test.tap(); test.typeText("Playing piano")
+        XCTAssertEqual(app.staticTexts["matching.test-categories"].label, "Music")
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let phrase = app.textFields["matching.new-rule-phrase"]; reveal(phrase, in: app)
+        phrase.tap(); phrase.typeText("cello")
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let category = element(app, "matching.new-rule-category"); reveal(category, in: app); category.tap()
+        let music = element(app, "matching.category-option.music")
+        XCTAssertTrue(music.waitForExistence(timeout: 5)); music.tap()
+        let add = app.buttons["matching.add-rule"]; reveal(add, in: app); add.tap()
+        recordScreen("AutomaticMatchingSettings", in: app)
+        let urgency = app.buttons["matching.urgency"]; reveal(urgency, in: app); urgency.tap()
+        let newPhrase = app.textFields["matching.new-urgency-phrase"]; reveal(newPhrase, in: app)
+        newPhrase.tap(); newPhrase.typeText("renew passport")
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let addPhrase = app.buttons["matching.add-urgency-phrase"]; reveal(addPhrase, in: app); addPhrase.tap()
+        XCTAssertTrue(app.staticTexts["renew passport"].exists)
+    }
+    func testTimerQueueRestartDoneNextPauseAndPersistence() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        recordScreen("PhoneTimerExpired", in: app)
+        app.buttons["timers.restart"].tap()
+        XCTAssertTrue(app.buttons["timers.pause-resume"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        app.buttons["timers.done"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.buttons["timers.pause-resume"].tap()
+        XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 10))
+        recordScreen("PhoneTimerPaused", in: app)
+        app.terminate(); app.launchArguments = ["--ui-timer-open"]; app.launch()
+        XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.buttons["timers.pause-resume"].tap()
+        XCTAssertFalse(app.staticTexts["timers.paused"].exists)
+        app.buttons["timers.done"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Take a walk")
+    }
+    func testTimerQueueCanRemoveWaitingTaskAndDoesNotCreateActivityLogs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
+        app.launch()
+        let removeEmail = app.buttons["timers.delete.timer-email"]
+        XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 20))
+        reveal(removeEmail, in: app); removeEmail.tap()
+        XCTAssertFalse(removeEmail.exists)
+        reveal(app.buttons["timers.done"], in: app); app.buttons["timers.done"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Take a walk")
+        app.buttons["Close"].tap()
+        app.tabBars.buttons["Today"].tap()
+        recordScreen("PhoneTimerQueueDoesNotLogPlannedTime", in: app)
+        XCTAssertFalse(app.staticTexts["Practice guitar"].exists)
+    }
     private func recordScreen(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.state == .runningForeground ? app.screenshot() : XCUIScreen.main.screenshot())
         attachment.name = "Review-\(name).png"; attachment.lifetime = .keepAlways

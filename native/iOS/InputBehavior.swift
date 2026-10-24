@@ -82,6 +82,9 @@ private struct InputDismissal: ViewModifier {
     }
 }
 extension View {
+    func ledgerPreserveKeyboard() -> some View {
+        background(KeyboardTapInstaller(preservesKeyboard: true).allowsHitTesting(false))
+    }
     func ledgerInputDismissal(preservingKeyboard: Bool = false, showsKeyboardDone: Bool = true) -> some View {
         modifier(InputDismissal(preservingKeyboard: preservingKeyboard, showsKeyboardDone: showsKeyboardDone))
     }

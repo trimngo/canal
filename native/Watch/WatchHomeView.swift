@@ -50,6 +50,8 @@ struct WatchHomeView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Estimated today").font(.headline)
                         Button("Log now") { store.beginSample() }
+                        Button("Timer queue", systemImage: "timer") { tab = 3 }
+                            .accessibilityIdentifier("watch.timers")
                         Button("Watch alerts") { notificationSettings = true }
                             .accessibilityIdentifier("watch.notifications")
                         ForEach(store.ledger.history(range: .today, now: now).rows) { row in
@@ -73,7 +75,10 @@ struct WatchHomeView: View {
                     }
                 }
             }.tag(2)
+            NavigationStack { TimerQueueView() }.tag(3)
         }.tabViewStyle(.verticalPage)
+            .onAppear { if store.showingTimerQueue { tab = 3 } }
+            .onChange(of: store.timerRequestID) { _, _ in tab = 3 }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
