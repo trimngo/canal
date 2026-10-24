@@ -100,6 +100,7 @@ struct LogGoalPicker: View {
 struct CommitmentsView: View {
     @EnvironmentObject private var store: LedgerStore
     @State private var editing = false
+    @State private var selectedCategory: CategoryDetailRequest?
     @State private var editingGoal: DatedGoal?
     @State private var progress: [DatedGoalProgress] = []
     @State private var daily: DailyGoalsReport?
@@ -132,8 +133,8 @@ struct CommitmentsView: View {
                             datedProgress(row, now: clock.date).padding(.leading, 12)
                         }
                     } header: {
-                        NavigationLink {
-                            CategoryDetailView(request: CategoryDetailRequest(id: id, name: store.ledger.categories.first { $0.id == id }?.name ?? "Category"))
+                        Button {
+                            selectedCategory = CategoryDetailRequest(id: id, name: store.ledger.categories.first { $0.id == id }?.name ?? "Category")
                         } label: {
                             HStack { Text(store.ledger.categoryPath(id)); Spacer(); Image(systemName: "chevron.right") }
                         }.textCase(nil).accessibilityIdentifier("commitments.category.\(id)")
@@ -156,6 +157,7 @@ struct CommitmentsView: View {
             NavigationStack { GoalEditorView().toolbar { ToolbarItem(placement: .topBarLeading) { Button("Close") { editing = false } } } }
         }
         .sheet(item: $editingGoal) { DatedGoalEditorView(goal: $0) }
+        .sheet(item: $selectedCategory) { CategoryDetailView(request: $0) }
         .task(id: calculationID) {
             let ledger = store.ledger, now = Date()
             let work = Task.detached(priority: .userInitiated) {
@@ -167,8 +169,8 @@ struct CommitmentsView: View {
         .onChange(of: store.ledger) { _, _ in calculationID = UUID() }
     }
     private func categoryProgress(_ row: DailyGoalProgress) -> some View {
-        NavigationLink {
-            CategoryDetailView(request: CategoryDetailRequest(id: row.id, name: row.category.name))
+        Button {
+            selectedCategory = CategoryDetailRequest(id: row.id, name: row.category.name)
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -183,7 +185,7 @@ struct CommitmentsView: View {
                 let pending = today.unreviewed(for: row.id, ledger: store.ledger)
                 if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
             }.padding(.vertical, 4)
-        }.accessibilityIdentifier("commitments.target.\(row.id)")
+        }.buttonStyle(.plain).accessibilityIdentifier("commitments.target.\(row.id)")
     }
     private func datedProgress(_ row: DatedGoalProgress, now: Date) -> some View {
         Button { editingGoal = row.goal } label: {
