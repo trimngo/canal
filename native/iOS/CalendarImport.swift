@@ -120,14 +120,14 @@ struct CalendarConnectionView: View {
                 Button("Check for ended events") { Task { await connection.refresh() } }.disabled(connection.refreshing)
                 NavigationLink("Review calendar events") { CalendarEventReviewView() }
                     .accessibilityIdentifier("calendar.review")
-            } footer: { Text("Opening Dash checks selected calendars. Background updates are best effort. Confirmed events use their full period; overlapping sample estimates are excluded from totals, and original samples are kept.") }
+            } footer: { Text("Opening Dash checks selected calendars. Background updates are best effort. Confirmed events count until their scheduled end or the first overlapping log, whichever is earlier. Samples take over after that point. Original records are kept.") }
         }.navigationTitle("Calendars").task { connection.reload(); await connection.refresh() }
     }
 }
 
 struct CalendarEventReviewView: View {
     @EnvironmentObject private var store: LedgerStore
-    @State private var selected: CalendarEventRecord?
+    @State private var review: LogReviewRequest?
     @State private var error: String?
     private var pending: [CalendarEventRecord] {
         (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.sorted { $0.snapshot.end > $1.snapshot.end }
@@ -136,10 +136,10 @@ struct CalendarEventReviewView: View {
         List {
             if pending.isEmpty { ContentUnavailableView("No events to confirm", systemImage: "calendar.badge.checkmark") }
             ForEach(pending) { record in
-                Button { selected = record } label: {
+                Button { review = LogReviewRequest(entryIDs: [], calendarIDs: [record.id]) } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(record.snapshot.title).foregroundStyle(.primary)
-                        Text(record.snapshot.start.formatted(date: .abbreviated, time: .shortened) + " – " + record.snapshot.end.formatted(date: .abbreviated, time: .shortened))
+                        Text(record.snapshot.start.formatted(date: .abbreviated, time: .shortened) + " – " + store.ledger.calendarEventEnd(record.snapshot).formatted(date: .abbreviated, time: .shortened))
                             .font(.caption).foregroundStyle(.secondary)
                         Text(record.snapshot.calendarName).font(.caption).foregroundStyle(.secondary)
                     }
@@ -148,41 +148,10 @@ struct CalendarEventReviewView: View {
             }
             if let error { Text(error).foregroundStyle(.red) }
         }.navigationTitle("Confirm events").navigationBarTitleDisplayMode(.inline)
-            .sheet(item: $selected) { CalendarEventConfirmationView(record: $0) }
+            .sheet(item: $review) { LogReviewView(entryIDs: $0.entryIDs, calendarIDs: $0.calendarIDs) }
             .task { await CalendarImport.shared.refresh() }
     }
     private func decide(_ record: CalendarEventRecord, confirm: Bool) {
         do { try store.decideCalendarEvent(record.id, confirm: confirm) } catch { self.error = error.localizedDescription }
-    }
-}
-
-private struct CalendarEventConfirmationView: View {
-    @EnvironmentObject private var store: LedgerStore
-    @Environment(\.dismiss) private var dismiss
-    let record: CalendarEventRecord
-    @State private var categories: [String] = []
-    @State private var goalID: String?
-    @State private var error: String?
-    var body: some View {
-        NavigationStack {
-            CategorySelectionList(selection: $categories, activity: record.snapshot.title, timestamp: record.snapshot.start, showsKeyboardDone: false)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(store.duration(record.snapshot.end.timeIntervalSince(record.snapshot.start) / 60)) · \(store.time(record.snapshot.start))–\(store.time(record.snapshot.end))").font(.caption)
-                        LogGoalPicker(goalID: $goalID, categoryIDs: $categories)
-                        if let error { Text(error).foregroundStyle(.red).font(.caption) }
-                    }.padding(.horizontal).padding(.vertical, 4).background(.bar)
-                }
-                .navigationTitle("Did this happen?").navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Skip") { decide(false) }.accessibilityIdentifier("calendar.skip") }
-                    ToolbarItem(placement: .confirmationAction) { Button("Confirm") { decide(true) }.accessibilityIdentifier("calendar.confirm") }
-                }
-        }
-    }
-    private func decide(_ confirm: Bool) {
-        UIApplication.shared.dismissLedgerKeyboard()
-        do { try store.decideCalendarEvent(record.id, confirm: confirm, categoryIDs: categories, goalID: goalID); dismiss() }
-        catch { self.error = error.localizedDescription }
     }
 }

@@ -47,7 +47,7 @@ extension Ledger {
     public func groupEntryCounts(now: Date = Date()) -> [String: Int] {
         var counts: [String: Int] = [:]
         for entry in activeEntries where entry.end <= now {
-            let ids = confirmedCategoryIDs(for: entry)
+            let ids = effectiveCategoryIDs(for: entry)
             var counted = Set<String>()
             for id in ids {
                 counted.insert(id)
@@ -108,7 +108,7 @@ extension Ledger {
             let entry = entries[index]
             // Clear cached automatic assignments from previous versions or an
             // older paired device. Suggestions are computed only for display.
-            guard entry.categoryAssignment == .automatic && entry.categoryID != nil else { continue }
+            guard entry.categoryAssignment == .automatic && entry.categorySuggestion == nil && entry.categoryID != nil else { continue }
             entries[index].categoryID = nil
             entries[index].categoryIDs = nil
             // This removes an obsolete derived cache, not a user's edit. Keep
@@ -134,7 +134,8 @@ extension Ledger {
             let labelsChanged = Set(entries[index].categoryIDs ?? entries[index].categoryID.map { [$0] } ?? []) != Set(ids)
             entries[index].categoryID = ids.first
             entries[index].categoryIDs = ids
-            entries[index].categoryAssignment = ids.isEmpty ? .automatic : .manual
+            entries[index].categoryAssignment = .manual
+            entries[index].categorySuggestion = nil
             if entries[index].goalID != nil, labelsChanged { entries[index].goalShare = datedGoalShare(for: entries[index], goalID: entries[index].goalID) }
             entries[index].revision = Revision(counter: counter, writer: writer); counter += 1
         }

@@ -124,7 +124,7 @@ struct CheckInEditor: View {
             }
         }.ledgerInputDismissal().onDisappear { focused = false }.onAppear {
             if let entry {
-                activity = entry.activity; categoryIDs = store.ledger.confirmedCategoryIDs(for: entry)
+                activity = entry.activity; categoryIDs = store.ledger.effectiveCategoryIDs(for: entry)
                 timestamp = entry.end; recordNow = false
             } else if let draft = store.quickReplyDraft {
                 activity = draft; store.quickReplyDraft = nil

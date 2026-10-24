@@ -37,7 +37,7 @@ struct DayCalendarView: View {
         var result: [CalendarActivity] = []
         for segment in store.ledger.inferredSegments(on: day, now: now) {
             guard let sample = observations[segment.sampleID] else { continue }
-            let groupIDs = store.ledger.confirmedCategoryIDs(for: sample)
+            let groupIDs = store.ledger.effectiveCategoryIDs(for: sample)
             if let last = result.last, last.end == segment.start,
                last.categoryIDs == groupIDs, last.confirmed == (sample.intervalStart != nil),
                last.activity.caseInsensitiveCompare(sample.activity) == .orderedSame {

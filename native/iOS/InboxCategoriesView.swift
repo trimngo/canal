@@ -65,12 +65,17 @@ struct InboxCategoriesView: View {
     }
 }
 
-/// Save one item at a time without starting or changing a ranking session.
+/// Independent of ranking. All drafts and the keyboard-visible save action
+/// belong to the queue, so an inline edit cannot save against the next item.
 struct CaptureCategoryReviewView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     let captureIDs: [String]
     @State private var index = 0
+    @State private var categories: [String] = []
+    @State private var text = ""
+    @State private var error: String?
+    @State private var snoozing: Capture?
     private var current: Capture? {
         guard index < captureIDs.count else { return nil }
         return store.ledger.captures.first { $0.id == captureIDs[index] && $0.deletedAt == nil }
@@ -79,53 +84,51 @@ struct CaptureCategoryReviewView: View {
         NavigationStack {
             Group {
                 if let capture = current {
-                    CaptureCategoryReviewEntry(capture: capture, position: index + 1, count: captureIDs.count) {
-                        index += 1; advancePastMissing()
-                    }.id(capture.id)
+                    CategorySelectionList(selection: $categories, activity: capture.text, timestamp: capture.createdAt,
+                        activityMaxLength: nil, saveActivity: { try store.updateCaptureText(capture, text: $0) },
+                        activityDraft: Binding(get: { text }, set: { if current?.id == capture.id { text = $0 } }),
+                        showsKeyboardDone: false,
+                        selectionHelp: "These are the same categories as your logs. Categorization does not change ranking or add logged time.")
+                        .id(capture.id)
+                        .safeAreaInset(edge: .top, spacing: 0) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                if let suggestion = capture.categorySuggestion { Text("Suggested · \(suggestion.reason)").font(.caption).foregroundStyle(.secondary) }
+                                CaptureReviewActions(capture: capture, identifier: "idea-review", onHandled: advance, onSnooze: { snoozing = $0 })
+                                InlineCaptureNotes(capture: capture, identifier: "idea-review.notes")
+                            }.padding(.horizontal).background(.bar)
+                        }
                 } else { Color.clear }
             }.navigationTitle("Categorize ideas").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }.accessibilityIdentifier("idea-review.close")
-                } }
-                .task(id: current?.id) { advancePastMissing() }
-        }
-    }
-    private func advancePastMissing() {
-        let existing = Set(store.ledger.captures.filter { $0.deletedAt == nil }.map(\.id))
-        while index < captureIDs.count, !existing.contains(captureIDs[index]) { index += 1 }
-        if index >= captureIDs.count { dismiss() }
-    }
-}
-
-private struct CaptureCategoryReviewEntry: View {
-    @EnvironmentObject private var store: LedgerStore
-    let capture: Capture
-    let position: Int
-    let count: Int
-    let didSave: () -> Void
-    @State private var categories: [String] = []
-    @State private var loaded = false
-    @State private var error: String?
-    var body: some View {
-        CategorySelectionList(selection: $categories, activity: capture.text, timestamp: capture.createdAt,
-            saveActivity: { try store.updateCaptureText(capture, text: $0) },
-            showsKeyboardDone: false,
-            selectionHelp: "These are the same categories as your logs. Categorization does not change ranking or add logged time.")
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 6) {
-                    if let error { Text(error).font(.caption).foregroundStyle(.red) }
-                    HStack {
-                        Text("\(position) of \(count)").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("idea-review.position")
-                        Spacer()
+                .safeAreaInset(edge: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                        HStack {
+                            Text("\(index + 1) of \(captureIDs.count)").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("idea-review.position")
+                            Spacer()
+                            if store.canUndoCaptureDeletion { Button("Undo delete") { store.undoCaptureDeletion() }.accessibilityIdentifier("idea-review.undo-delete") }
+                        }
+                    }.padding().background(.bar)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.accessibilityIdentifier("idea-review.close") }
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button("Save & next") {
                             UIApplication.shared.dismissLedgerKeyboard()
-                            do { try store.categorizeCapture(capture, categoryIDs: categories); didSave() }
+                            guard let capture = current else { return }
+                            do { try store.reviewCapture(capture, text: text, categoryIDs: categories); advance() }
                             catch { self.error = error.localizedDescription }
-                        }.buttonStyle(.borderedProminent).disabled(!store.storageAvailable)
-                            .accessibilityIdentifier("idea-review.save-next")
+                        }.disabled(current == nil || !store.storageAvailable).accessibilityIdentifier("idea-review.save-next")
                     }
-                }.padding().background(.bar)
-            }
-            .onAppear { if !loaded { categories = store.ledger.categoryIDs(for: capture); loaded = true } }
+                }
+                .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
+                .task(id: current?.id) { load() }
+        }
+    }
+    private func advance() { index += 1; load() }
+    private func load() {
+        let existing = Set(store.ledger.captures.filter { $0.deletedAt == nil }.map(\.id))
+        while index < captureIDs.count, !existing.contains(captureIDs[index]) { index += 1 }
+        guard let capture = current else { dismiss(); return }
+        categories = store.ledger.categoryIDs(for: capture); text = capture.text; error = nil
     }
 }

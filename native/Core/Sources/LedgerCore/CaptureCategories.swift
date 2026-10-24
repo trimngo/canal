@@ -10,7 +10,9 @@ extension Ledger {
         guard let index = captures.firstIndex(where: { $0.id == id }), captures[index].deletedAt == nil else { throw LedgerError.deletedCapture }
         let ids = Array(Set(categoryIDs)).sorted()
         try validateCategories(ids)
-        guard self.categoryIDs(for: captures[index]) != ids else { return }
+        guard self.categoryIDs(for: captures[index]) != ids || captures[index].categorySuggestion != nil || captures[index].categoriesReviewed != true else { return }
+        captures[index].categorySuggestion = nil
+        captures[index].categoriesReviewed = true
         captures[index].categoryIDs = ids
         captures[index].revision = nextRevision(writer: writer)
     }

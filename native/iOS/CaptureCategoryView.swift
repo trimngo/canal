@@ -5,6 +5,7 @@ struct CaptureCategoryButton: View {
     @EnvironmentObject private var store: LedgerStore
     let capture: Capture
     let identifier: String
+    var compact = false
     @State private var showing = false
     @State private var selection: [String] = []
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
@@ -14,8 +15,8 @@ struct CaptureCategoryButton: View {
             UIApplication.shared.dismissLedgerKeyboard()
             selection = store.ledger.categoryIDs(for: current); showing = true
         } label: {
-            Label(names.isEmpty ? "Categorize" : names, systemImage: "tag")
-                .font(.subheadline).lineLimit(2).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
+            Label((current.categorySuggestion == nil ? "" : "Suggested · ") + (names.isEmpty ? "Categorize" : names), systemImage: "tag")
+                .font(compact ? .caption : .subheadline).lineLimit(compact ? 1 : 2).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
         }.buttonStyle(.borderless).accessibilityIdentifier(identifier)
             .accessibilityLabel(names.isEmpty ? "Categorize idea" : "Categories: \(names)")
             .sheet(isPresented: $showing) {
@@ -34,8 +35,11 @@ private struct CaptureCategoryView: View {
     var body: some View {
         NavigationStack {
             CategorySelectionList(selection: $selection, activity: current.text, timestamp: capture.createdAt,
-                                  saveActivity: { try store.updateCaptureText(capture, text: $0) },
+                                  activityMaxLength: nil, saveActivity: { try store.updateCaptureText(capture, text: $0) },
                                   selectionHelp: "Use the same categories as your journal. Categorizing an idea does not add logged time. A parent and its subcategory cannot both be selected.")
+                .safeAreaInset(edge: .top) {
+                    if let suggestion = current.categorySuggestion { Text("Suggested · \(suggestion.reason)").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal).padding(.vertical, 4).background(.bar) }
+                }
                 .navigationTitle("Idea categories").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error {

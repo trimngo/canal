@@ -37,6 +37,9 @@ final class LedgerStore: ObservableObject {
     private let file: URL
     private let writer: String
     private var saveObserver: (() -> Void)?
+    #if os(iOS)
+    private var automaticCategoryWork: Task<Void, Never>?
+    #endif
     private(set) var cloud: CloudSync?
     private(set) var companion: CompanionSync?
     private var started = false
@@ -168,7 +171,7 @@ final class LedgerStore: ObservableObject {
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
-            if ProcessInfo.processInfo.arguments.contains("--ui-dated-goals-fixture") {
+            if (ProcessInfo.processInfo.arguments.contains("--ui-dated-goals-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-feedback-fixture")) {
                 var fixture = Ledger(); fixture.settings.reportingTimeZoneIdentifier = "UTC"
                 let now = Date()
                 let goal = try fixture.saveDatedGoal(name: "Prepare DIGS lecture", categoryID: "work", targetMinutes: 240,
@@ -183,6 +186,14 @@ final class LedgerStore: ObservableObject {
                 try fixture.decideCalendarEvent(completed.id, confirm: true, goalID: goal, writer: "fixture", now: now)
                 try fixture.saveSample(id: "ui-goal-review", at: now.addingTimeInterval(-60), activity: "Preparing slides to categorize", categoryID: nil, writer: "fixture", now: now)
                 try fixture.saveAllocationGoals(["work": 20], writer: "fixture")
+                if ProcessInfo.processInfo.arguments.contains("--ui-feedback-fixture") {
+                    try fixture.setCategoryFavorites(["work"], favorite: true, writer: "fixture")
+                    let sample = fixture.entries.first { $0.id == "ui-goal-review" }!
+                    try fixture.suggestCategories(CategorySuggestion(categoryIDs: ["work"], reason: "Matched confirmed vocabulary: preparing, slides", sourceText: sample.activity), logID: sample.id, writer: "fixture")
+                    for day in 1...7 {
+                        try fixture.saveSample(id: "comparison-\(day)", at: now.addingTimeInterval(Double(-day * 86400)), activity: "Music practice", categoryIDs: ["leisure"], writer: "fixture", now: now)
+                    }
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
@@ -440,6 +451,9 @@ final class LedgerStore: ObservableObject {
         importSiriCaptures()
         companion?.start(); cloud?.requestSync()
         #if os(iOS)
+        scheduleAutomaticCategories()
+        #endif
+        #if os(iOS)
         if storageAvailable { backup?.request(ledger) }
         #endif
     }
@@ -479,8 +493,36 @@ final class LedgerStore: ObservableObject {
         draft.normalizeInboxRanking(writer: writer)
         try JSONEncoder().encode(draft).write(to: file, options: [.atomic])
         ledger = draft
+        #if os(iOS)
+        scheduleAutomaticCategories()
+        #endif
         saveObserver?()
     }
+
+    #if os(iOS)
+    private func scheduleAutomaticCategories() {
+        automaticCategoryWork?.cancel()
+        guard started, !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) else { return }
+        let snapshot = ledger
+        automaticCategoryWork = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            let results = await AutomaticCategories.shared.classify(snapshot)
+            guard !Task.isCancelled, let self else { return }
+            var draft = self.ledger
+            // Verify source revisions after background work; never overwrite an
+            // edit, confirmation, deletion or sync that arrived in the meantime.
+            for (id, suggestion) in results.logs {
+                guard snapshot.entries.first(where: { $0.id == id })?.revision == draft.entries.first(where: { $0.id == id })?.revision else { continue }
+                try? draft.suggestCategories(suggestion, logID: id, writer: self.writer)
+            }
+            for (id, suggestion) in results.ideas {
+                guard snapshot.captures.first(where: { $0.id == id })?.revision == draft.captures.first(where: { $0.id == id })?.revision else { continue }
+                try? draft.suggestCategories(suggestion, captureID: id, writer: self.writer)
+            }
+            if draft != self.ledger { do { try self.commit(draft) } catch { self.report(error) } }
+        }
+    }
+    #endif
 
     func merge(_ incoming: Ledger) throws {
         guard (1...2).contains(incoming.schemaVersion) else { throw StoreError.unsupportedVersion }
@@ -524,6 +566,15 @@ final class LedgerStore: ObservableObject {
     func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String] = [], goalID: String? = nil) throws {
         var draft = ledger
         try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, goalID: goalID, writer: writer)
+        try commit(draft)
+    }
+    func reviewCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String], mood: Int?, goalID: String?, activity: String) throws {
+        var draft = ledger
+        try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, goalID: goalID, writer: writer)
+        if confirm, let entry = draft.calendarEvents?.first(where: { $0.id == id }) {
+            try draft.updateLogActivity(id: entry.logID, activity: activity, writer: writer)
+            try draft.setMood(for: entry.logID, value: mood, writer: writer)
+        }
         try commit(draft)
     }
     func reviewLog(_ entry: CheckIn, categoryIDs: [String], mood: Int?, goalID: String?, activity: String? = nil) throws {
@@ -574,7 +625,7 @@ final class LedgerStore: ObservableObject {
     }
 
     func categoryNames(for entry: CheckIn) -> String {
-        let names = ledger.confirmedCategoryIDs(for: entry).map { ledger.categoryPath($0) }
+        let names = ledger.effectiveCategoryIDs(for: entry).map { ledger.categoryPath($0) }
         return names.isEmpty ? "Uncategorized" : names.joined(separator: " + ")
     }
 
@@ -644,6 +695,12 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.updateCaptureText(id: capture.id, text: text, writer: writer); try commit(draft)
     }
 
+    func reviewCapture(_ capture: Capture, text: String, categoryIDs: [String]) throws {
+        var draft = ledger
+        try draft.updateCaptureText(id: capture.id, text: text, writer: writer)
+        try draft.categorizeCapture(id: capture.id, categoryIDs: categoryIDs, writer: writer)
+        try commit(draft)
+    }
     func categorizeCapture(_ capture: Capture, categoryIDs: [String]) throws {
         var draft = ledger
         try draft.categorizeCapture(id: capture.id, categoryIDs: categoryIDs, writer: writer)
@@ -778,6 +835,7 @@ final class LedgerStore: ObservableObject {
                 draft.entries[index].categoryIDs = change.before.categoryIDs
                 draft.entries[index].categoryID = change.before.categoryID
                 draft.entries[index].categoryAssignment = change.before.categoryAssignment
+                draft.entries[index].categorySuggestion = change.before.categorySuggestion
                 draft.entries[index].mood = change.before.mood
                 draft.entries[index].goalID = change.before.goalID
                 draft.entries[index].goalShare = change.before.goalShare

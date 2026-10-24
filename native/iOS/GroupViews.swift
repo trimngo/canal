@@ -35,7 +35,7 @@ struct GroupEntriesView: View {
         else { source = store.ledger.entries(on: day) }
         let categoryIDs = Set([groupID] + (directOnly ? [] : store.ledger.descendants(of: groupID).map(\.id)))
         return source.filter {
-            $0.end <= Date() && (groupID == "uncategorized" ? (store.ledger.confirmedCategoryID(for: $0) == nil || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")) : !Set(store.ledger.confirmedCategoryIDs(for: $0)).isDisjoint(with: categoryIDs))
+            $0.end <= Date() && (groupID == "uncategorized" ? (store.ledger.effectiveCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")) : !Set(store.ledger.effectiveCategoryIDs(for: $0)).isDisjoint(with: categoryIDs))
         }
     }
     var body: some View {
@@ -104,7 +104,7 @@ struct GroupEntriesView: View {
                     Button("Cancel", role: .cancel) {}
                 } message: { Text("Logs and ideas are kept. This category’s shares become Uncategorized, its label is removed from ideas, and children are promoted.") }
                 .sheet(item: $categorizing) { entry in
-                    GroupAssignmentView(entry: entry, selection: store.ledger.confirmedCategoryIDs(for: entry))
+                    GroupAssignmentView(entry: entry, selection: store.ledger.effectiveCategoryIDs(for: entry))
                 }
                 .sheet(item: $editing) { entry in
                     NavigationStack {

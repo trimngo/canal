@@ -102,54 +102,53 @@ struct CommitmentsView: View {
     @State private var editing = false
     @State private var editingGoal: DatedGoal?
     @State private var progress: [DatedGoalProgress] = []
+    @State private var daily: DailyGoalsReport?
+    @State private var today = AllocationPeriod()
     @State private var calculationID = UUID()
+    private var categoryIDs: [String] {
+        let ids = Set((daily?.commitments.map(\.id) ?? []) + progress.compactMap { $0.goal.categoryID })
+        return store.ledger.orderedCategories.map(\.id).filter(ids.contains)
+    }
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { clock in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let window = store.ledger.goalDayWindow(on: clock.date, now: clock.date) {
-                        Text("\(store.duration(window.remainingMinutes)) left today").font(.title2.bold())
+            List {
+                if let window = store.ledger.goalDayWindow(on: clock.date, now: clock.date) {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("\(store.duration(window.remainingMinutes)) left today").font(.headline)
+                            ProgressView(value: window.elapsedMinutes, total: max(1, window.minutes)).tint(.secondary)
+                            HStack {
+                                Text("\(store.duration(window.elapsedMinutes)) elapsed")
+                                Spacer()
+                                Text("Until \(window.interval.end.formatted(date: .omitted, time: .shortened))")
+                            }.font(.caption).foregroundStyle(.secondary)
+                        }.padding(.vertical, 4)
                     }
-                    let unfinished = progress.filter { !$0.isMet }
-                    let needed = unfinished.compactMap(\.dailyMinutesNeeded).reduce(0, +)
-                    if needed > 0 {
-                        Text("\(store.duration(needed))/workday needed across your goals")
-                            .font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("dated-goals.daily-demand")
+                }
+                ForEach(categoryIDs, id: \.self) { id in
+                    Section {
+                        if let target = daily?.commitments.first(where: { $0.id == id }) { categoryProgress(target) }
+                        ForEach(progress.filter { $0.goal.categoryID == id }) { row in
+                            datedProgress(row, now: clock.date).padding(.leading, 12)
+                        }
+                    } header: {
+                        NavigationLink {
+                            CategoryDetailView(request: CategoryDetailRequest(id: id, name: store.ledger.categories.first { $0.id == id }?.name ?? "Category"))
+                        } label: {
+                            HStack { Text(store.ledger.categoryPath(id)); Spacer(); Image(systemName: "chevron.right") }
+                        }.textCase(nil).accessibilityIdentifier("commitments.category.\(id)")
                     }
-                    if store.ledger.activeDatedGoals.isEmpty {
-                        ContentUnavailableView {
-                            Label("Add a goal", systemImage: "target")
-                        } description: { Text("Set hours and a deadline in Edit goals. Logs will track your progress.") }
-                        actions: { Button("Edit goals") { editing = true } }
-                    }
-                    ForEach(progress) { row in
-                        Button { editingGoal = row.goal } label: {
-                            VStack(alignment: .leading, spacing: 7) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text(row.goal.name).font(.headline).foregroundStyle(.primary)
-                                    Spacer(minLength: 8)
-                                    Text(row.goal.deadline, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                if let category = row.goal.categoryID, store.ledger.categories.contains(where: { $0.id == category }) {
-                                    Text(store.ledger.categoryPath(category)).font(.caption).foregroundStyle(.secondary)
-                                }
-                                ProgressView(value: row.fraction).tint(row.isMet ? .green : .teal)
-                                HStack {
-                                    Text("\(store.duration(row.actualMinutes)) of \(store.duration(row.goal.targetMinutes))")
-                                    Spacer()
-                                    Text(row.isMet ? "Met" : "\(store.duration(row.remainingMinutes)) left")
-                                }.font(.subheadline).foregroundStyle(.primary)
-                                Text(paceLabel(row, now: clock.date)).font(.caption)
-                                    .foregroundStyle(row.differenceMinutes < -1 ? Color.orange : Color.secondary)
-                            }.padding(.vertical, 8).contentShape(Rectangle())
-                        }.buttonStyle(.plain).accessibilityIdentifier("dated-goals.progress.\(row.id)")
-                        Divider()
-                    }
-                    NavigationLink("Category targets") { CategoryTargetsTodayView() }
-                        .accessibilityIdentifier("dated-goals.category-targets")
-                }.padding(20)
-            }.onChange(of: Int(clock.date.timeIntervalSince1970 / 60)) { _, _ in calculationID = UUID() }
+                }
+                let standalone = progress.filter { row in row.goal.categoryID == nil || !store.ledger.categories.contains(where: { $0.id == row.goal.categoryID }) }
+                if !standalone.isEmpty {
+                    Section("Goals") { ForEach(standalone) { datedProgress($0, now: clock.date) } }
+                }
+                if categoryIDs.isEmpty && progress.isEmpty {
+                    Text("Favorite a category target or add a goal in Edit goals.").foregroundStyle(.secondary)
+                    Button("Edit goals") { editing = true }
+                }
+            }.listStyle(.plain)
+                .onChange(of: Int(clock.date.timeIntervalSince1970 / 60)) { _, _ in calculationID = UUID() }
         }
         .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit goals") { editing = true }.accessibilityIdentifier("goals.edit") } }
@@ -158,12 +157,51 @@ struct CommitmentsView: View {
         }
         .sheet(item: $editingGoal) { DatedGoalEditorView(goal: $0) }
         .task(id: calculationID) {
-            let ledger = store.ledger
-            let job = Task.detached(priority: .userInitiated) { ledger.datedGoalProgress() }
-            let rows = await withTaskCancellationHandler(operation: { await job.value }, onCancel: { job.cancel() })
-            if !Task.isCancelled { progress = rows }
+            let ledger = store.ledger, now = Date()
+            let work = Task.detached(priority: .userInitiated) {
+                (ledger.datedGoalProgress(now: now), ledger.dailyGoals(now: now, favoritesOnly: true), ledger.allocation(on: now, now: now))
+            }
+            let result = await withTaskCancellationHandler(operation: { await work.value }, onCancel: { work.cancel() })
+            if !Task.isCancelled { progress = result.0; daily = result.1; today = result.2 }
         }
         .onChange(of: store.ledger) { _, _ in calculationID = UUID() }
+    }
+    private func categoryProgress(_ row: DailyGoalProgress) -> some View {
+        NavigationLink {
+            CategoryDetailView(request: CategoryDetailRequest(id: row.id, name: row.category.name))
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(row.isMet ? "Daily target met" : "\(store.duration(row.remainingMinutes)) left today").foregroundStyle(.primary)
+                    Spacer()
+                    if let percentage = store.ledger.currentGoals()[row.id] { Text("\(percentage, specifier: "%.0f")% goal").font(.caption).foregroundStyle(.secondary) }
+                }
+                GeometryReader { geometry in
+                    ProgressView(value: row.fraction).frame(width: max(2, geometry.size.width * (daily?.goalWidthFraction(row) ?? 1)), alignment: .leading)
+                }.frame(height: 5)
+                Text("\(store.duration(row.actualMinutes)) of \(store.duration(row.targetMinutes))").font(.caption).foregroundStyle(.secondary)
+                let pending = today.unreviewed(for: row.id, ledger: store.ledger)
+                if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
+            }.padding(.vertical, 4)
+        }.accessibilityIdentifier("commitments.target.\(row.id)")
+    }
+    private func datedProgress(_ row: DatedGoalProgress, now: Date) -> some View {
+        Button { editingGoal = row.goal } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Label(row.goal.name, systemImage: "target").font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Text(row.goal.deadline, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day()).font(.caption).foregroundStyle(.secondary)
+                }
+                ProgressView(value: row.fraction).tint(row.isMet ? .green : .teal)
+                HStack {
+                    Text("\(store.duration(row.actualMinutes)) of \(store.duration(row.goal.targetMinutes))")
+                    Spacer()
+                    Text(row.isMet ? "Met" : "\(store.duration(row.remainingMinutes)) left")
+                }.font(.caption).foregroundStyle(.primary)
+                Text(paceLabel(row, now: now)).font(.caption2).foregroundStyle(row.differenceMinutes < -1 ? Color.orange : Color.secondary)
+            }.padding(.vertical, 4).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityIdentifier("dated-goals.progress.\(row.id)")
     }
     private func paceLabel(_ row: DatedGoalProgress, now: Date) -> String {
         if row.isMet { return "Goal met" }

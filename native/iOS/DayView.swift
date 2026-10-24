@@ -44,16 +44,15 @@ struct AllocationHistoryView: View {
             .sheet(item: $selectedGroup, onDismiss: { now = Date() }) { group in
                 CategoryDetailView(request: group)
             }
-            .sheet(item: $reviewing, onDismiss: { now = Date() }) { request in LogReviewView(entryIDs: request.entryIDs) }
+            .sheet(item: $reviewing, onDismiss: { now = Date() }) { request in LogReviewView(entryIDs: request.entryIDs, calendarIDs: request.calendarIDs) }
 
     }
 
     private func content(now: Date) -> some View {
         let report = store.ledger.history(range: range, start: start, end: end, now: now)
-        let ungrouped = report.samples.filter {
-            $0.end >= report.start && $0.end <= report.end &&
-            (store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized"))
-        }.count
+        let unreviewed = report.samples.filter { store.ledger.needsCategoryReview($0) || store.ledger.effectiveCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized") }
+        let pending = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.map(\.id)
+        let reviewCount = unreviewed.count + pending.count
         return VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -68,21 +67,14 @@ struct AllocationHistoryView: View {
                     DatePicker("From", selection: $start, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.from")
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
-                let pendingEvents = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.count
-                if pendingEvents > 0 {
-                    NavigationLink("Confirm calendar events (\(pendingEvents))") { CalendarEventReviewView() }
-                        .font(.subheadline).accessibilityIdentifier("dashboard.calendar-events")
-                }
-                if ungrouped > 0 {
+                if reviewCount > 0 {
                     Button {
-                        reviewing = LogReviewRequest(entryIDs: report.samples.filter {
-                            store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")
-                        }.sorted { $0.end == $1.end ? $0.id < $1.id : $0.end > $1.end }.map(\.id))
+                        reviewing = LogReviewRequest(entryIDs: unreviewed.map(\.id), calendarIDs: pending)
                     } label: {
-                        Label("Review logs (\(ungrouped))", systemImage: "tray")
-                            .font(.subheadline).frame(minHeight: 32)
+                        Label("Review logs (\(reviewCount))", systemImage: "tray").font(.subheadline).frame(minHeight: 32)
                     }.accessibilityIdentifier("dashboard.review.uncategorized")
                 }
+                DaylightDashboardView()
             }.padding(.horizontal, 20).padding(.vertical, 8)
             Divider()
             HistoryPanel(report: report, hideZeroTime: hideZeroTime, selectDirect: { row in

@@ -11,7 +11,7 @@ struct HistoryPanel: View {
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
     @State private var expandedCategories = Set<String>()
-    private let pages = ["Breakdown", "Pie chart", "Daily trend", "Heatmap"]
+    private let pages = ["Breakdown", "Pie chart", "Daily trend", "Heatmap", "Day comparison"]
     private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
     private func color(_ id: String) -> Color {
         if id == "uncategorized" { return .orange }
@@ -43,6 +43,8 @@ struct HistoryPanel: View {
                             else { select(item.row) }
                         }.padding(.horizontal, 20)
                             .frame(width: geometry.size.width, height: geometry.size.height).id(3)
+                        DailyComparisonView().padding(.horizontal, 16)
+                            .frame(width: geometry.size.width, height: geometry.size.height).id(4)
                     }.scrollTargetLayout()
                 }.scrollTargetBehavior(.paging).scrollPosition(id: $page).scrollIndicators(.hidden)
                     .accessibilityIdentifier("report.pages")
@@ -116,6 +118,8 @@ struct HistoryPanel: View {
                 if !item.direct { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
             }
             ProgressView(value: min(1, item.row.percent / 100)).tint(color(item.row.id))
+            let pending = report.unreviewed(for: item.row.id, in: store.ledger, direct: item.direct)
+            if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
         }.padding(.vertical, 6).contentShape(Rectangle())
     }
     private func pie(diameter: CGFloat) -> some View {
@@ -154,6 +158,10 @@ struct HistoryPanel: View {
                             .accessibilityElement(children: .combine).accessibilityIdentifier("report.pie.selection")
                             .allowsHitTesting(false)
                     }.frame(width: diameter, height: diameter).frame(maxWidth: .infinity)
+                    if let row = selectedRow {
+                        let pending = report.unreviewed(for: row.id, in: store.ledger)
+                        if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
+                    }
                     ForEach(report.rows) { row in
                         Button { selectedGroupID = row.id } label: {
                             HStack {

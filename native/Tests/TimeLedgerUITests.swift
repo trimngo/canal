@@ -2418,7 +2418,7 @@ final class TimeLedgerUITests: XCTestCase {
         let threeGoals = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 3"), object: goals)
         XCTAssertEqual(XCTWaiter.wait(for: [threeGoals], timeout: 5), .completed)
         let song = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Rehearse public song")).firstMatch
-        XCTAssertTrue(song.label.contains("Work"))
+        XCTAssertTrue(app.buttons["commitments.category.work"].exists)
         recordScreen("DatedCommitmentsProgress", in: app)
         app.terminate(); app.launchArguments = []; app.launch()
         app.tabBars.buttons["Commitments"].tap()
@@ -2439,6 +2439,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars.buttons["log-review.save-next"].exists)
         recordScreen("ReviewSaveNextInTopBar", in: app)
         next.tap()
+        XCTAssertTrue(app.buttons["log-review.skip-event"].waitForExistence(timeout: 5))
+        app.buttons["log-review.skip-event"].tap()
         XCTAssertFalse(app.buttons["log-review.close"].exists)
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
         app.terminate(); app.launchArguments = []; app.launch()
@@ -2450,18 +2452,65 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testCalendarConfirmationRecordsFullPeriodAndUpdatesGoal() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
-        app.buttons["dashboard.calendar-events"].tap()
-        app.buttons["calendar.event.ui-pending"].tap()
+        app.buttons["dashboard.review.uncategorized"].tap()
+        tapCategory("work", in: app); app.buttons["log-review.save-next"].tap()
         element(app, "log-review.goal").tap(); app.buttons["Prepare DIGS lecture"].tap()
         recordScreen("ConfirmCalendarPeriod", in: app)
-        app.buttons["calendar.confirm"].tap()
-        XCTAssertTrue(app.staticTexts["No events to confirm"].waitForExistence(timeout: 5))
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Commitments"].tap()
         let digs = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare DIGS lecture")).firstMatch
         XCTAssertTrue(digs.waitForExistence(timeout: 10))
         XCTAssertTrue(digs.label.contains("2h 0m of 4h 0m"), digs.label)
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertFalse(app.buttons["dashboard.calendar-events"].exists)
+    }
+
+    func testUnifiedCommitmentsAndPinnedGoalActions() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-feedback-fixture"]; app.launch()
+        app.tabBars.buttons["Commitments"].tap()
+        XCTAssertTrue(app.buttons["commitments.target.work"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "dated-goals.progress.")).count == 2)
+        XCTAssertFalse(app.buttons["dated-goals.category-targets"].exists)
+        recordScreen("UnifiedCommitments", in: app)
+        openGoalEditor(in: app)
+        let add = app.buttons["plan.create-goal"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        let y = add.frame.midY
+        app.swipeUp(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
+        app.swipeDown(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
+        recordScreen("PinnedGoalActions", in: app)
+    }
+
+    func testOneDayComparisonHasEarlierBaselineAndUnitSwitch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-feedback-fixture"]; app.launch()
+        app.buttons["Show day comparison"].tap()
+        let baseline = element(app, "comparison.baseline")
+        XCTAssertTrue(baseline.waitForExistence(timeout: 10))
+        let original = baseline.label
+        XCTAssertTrue(app.staticTexts["Today so far"].exists)
+        recordScreen("DailyNumericComparison", in: app)
+        app.buttons["comparison.previous"].tap()
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", original), object: baseline)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+        app.segmentedControls["comparison.unit"].buttons["Time"].tap()
+        XCTAssertFalse(app.staticTexts["Today so far"].exists)
+        recordScreen("YesterdayTimeComparison", in: app)
+    }
+
+    func testSuggestedLogStaysInReviewAndConfirmationRemovesMarker() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-feedback-fixture"]; app.launch()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "awaiting category review")).firstMatch.waitForExistence(timeout: 10))
+        app.buttons["dashboard.review.uncategorized"].tap()
+        XCTAssertTrue(app.buttons["category-tag.work"].waitForExistence(timeout: 5))
+        recordScreen("SuggestedLogReview", in: app)
+        let field = app.textFields["category-search.field"]; field.tap(); field.typeText("work")
+        XCTAssertTrue(app.buttons["log-review.save-next"].isHittable)
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.buttons["log-review.skip-event"].waitForExistence(timeout: 5))
+        app.buttons["log-review.skip-event"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "awaiting category review")).firstMatch.exists)
     }
 
 }
