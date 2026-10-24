@@ -9,7 +9,7 @@ struct DailyGoalCapacityView: View {
     let editWindow: () -> Void
     @State private var showingExplanation = false
     private let colors: [Color] = [.teal, .indigo, .orange, .pink, .blue, .purple, .mint]
-    var body: some View { timeLeft(report) }
+    var body: some View { timeLeft(report).buttonStyle(.borderless) }
     private func color(_ goal: DailyGoalProgress, in report: DailyGoalsReport) -> Color {
         guard !goal.isRollup, goal.targetMinutes > 0 else { return .secondary }
         let colored = report.commitments.filter { $0.targetMinutes > 0 }

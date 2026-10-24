@@ -2482,11 +2482,12 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["category-detail.close"].tap()
         XCTAssertTrue(app.navigationBars["Commitments"].exists)
         openGoalEditor(in: app)
+        if app.buttons["plan.hide-blank-goals"].value as? String == "On" { app.buttons["plan.hide-blank-goals"].tap() }
         let add = app.buttons["plan.create-goal"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         let y = add.frame.midY
         app.swipeUp(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
-        app.swipeDown(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
+        app.swipeUp(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
         recordScreen("PinnedGoalActions", in: app)
     }
 
@@ -2545,6 +2546,23 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["keyboard.done"].firstMatch.tap()
         XCTAssertTrue(element(app, "inbox.details.uncategorized").waitForExistence(timeout: 5))
         recordScreen("CompactInboxSearch", in: app)
+    }
+
+    func testPieStaysUsableWhenReviewMergesTheLastUncategorizedSector() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
+        app.buttons["Show pie chart"].tap()
+        XCTAssertTrue(element(app, "report.pie.chart").waitForExistence(timeout: 5))
+        app.buttons["dashboard.review.uncategorized"].tap()
+        element(app, "log-review.goal").tap(); app.buttons["Prepare SDES lecture"].tap()
+        let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.buttons["log-review.skip-event"].waitForExistence(timeout: 5))
+        app.buttons["log-review.skip-event"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "report.pie.chart").exists)
+        app.buttons["report.pie.group.work"].tap()
+        XCTAssertTrue(element(app, "report.pie.selection").label.contains("Work"))
+        recordScreen("PieAfterCategoryMerge", in: app)
     }
 
 }

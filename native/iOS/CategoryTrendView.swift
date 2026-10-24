@@ -169,6 +169,8 @@ struct CategoryTrendView: View {
                     .foregroundStyle(.secondary).lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
+        .id(points.map(\.id))
+        .transaction { $0.animation = nil }
         .chartLegend(.hidden)
         .chartXSelection(value: $chartDate)
         .chartXScale(domain: report.start...max(report.end, report.start.addingTimeInterval(3600)))
