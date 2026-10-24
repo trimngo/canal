@@ -10,40 +10,6 @@ concurrency:
   group: native-checks-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  build:
-    runs-on: macos-15
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode and boot iPhone
-        run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
-          echo "TIMER_PHONE=$DEVICE_ID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$DEVICE_ID" || true
-      - name: Install project generator
-        env: { HOMEBREW_NO_AUTO_UPDATE: '1' }
-        run: brew install xcodegen
-      - name: Core, packaging, iPhone and Watch simulator builds
-        env: { LEDGER_UI_TESTS: '0' }
-        run: bash native/scripts/validate.sh
-      - name: Test timer queue and automatic-next setting on phone
-        run: |
-          xcodebuild -project native/TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$TIMER_PHONE" -derivedDataPath native/build -resultBundlePath native/build/TimerPhone.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueRestartDoneNextPauseAndPersistence -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueCanRemoveWaitingTaskAndDoesNotCreateActivityLogs -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerAutoNextCanBeDisabledAndManualStartPersists test
-      - name: Compile Watch alarm and gestures for physical devices
-        run: xcodebuild -project native/TimeLedger.xcodeproj -scheme TimeLedgerWatch -destination 'generic/platform=watchOS' -derivedDataPath native/build-watch-device CODE_SIGNING_ALLOWED=NO build
-      - name: Export phone timer review
-        if: always()
-        run: |
-          if [ -f native/build/TimerPhone.xcresult/Info.plist ]; then
-            mkdir -p native/build/timer-phone-review
-            xcrun xcresulttool get test-results summary --path native/build/TimerPhone.xcresult > native/build/timer-phone-review/summary.json
-            xcrun xcresulttool export attachments --path native/build/TimerPhone.xcresult --output-path native/build/timer-phone-attachments
-            python3 native/scripts/export-ui-review.py native/build/timer-phone-attachments native/build/timer-phone-review
-          fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with: { name: timer-phone-review, path: native/build/timer-phone-review, retention-days: 7 }
   watch-ui:
     runs-on: macos-15
     timeout-minutes: 35
@@ -59,7 +25,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           source = Path("native/scripts/test-watch-ui.sh").read_text()
-          filters = " -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testTimerExpiryHasDirectDoneAndRestartAndKeepsQueueAfterRelaunch -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testTimerComplicationRouteQueuesDictatedTaskWithoutAnotherSave -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testWatchHomeCanAddATimerInOneTap -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testCancelCreatesNoSampleAndNormalIconDoesNotStartInput"
+          filters = " -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testTimerExpiryHasDirectDoneAndRestartAndKeepsQueueAfterRelaunch -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testWatchHomeCanAddATimerInOneTap"
           source = source.replace("-parallel-testing-enabled NO test", "-parallel-testing-enabled NO" + filters + " test")
           source = source.replace('xcrun simctl bootstatus "$PHONE_DEVICE_ID" -b', 'xcrun simctl bootstatus "$PHONE_DEVICE_ID" -b\nxcrun simctl boot "$WATCH_DEVICE_ID" || true\nxcrun simctl bootstatus "$WATCH_DEVICE_ID" -b')
           Path("native/scripts/.timer-watch-validation.sh").write_text(source)

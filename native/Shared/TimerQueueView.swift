@@ -23,8 +23,10 @@ struct TimerQueueView: View {
             queue(at: timeline.date)
             #endif
         }
+        #if os(watchOS)
+        .navigationTitle("")
+        #else
         .navigationTitle("Timer queue")
-        #if !os(watchOS)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("About timers", systemImage: "info.circle") { showingHelp = true }
@@ -58,7 +60,7 @@ struct TimerQueueView: View {
                         Text(task.title).font(.headline).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityIdentifier("timers.current")
                         if control.isFinished(at: now) {
-                            Text("Finished").font(.caption.bold()).foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
+                            Text("Finished").font(.system(size: 12, weight: .semibold)).foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
                         } else if let due = control.dueAt {
                             Text(timerInterval: due.addingTimeInterval(-task.duration)...due, countsDown: true)
                                 .font(.title3.monospacedDigit()).accessibilityIdentifier("timers.countdown")
@@ -169,7 +171,11 @@ struct TimerQueueView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }.buttonStyle(.borderless)
                 } else if !store.ledger.waitingTimers.isEmpty {
-                    Button("Start next task") { act("start") }.accessibilityIdentifier("timers.start")
+                    if canControl {
+                        Button("Start next task") { act("start") }.accessibilityIdentifier("timers.start")
+                    } else {
+                        Text("Start the next task on your Apple Watch.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section("Add a timer") {
                     TextField("Task · 5 minutes unless specified", text: $draft, axis: .vertical)
