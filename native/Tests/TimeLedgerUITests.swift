@@ -1,6 +1,26 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testTimerAutoNextCanBeDisabledAndManualStartPersists() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]; app.launch()
+        XCTAssertTrue(app.buttons["timers.done"].waitForExistence(timeout: 20))
+        app.buttons["Close"].tap(); app.tabBars.buttons["Settings"].tap()
+        app.buttons["settings.timers"].tap()
+        let setting = element(app, "timers.auto-next")
+        XCTAssertTrue(setting.waitForExistence(timeout: 5)); setting.tap()
+        app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.timers"].tap()
+        XCTAssertTrue(app.buttons["timers.done"].waitForExistence(timeout: 10))
+        app.buttons["timers.done"].tap()
+        XCTAssertTrue(app.buttons["timers.start"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["timers.current"].exists)
+        app.buttons["timers.start"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.terminate(); app.launchArguments = ["--ui-timer-open"]; app.launch()
+        XCTAssertTrue(app.buttons["timers.done"].waitForExistence(timeout: 20))
+        app.buttons["timers.done"].tap()
+        XCTAssertTrue(app.buttons["timers.start"].waitForExistence(timeout: 5))
+        recordScreen("TimerManualNext", in: app)
+    }
     func testUrgentInboxShowsUnrankedIdeasAndCorrectionPersistsWithoutRanking() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-urgent-inbox"]; app.launch()
         openInbox(app)

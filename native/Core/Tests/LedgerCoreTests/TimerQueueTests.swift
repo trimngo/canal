@@ -40,6 +40,29 @@ final class TimerQueueTests: XCTestCase {
         XCTAssertNil(ledger.currentTimer?.completedAt)
         XCTAssertEqual(ledger.waitingTimers.map(\.id), ["two"])
     }
+    func testManualNextSettingCompletesCurrentAndWaitsForExplicitStart() throws {
+        var ledger = try fixture(); ledger.settings.timerAutoStartNext = false
+        ledger.finishTimer(writer: "watch", onWatch: true, now: now)
+        XCTAssertNil(ledger.currentTimer); XCTAssertNil(ledger.timerControl?.dueAt)
+        XCTAssertNotNil(ledger.queuedTimers?.first { $0.id == "one" }?.completedAt)
+        try ledger.enqueueTimer(id: "three", title: "Walk", duration: 300, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
+        XCTAssertNil(ledger.currentTimer)
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["two", "three"])
+        ledger.startNextTimer(writer: "watch", onWatch: true, now: now.addingTimeInterval(3))
+        XCTAssertEqual(ledger.currentTimer?.id, "two")
+        XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(603))
+    }
+    func testAutoNextSettingSurvivesSyncBackupAndDefaultsOnForOldFiles() throws {
+        XCTAssertTrue(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8)).timerAutoStartNext)
+        var ledger = try fixture(); var settings = ledger.settings; settings.timerAutoStartNext = false
+        try ledger.saveSettings(settings, writer: "watch")
+        let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        XCTAssertFalse(restored.settings.timerAutoStartNext)
+        var phone = Ledger(); phone.merge(restored); XCTAssertFalse(phone.settings.timerAutoStartNext)
+        var quick = CompanionQuickDelivery()
+        let packet = try JSONDecoder().decode(CompanionQuickPacket.self, from: XCTUnwrap(try quick.prepare(ledger, id: "setting")))
+        XCTAssertFalse(packet.ledger.settings.timerAutoStartNext)
+    }
     func testOldOrRepeatedNotificationActionCannotSkipAnotherTask() throws {
         var ledger = try fixture()
         let old = ledger.timerControl!.token
@@ -125,15 +148,25 @@ final class TimerQueueTests: XCTestCase {
                                        ("Read, 1 hour and 30 minutes", "Read", 5400.0),
                                        ("Twenty one pilots for twenty-five minutes", "Twenty one pilots", 1500.0),
                                        ("Stretch for half an hour", "Stretch", 1800.0),
+                                       ("Read ten minutes", "Read", 600.0),
+                                       ("Dishes 10 minutes.", "Dishes", 600.0),
                                        ("20 minutes practice guitar", "practice guitar", 1200.0)] {
             let draft = try TimerDraft.parse(text)
             XCTAssertEqual(draft.title, title, text); XCTAssertEqual(draft.duration, seconds, text)
         }
     }
     func testAmbiguousDurationRequiresCorrection() {
-        for text in ["Read", "Read for a while", "Read for 20 minutes or 30 minutes", "Read for -2 minutes", "Read for 25 hours"] {
+        for text in ["Read for 20 minutes or 30 minutes", "Read 20 minutes or 30 minutes", "Read for -2 minutes", "Read for 25 hours", "Read for zero minutes", "20 minutes"] {
             XCTAssertThrowsError(try TimerDraft.parse(text), text)
         }
+    }
+    func testTaskWithoutDurationDefaultsToFiveMinutesAndKeepsItsWords() throws {
+        for text in ["Read", "Read for a while", "Buy five apples", "Twenty one pilots", "Reply to Alan", "Read as much as possible", "🎸 Practice guitar"] {
+            let draft = try TimerDraft.parse("  \(text)  ")
+            XCTAssertEqual(draft.title, text); XCTAssertEqual(draft.duration, 300)
+        }
+        XCTAssertThrowsError(try TimerDraft.parse("  "))
+        XCTAssertThrowsError(try TimerDraft.parse(String(repeating: "a", count: 501)))
     }
     func testOnlyExactTimerComplicationRoutesAreAccepted() {
         XCTAssertTrue(TimerQueueShortcut.matches(TimerQueueShortcut.add))

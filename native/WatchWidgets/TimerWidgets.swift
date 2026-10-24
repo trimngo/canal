@@ -27,7 +27,7 @@ private struct TimerComplication: View {
     var body: some View {
         content.widgetURL(adding ? TimerQueueShortcut.add : TimerQueueShortcut.current)
             .containerBackground(.fill.tertiary, for: .widget)
-            .accessibilityLabel(adding ? "Dictate a timer task and duration" : "Current timer: \(entry.current?.title ?? "No timer")")
+            .accessibilityLabel(adding ? "Dictate a timer task, five minutes by default" : "Current timer: \(entry.current?.title ?? "No timer")")
     }
     @ViewBuilder private var countdown: some View {
         if let current = entry.current {
@@ -66,7 +66,7 @@ private struct TimerComplication: View {
 struct DashAddTimerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "DashAddTimer", provider: TimerProvider()) { TimerComplication(entry: $0, adding: true) }
-            .configurationDisplayName("Queue timer").description("Dictate a task and duration. Additional tasks wait in your queue.")
+            .configurationDisplayName("Queue timer").description("Dictate a task. Defaults to five minutes, or say a duration. Additional tasks wait in your queue.")
             .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryRectangular, .accessoryInline])
     }
 }

@@ -54,9 +54,9 @@ struct LedgerShortcuts: AppShortcutsProvider {
 
 struct QueueTimerIntent: AppIntent {
     static var title: LocalizedStringResource = "Queue a timer"
-    static var description = IntentDescription("Add a task and duration, for example: Practice guitar for twenty minutes. Further tasks wait until you choose Done & Next.")
+    static var description = IntentDescription("Add a task. Defaults to five minutes, or include a duration such as Practice guitar for twenty minutes. Further tasks wait until you choose Done & Next.")
     static var openAppWhenRun = true
-    @Parameter(title: "Task and duration") var task: String
+    @Parameter(title: "Task") var task: String
     static var parameterSummary: some ParameterSummary { Summary("Queue \(\.$task)") }
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = LedgerStore.shared; store.start(); try store.addTimer(task); store.openTimers()

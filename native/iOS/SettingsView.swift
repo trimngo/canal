@@ -25,6 +25,7 @@ struct SettingsView: View {
             Section {
                 NavigationLink("Calendars") { CalendarConnectionView() }.accessibilityIdentifier("settings.calendars")
                 NavigationLink("Automatic matching") { AutomaticMatchingView() }.accessibilityIdentifier("settings.matching")
+                NavigationLink("Timers") { TimerSettingsView() }.accessibilityIdentifier("settings.timers")
                 NavigationLink("Siri via Reminders") { ReminderInboxSetupView() }
                     .accessibilityIdentifier("settings.reminders")
             } footer: {

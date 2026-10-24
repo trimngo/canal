@@ -31,6 +31,44 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         record("WatchTimerDictationSaved", app)
     }
+    func testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-timer-system-input"]
+        app.launch()
+        XCTAssertTrue(app.buttons["timers.dictate"].waitForExistence(timeout: 30))
+        allowTimerNotifications(app)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "timers.progress").firstMatch.exists)
+        XCTAssertFalse(app.buttons["timers.queue"].exists)
+        app.buttons["timers.dictate"].tap()
+        let suggestion = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Stretch")).firstMatch
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 10))
+        XCTAssertTrue(suggestion.isHittable)
+        record("WatchTimerSystemInputVisible", app)
+        suggestion.tap()
+        let added = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "timers.waiting.", "Stretch")).firstMatch
+        for _ in 0..<5 { if added.exists { break }; app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(added.waitForExistence(timeout: 10))
+        let id = added.identifier.replacingOccurrences(of: "timers.waiting.", with: "")
+        XCTAssertEqual(app.staticTexts["timers.duration.\(id)"].label, "5:00")
+        for _ in 0..<5 { if app.staticTexts["timers.current"].isHittable { break }; app.scrollViews.firstMatch.swipeDown() }
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        XCTAssertTrue(app.buttons["timers.dictate"].isHittable)
+        record("WatchTimersInlineQueue", app)
+    }
+    func testWatchHomeCanAddATimerInOneTap() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-system-input"]
+        app.launch()
+        let add = app.buttons["watch.timer-add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 30)); add.tap()
+        let suggestion = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Stretch")).firstMatch
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 10)); suggestion.tap()
+        allowTimerNotifications(app)
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Stretch")
+        XCTAssertTrue(app.staticTexts["timers.countdown"].exists)
+        record("WatchHomeAddedDefaultTimer", app)
+    }
     override func setUpWithError() throws { continueAfterFailure = false }
     private func allowTimerNotifications(_ app: XCUIApplication) {
         let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")

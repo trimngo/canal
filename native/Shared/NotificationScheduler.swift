@@ -41,7 +41,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     func configureActions() {
         let reply = UNTextInputNotificationAction(identifier: "QUICK_LOG", title: "Dictate log", options: [],
             textInputButtonTitle: "Save", textInputPlaceholder: "What are you doing now?")
-        let done = UNNotificationAction(identifier: "TIMER_DONE", title: "Done & Next", options: [.foreground])
+        let done = UNNotificationAction(identifier: "TIMER_DONE", title: "Done", options: [.foreground])
         let restart = UNNotificationAction(identifier: "TIMER_RESTART", title: "Restart", options: [.foreground])
         center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [reply], intentIdentifiers: []),
             UNNotificationCategory(identifier: "TASK_TIMER", actions: [done, restart], intentIdentifiers: [])])

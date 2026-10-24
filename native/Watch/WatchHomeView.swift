@@ -50,6 +50,8 @@ struct WatchHomeView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Estimated today").font(.headline)
                         Button("Log now") { store.beginSample() }
+                        Button("Add timer", systemImage: "mic.fill") { store.openTimers(dictate: true) }
+                            .accessibilityIdentifier("watch.timer-add")
                         Button("Timer queue", systemImage: "timer") { tab = 3 }
                             .accessibilityIdentifier("watch.timers")
                         Button("Watch alerts") { notificationSettings = true }

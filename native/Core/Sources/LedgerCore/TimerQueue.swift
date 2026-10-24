@@ -6,7 +6,7 @@ public enum TimerQueueError: LocalizedError {
         switch self {
         case .invalidTask: return "Give this timer a task name (up to 500 characters)."
         case .invalidDuration: return "Choose a duration between one second and 24 hours."
-        case .missingDuration: return "Include a duration, for example: Practice guitar for twenty minutes."
+        case .missingDuration: return "Use one clear duration, for example: Practice guitar for twenty minutes."
         }
     }
 }
@@ -61,8 +61,9 @@ public enum TimerQueueShortcut {
     }
 }
 
-/// Explicit durations only. Unparseable dictation remains a draft for correction.
+/// Task-only dictation uses five minutes. Explicit durations override that default.
 public struct TimerDraft: Equatable, Sendable {
+    public static let defaultDuration: TimeInterval = 5 * 60
     public let title: String
     public let duration: TimeInterval
     public static func parse(_ text: String) throws -> TimerDraft {
@@ -70,7 +71,7 @@ public struct TimerDraft: Equatable, Sendable {
         guard !original.isEmpty, original.count <= 600 else { throw TimerQueueError.invalidTask }
         let words = ["zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
                      "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
-                     "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "ninety": 90]
+                     "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90]
         // Normalize number words only in the duration portion; preserve the task.
         let splitter = try NSRegularExpression(pattern: "(?i)\\s+(?:for|,)\\s*|,\\s*")
         let parts = splitter.matches(in: original, range: NSRange(original.startIndex..., in: original))
@@ -84,6 +85,21 @@ public struct TimerDraft: Equatable, Sendable {
         if let regex = try? NSRegularExpression(pattern: durationPattern), let match = regex.firstMatch(in: original, range: NSRange(original.startIndex..., in: original)),
            let durationRange = Range(match.range(at: 1), in: original), let titleRange = Range(match.range(at: 2), in: original) {
             candidates.append((String(original[titleRange]), String(original[durationRange])))
+        }
+        let number = "(?:" + words.keys.sorted().joined(separator: "|") + "|half|an?)"
+        let compound = "(?:[- ](?:one|two|three|four|five|six|seven|eight|nine|an))?"
+        let explicitPattern = "(?i)\\b(?:[0-9]+(?:\\.[0-9]+)?\\s*|" + number + compound + "\\s+)(?:hours?|hrs?|minutes?|mins?|seconds?|secs?)\\b|\\b[0-9]+(?:\\.[0-9]+)?\\s*[hms]\\b"
+        let explicitTime = try NSRegularExpression(pattern: explicitPattern)
+        // A trailing duration also works without “for”: “Read ten minutes”.
+        if parts.isEmpty {
+            let suffix = try NSRegularExpression(pattern: "(?i)^(.+?)\\s+((?:(?:[0-9.]+|[a-z]+)(?:[- ][a-z]+)?\\s*(?:hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\\s*(?:and\\s*)?)+)[.,;]?$" )
+            if let match = suffix.firstMatch(in: original, range: NSRange(original.startIndex..., in: original)),
+               let title = Range(match.range(at: 1), in: original), let duration = Range(match.range(at: 2), in: original) {
+                let value = String(original[title])
+                if explicitTime.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) == nil {
+                    candidates.append((value, String(original[duration])))
+                }
+            }
         }
         for (title, raw) in candidates {
             let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ",.;")))
@@ -113,7 +129,10 @@ public struct TimerDraft: Equatable, Sendable {
             guard seconds.isFinite, (1...86400).contains(seconds) else { throw TimerQueueError.invalidDuration }
             return TimerDraft(title: cleanTitle, duration: seconds)
         }
-        throw TimerQueueError.missingDuration
+        // An ambiguous/invalid explicit time must not silently become five minutes.
+        if explicitTime.firstMatch(in: original, range: NSRange(original.startIndex..., in: original)) != nil { throw TimerQueueError.missingDuration }
+        guard original.count <= 500 else { throw TimerQueueError.invalidTask }
+        return TimerDraft(title: original, duration: defaultDuration)
     }
 }
 
@@ -132,9 +151,10 @@ extension Ledger {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, title.count <= 500 else { throw TimerQueueError.invalidTask }
         guard duration.isFinite, (1...86400).contains(duration) else { throw TimerQueueError.invalidDuration }
+        let hadWaitingTasks = !waitingTimers.isEmpty
         let value = QueuedTimer(id: id, title: title, duration: duration, createdAt: now, revision: nextRevision(writer: writer))
         queuedTimers = (queuedTimers ?? []) + [value]
-        if currentTimer == nil, timerControl?.taskID == nil { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
+        if currentTimer == nil, timerControl?.taskID == nil, !hadWaitingTasks { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
     }
     public mutating func startNextTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard currentTimer == nil else { return }
@@ -146,7 +166,10 @@ extension Ledger {
               let i = queuedTimers?.firstIndex(where: { $0.id == current.id }) else { return }
         queuedTimers?[i].completedAt = now
         let revision = nextRevision(writer: writer); queuedTimers?[i].revision = revision
-        startNextTimer(writer: writer, onWatch: onWatch, now: now)
+        if settings.timerAutoStartNext { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
+        else {
+            timerControl = TimerQueueControl(taskID: nil, dueAt: nil, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        }
     }
     public mutating func restartTimer(expectedToken: String? = nil, writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, expectedToken == nil || timerControl?.token == expectedToken else { return }
