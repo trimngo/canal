@@ -62,6 +62,16 @@ final class LedgerStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-urgent-inbox") {
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "music", name: "Music")]
+                for (id, text) in [("alan", "Get back to Alan"), ("joe", "Reply back to Joe"), ("rent", "Pay the rent"), ("guitar", "Practice guitar")] {
+                    try fixture.addCapture(text: text, id: id, writer: "fixture")
+                }
+                var ranking = InboxRanking(); ranking.ordered = ["guitar"]
+                ranking.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranking
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
                 defaults.removeObject(forKey: "goals.display-unit")
                 var fixture = Ledger()
@@ -774,6 +784,10 @@ final class LedgerStore: ObservableObject {
 
     func updateCaptureText(_ capture: Capture, text: String) throws {
         var draft = ledger; try draft.updateCaptureText(id: capture.id, text: text, writer: writer); try commit(draft)
+    }
+
+    func setCaptureTiming(_ capture: Capture, timing: CaptureTiming?) throws {
+        var draft = ledger; try draft.setCaptureTiming(capture.id, timing: timing, writer: writer); try commit(draft)
     }
 
     func reviewCapture(_ capture: Capture, text: String, categoryIDs: [String], notes: String? = nil) throws {

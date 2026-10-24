@@ -37,7 +37,12 @@ extension Ledger {
             let categories = "\n   Categories: " + (labels.isEmpty ? "Uncategorized" : labels.joined(separator: "; ")) + (idea.categorySuggestion == nil ? "" : " (Suggested, awaiting review)")
             let notes = idea.notes.map { "\n   Notes: " + $0.replacingOccurrences(of: "\n", with: "\n   ") } ?? ""
             let snooze = idea.snoozeReturnDate().map { "\n   " + ($0 > now ? "Snoozed until: " : "Returned from snooze: ") + formatter.string(from: $0) } ?? ""
-            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(categories)\(notes)\(snooze)"
+            let urgency = urgency(for: idea)
+            let timing = urgency.map { value in
+                "\n   Timing: " + (value.timing.dueAt.map { "Due " + formatter.string(from: $0) } ?? "ASAP") +
+                    (value.isSuggested ? " (Suggested: \(value.reason.rawValue))" : "")
+            } ?? "\n   Timing: No date"
+            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(categories)\(notes)\(snooze)\(timing)"
         }
         let noun = ideas.count == 1 ? "idea" : "ideas"
         return InboxExport(count: ideas.count, text: (["Dash inbox — \(ideas.count) \(noun)"] + items).joined(separator: "\n\n"))

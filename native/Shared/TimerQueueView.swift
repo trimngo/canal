@@ -10,7 +10,6 @@ struct TimerQueueView: View {
     @State private var inputError: String?
     @State private var inputOpen = false
     @State private var showingHelp = false
-    @State private var showingAlarmSettings = false
     @State private var showingQueue = false
     @FocusState private var focused: Bool
     @ObservedObject private var notifications = NotificationScheduler.shared
@@ -44,9 +43,10 @@ struct TimerQueueView: View {
                     HStack(spacing: 6) {
                         Button(control.pausedRemaining == nil ? "Pause" : "Resume", systemImage: control.pausedRemaining == nil ? "pause" : "play") {
                             act(control.pausedRemaining == nil ? "pause" : "resume")
-                        }.accessibilityIdentifier("timers.pause-resume")
+                        }.labelStyle(.iconOnly).accessibilityIdentifier("timers.pause-resume")
                         Button("Done", systemImage: "checkmark") { act("done") }
-                            .tint(.accentColor).accessibilityLabel("Done & Next").accessibilityIdentifier("timers.done")
+                            .labelStyle(.iconOnly).buttonStyle(.borderedProminent)
+                            .accessibilityLabel("Done & Next").accessibilityIdentifier("timers.done")
                     }.buttonStyle(.bordered)
                     Button("Queue · \(store.ledger.waitingTimers.count)", systemImage: "list.bullet") { showingQueue = true }
                         .font(.caption).buttonStyle(.plain).frame(minHeight: 32).accessibilityIdentifier("timers.queue")
@@ -58,17 +58,14 @@ struct TimerQueueView: View {
             #endif
         }
         .navigationTitle("Timer queue")
+        #if !os(watchOS)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                #if os(watchOS)
-                Button("Alarm settings", systemImage: "gearshape") { showingAlarmSettings = true }
-                #else
                 Button("About timers", systemImage: "info.circle") { showingHelp = true }
-                #endif
             }
         }
+        #endif
         #if os(watchOS)
-        .sheet(isPresented: $showingAlarmSettings) { TimerAlarmSettingsView() }
         .sheet(isPresented: $showingQueue) {
             NavigationStack {
                 TimelineView(.periodic(from: Date(), by: 1)) { timeline in queue(at: timeline.date) }
@@ -177,6 +174,10 @@ struct TimerQueueView: View {
                 if store.ledger.currentTimer != nil, !notifications.permissionGranted {
                     Button("Enable timer notifications") { requestAlerts() }.font(.caption)
                 }
+                #if os(watchOS)
+                NavigationLink("Alarm settings", destination: TimerAlarmSettingsView())
+                    .accessibilityIdentifier("timers.alarm-settings")
+                #endif
             }
     }
     private var canControl: Bool { LedgerStore.isWatch || store.ledger.timerControl?.onWatch != true }

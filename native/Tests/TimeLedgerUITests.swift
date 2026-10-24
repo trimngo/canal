@@ -1,6 +1,44 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testUrgentInboxShowsUnrankedIdeasAndCorrectionPersistsWithoutRanking() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-urgent-inbox"]; app.launch()
+        openInbox(app)
+        let urgent = app.staticTexts["inbox.urgent-title"]
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent (3)")
+        let dismiss = app.buttons["inbox.urgent.dismiss.alan"]
+        reveal(dismiss, in: app); dismiss.tap()
+        XCTAssertEqual(urgent.label, "Urgent (2)")
+        XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
+        recordScreen("InboxUrgentWithoutRanking", in: app)
+        app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent (2)")
+        XCTAssertFalse(app.buttons["inbox.urgent.dismiss.alan"].exists)
+        let title = app.staticTexts["inbox.ranked-title"]; reveal(title, in: app)
+        XCTAssertTrue(title.label.contains("(1)"))
+    }
+    func testAutomaticMatchingSettingsCanAddPhraseAndCategoryRule() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-urgent-inbox"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["settings.matching"].tap()
+        let test = element(app, "matching.test"); reveal(test, in: app)
+        test.tap(); test.typeText("Playing piano")
+        XCTAssertEqual(app.staticTexts["matching.test-categories"].label, "Music")
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let phrase = app.textFields["matching.new-rule-phrase"]; reveal(phrase, in: app)
+        phrase.tap(); phrase.typeText("cello")
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let category = app.buttons["matching.new-rule-category"]; reveal(category, in: app); category.tap()
+        app.buttons["Music"].tap()
+        let add = app.buttons["matching.add-rule"]; reveal(add, in: app); add.tap()
+        recordScreen("AutomaticMatchingSettings", in: app)
+        let urgency = app.buttons["matching.urgency"]; reveal(urgency, in: app); urgency.tap()
+        let newPhrase = app.textFields["matching.new-urgency-phrase"]; reveal(newPhrase, in: app)
+        newPhrase.tap(); newPhrase.typeText("renew passport")
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let addPhrase = app.buttons["matching.add-urgency-phrase"]; reveal(addPhrase, in: app); addPhrase.tap()
+        XCTAssertTrue(app.staticTexts["renew passport"].exists)
+    }
     func testTimerQueueRestartDoneNextPauseAndPersistence() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]

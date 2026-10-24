@@ -6,6 +6,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
         app.launch()
         XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 30))
+        allowTimerNotifications(app)
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         record("WatchTimerExpired", app)
         app.buttons["timers.restart"].tap()
@@ -26,10 +27,16 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-open", "--ui-timer-dictation"]
         app.launch()
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
+        allowTimerNotifications(app)
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         record("WatchTimerDictationSaved", app)
     }
     override func setUpWithError() throws { continueAfterFailure = false }
+    private func allowTimerNotifications(_ app: XCUIApplication) {
+        let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")
+        if carousel.alerts.buttons["Allow"].waitForExistence(timeout: 2) { carousel.alerts.buttons["Allow"].tap() }
+        if app.alerts.buttons["Allow"].waitForExistence(timeout: 1) { app.alerts.buttons["Allow"].tap() }
+    }
     override func tearDownWithError() throws {
         if testRun?.hasSucceeded == false {
             let app = XCUIApplication()

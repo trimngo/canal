@@ -31,7 +31,7 @@ jobs:
         run: bash native/scripts/validate.sh
       - name: Test timer expiry, restart, next, pause and persistence
         run: |
-          xcodebuild -project native/TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$TIMER_PHONE" -derivedDataPath native/build -resultBundlePath native/build/TimerPhone.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueRestartDoneNextPauseAndPersistence -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueCanRemoveWaitingTaskAndDoesNotCreateActivityLogs test
+          xcodebuild -project native/TimeLedger.xcodeproj -scheme TimeLedger -destination "platform=iOS Simulator,id=$TIMER_PHONE" -derivedDataPath native/build -resultBundlePath native/build/TimerPhone.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueRestartDoneNextPauseAndPersistence -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueCanRemoveWaitingTaskAndDoesNotCreateActivityLogs -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentInboxShowsUnrankedIdeasAndCorrectionPersistsWithoutRanking -only-testing:TimeLedgerUITests/TimeLedgerUITests/testAutomaticMatchingSettingsCanAddPhraseAndCategoryRule -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxAutoFocusesCaptureAndSavingNeverOpensRanking test
       - name: Compile standalone Watch alarm for physical devices
         run: xcodebuild -project native/TimeLedger.xcodeproj -scheme TimeLedgerWatch -destination 'generic/platform=watchOS' -derivedDataPath native/build-watch-device CODE_SIGNING_ALLOWED=NO build
       - name: Export timer interface review
