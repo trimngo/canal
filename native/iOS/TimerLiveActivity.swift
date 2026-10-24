@@ -7,7 +7,16 @@ import LedgerCore
 final class TimerLiveActivity {
     static let shared = TimerLiveActivity()
     private var last: TimerLiveAttributes.ContentState?
+    private var work: Task<Void, Never>?
     func refresh(_ ledger: Ledger) async {
+        let previous = work
+        let task = Task { @MainActor in
+            _ = await previous?.value
+            await self.refreshSerially(ledger)
+        }
+        work = task; await task.value
+    }
+    private func refreshSerially(_ ledger: Ledger) async {
         let activities = Activity<TimerLiveAttributes>.activities
         guard let timer = ledger.currentTimer, let control = ledger.timerControl else {
             for activity in activities { await activity.end(nil, dismissalPolicy: .immediate) }
@@ -16,12 +25,13 @@ final class TimerLiveActivity {
         let state = TimerLiveAttributes.ContentState(title: timer.title, dueAt: control.dueAt,
             pausedRemaining: control.pausedRemaining, duration: timer.duration)
         let content = ActivityContent(state: state, staleDate: control.dueAt)
-        for activity in activities where activity.attributes.taskID != timer.id { await activity.end(nil, dismissalPolicy: .immediate) }
-        if let activity = activities.first(where: { $0.attributes.taskID == timer.id }) {
+        // One Live Activity spans task transitions, including changes received
+        // while iOS is backgrounded. Creating a new activity would require foreground.
+        if let activity = activities.first {
             if last != state { await activity.update(content); last = state }
         } else if ActivityAuthorizationInfo().areActivitiesEnabled, UIApplication.shared.applicationState == .active {
             do {
-                _ = try Activity.request(attributes: TimerLiveAttributes(taskID: timer.id), content: content, pushType: nil)
+                _ = try Activity.request(attributes: TimerLiveAttributes(queueID: "main"), content: content, pushType: nil)
                 last = state
             } catch { /* Opening the queue retries; an unavailable mirror cannot stop a Watch timer. */ }
         }

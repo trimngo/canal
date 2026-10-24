@@ -37,12 +37,11 @@ struct TimerQueueView: View {
         .navigationTitle("Timer queue")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Menu("Timer options", systemImage: "ellipsis") {
-                    #if os(watchOS)
-                    Button("Alarm settings") { showingAlarmSettings = true }
-                    #endif
-                    Button("About timers") { showingHelp = true }
-                }
+                #if os(watchOS)
+                Button("Alarm settings", systemImage: "gearshape") { showingAlarmSettings = true }
+                #else
+                Button("About timers", systemImage: "info.circle") { showingHelp = true }
+                #endif
             }
         }
         #if os(watchOS)
@@ -90,10 +89,15 @@ struct TimerQueueView: View {
                                 Button(control.pausedRemaining == nil ? "Pause" : "Resume", systemImage: control.pausedRemaining == nil ? "pause" : "play") {
                                     act(control.pausedRemaining == nil ? "pause" : "resume")
                                 }.accessibilityIdentifier("timers.pause-resume")
+                                #if os(watchOS)
+                                Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
+                                Button("Skip task") { remove(task.id) }
+                                #else
                                 Menu("More", systemImage: "ellipsis") {
                                     Button("Restart") { act("restart") }
                                     Button("Skip task") { remove(task.id) }
                                 }
+                                #endif
                             }
                         } else {
                             Text("Use your Watch for Done & Next, Restart, or Pause.").font(.caption).foregroundStyle(.secondary)
@@ -214,6 +218,8 @@ private struct TimerAlarmSettingsView: View {
                 }
                 Button("Preview haptic") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }
                 Text("Alarm sound follows your Watch’s system settings. Repeating haptics use the Watch’s system alarm, limited to about 30 minutes.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Text("Stop silences the system alarm. Open shows the expired task with Done & Next and Restart. The Watch runs the timer without your phone.")
                     .font(.caption2).foregroundStyle(.secondary)
             }.navigationTitle("Alarm settings")
                 .onChange(of: pattern) { _, _ in WatchTimerAlarm.shared.refreshHaptics() }

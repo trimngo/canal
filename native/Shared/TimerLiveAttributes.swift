@@ -9,6 +9,6 @@ struct TimerLiveAttributes: ActivityAttributes {
         var pausedRemaining: Double?
         var duration: Double
     }
-    var taskID: String
+    var queueID: String
 }
 #endif
