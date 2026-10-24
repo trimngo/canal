@@ -8,6 +8,7 @@ public struct DailyComparisonRow: Identifiable, Equatable, Sendable {
     public let averageMinutes: Double
     public let averagePercent: Double
     public let unreviewedMinutes: Double
+    public let averageUnreviewedMinutes: Double
     public var minuteChange: Double { minutes - averageMinutes }
     public var percentagePointChange: Double { percent - averagePercent }
 }
@@ -42,7 +43,8 @@ extension Ledger {
             return DailyComparisonRow(id: id, name: name, minutes: minutes, percent: selected.percent(minutes),
                 averageMinutes: average,
                 averagePercent: count > 0 ? baseline.reduce(0) { $0 + $1.percent($1.directMinutes[id, default: 0]) } / count : 0,
-                unreviewedMinutes: selected.unreviewedDirectMinutes[id, default: 0])
+                unreviewedMinutes: selected.unreviewedDirectMinutes[id, default: 0],
+                averageUnreviewedMinutes: count > 0 ? baseline.reduce(0) { $0 + $1.unreviewedDirectMinutes[id, default: 0] } / count : 0)
         }.sorted { abs($0.minuteChange) == abs($1.minuteChange) ? $0.name < $1.name : abs($0.minuteChange) > abs($1.minuteChange) }
         return DailyComparison(day: day, baselineStart: lower, baselineEnd: upper, representedDays: baseline.count,
             isToday: day == today, hasData: selected.sufficient, rows: rows)

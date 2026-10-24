@@ -49,6 +49,7 @@ struct DailyComparisonView: View {
                                     Text(report.representedDays > 0 ? average(row) : "—").foregroundStyle(.secondary).frame(width: 65, alignment: .trailing)
                                     Text(report.hasData && report.representedDays > 0 ? change(row) : "—").frame(width: 65, alignment: .trailing)
                                 }.font(.caption.monospacedDigit())
+                                if row.averageUnreviewedMinutes > 0 { Text("Average includes \(store.duration(row.averageUnreviewedMinutes))/day awaiting category review").font(.caption2).foregroundStyle(.secondary) }
                                 if row.unreviewedMinutes > 0 { Text("Includes \(store.duration(row.unreviewedMinutes)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
                             }.padding(.vertical, 12).accessibilityElement(children: .combine).accessibilityIdentifier("comparison.row.\(row.id)")
                             Divider()

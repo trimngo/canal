@@ -29,6 +29,8 @@ public struct OfflineCategoryModel: Sendable {
     public let examples: [CategoryExample]
     private let categories: [LedgerCategory]
     private let tokensByGroup: [String: Set<String>]
+    private let occurrences: [String: [String: Int]]
+    private let acronyms: [String: Set<String>]
     private let labels: [String: [String]]
     private static let stop = Set("a an and are as at be been by do doing for from go going have i in is it just me my of on or some that the then this to was were with you your need want still about work working task idea thing today tomorrow yesterday now".split(separator: " ").map(String.init))
     private static func tokens(_ text: String) -> Set<String> {
@@ -44,15 +46,21 @@ public struct OfflineCategoryModel: Sendable {
             return ids.isEmpty ? nil : CategoryExample(text: capture.text, categoryIDs: ids)
         }
         var words: [String: Set<String>] = [:], values: [String: [String]] = [:]
+        var counts: [String: [String: Int]] = [:], abbreviations: [String: Set<String>] = [:]
         for example in examples {
             let key = example.categoryIDs.joined(separator: "|")
             words[key, default: []].formUnion(Self.tokens(example.text)); values[key] = example.categoryIDs
+            for word in Self.tokens(example.text) { counts[key, default: [:]][word, default: 0] += 1 }
+            for word in example.text.components(separatedBy: CharacterSet.alphanumerics.inverted) where (3...8).contains(word.count) && word.contains(where: \.isUppercase) && word.allSatisfy({ $0.isUppercase || $0.isNumber }) {
+                abbreviations[key, default: []].insert(OfflineGrouping.normalized(word))
+            }
         }
-        tokensByGroup = words; labels = values
+        tokensByGroup = words; labels = values; occurrences = counts; acronyms = abbreviations
     }
     public func suggest(_ text: String, semantic: [SemanticCategoryMatch] = []) -> CategorySuggestion? {
         let normalized = OfflineGrouping.normalized(text), query = Self.tokens(text)
         guard !query.isEmpty else { return nil }
+        if Set(normalized.split(separator: " ").map(String.init)).isDisjoint(with: ["not", "never"]) == false { return nil }
         func result(_ ids: [String], _ reason: String) -> CategorySuggestion {
             CategorySuggestion(categoryIDs: ids, reason: reason, sourceText: text)
         }
@@ -78,9 +86,10 @@ public struct OfflineCategoryModel: Sendable {
             if !unique.isEmpty { scores.append((key, unique.count, Set(unique))) }
         }
         scores.sort { $0.1 > $1.1 }
-        if let best = scores.first, best.1 >= 2, scores.count == 1 || best.1 >= scores[1].1 + 2,
-           let ids = labels[best.0] {
-            return result(ids, "Matched confirmed vocabulary: " + best.2.sorted().prefix(2).joined(separator: ", "))
+        if let best = scores.first, scores.count == 1 || best.1 >= scores[1].1 + 2, let ids = labels[best.0] {
+            let distinctive = best.2.first { acronyms[best.0, default: []].contains($0) || ($0.count >= 5 && occurrences[best.0]?[$0] ?? 0 >= 2) }
+            if best.1 >= 2 { return result(ids, "Matched confirmed vocabulary: " + best.2.sorted().prefix(2).joined(separator: ", ")) }
+            if let word = distinctive { return result(ids, "Matched confirmed word: " + (acronyms[best.0, default: []].contains(word) ? word.uppercased() : word)) }
         }
         var grouped: [String: Double] = [:]
         for match in semantic where !match.categoryIDs.isEmpty {

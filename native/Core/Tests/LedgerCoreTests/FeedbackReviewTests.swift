@@ -193,4 +193,22 @@ final class FeedbackReviewTests: XCTestCase {
         XCTAssertEqual(watch.effectiveCategoryIDs(for: watch.entries[0]), ["digs"])
     }
 
+    func testLearnsDistinctiveAcronymsAndRepeatedWordsButAbstainsOnNegation() throws {
+        var value = ledger()
+        try value.saveSample(at: now, activity: "Preparing SDES slides", categoryIDs: ["digs"], writer: "p", now: now)
+        XCTAssertEqual(OfflineCategoryModel(ledger: value).suggest("SDES")?.categoryIDs, ["digs"])
+        XCTAssertNil(OfflineCategoryModel(ledger: value).suggest("Not doing DIGS"))
+        try value.saveSample(at: now, activity: "Practicing guitar", categoryIDs: ["music"], writer: "p", now: now)
+        XCTAssertNil(OfflineCategoryModel(ledger: value).suggest("Tuning guitar"))
+        try value.saveSample(at: now, activity: "Learning guitar", categoryIDs: ["music"], writer: "p", now: now)
+        XCTAssertEqual(OfflineCategoryModel(ledger: value).suggest("Tuning guitar")?.categoryIDs, ["music"])
+    }
+    func testHistoricalComparisonReportsUnreviewedBaselineAsSubset() throws {
+        var value = ledger(); let timestamp = now.addingTimeInterval(-86400)
+        try value.saveSample(id: "s", at: timestamp, activity: "Preparing", categoryIDs: [], writer: "p", now: now)
+        try value.suggestCategories(CategorySuggestion(categoryIDs: ["digs"], reason: "Matched", sourceText: "Preparing"), logID: "s", writer: "p")
+        let row = try XCTUnwrap(value.dailyComparison(on: now, now: now, calendar: cal).rows.first { $0.id == "digs" })
+        XCTAssertEqual(row.averageUnreviewedMinutes, 15); XCTAssertEqual(row.averageMinutes, 15)
+    }
+
 }
