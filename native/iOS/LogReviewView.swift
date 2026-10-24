@@ -98,7 +98,7 @@ struct LogReviewView: View {
                     loaded = true; loadCurrent()
                 }
             }
-            .onChange(of: item) { _, _ in loadCurrent() }
+            .onChange(of: current?.id) { _, _ in loadCurrent() }
         }
     }
     private func loadCurrent() {
