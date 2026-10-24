@@ -7,9 +7,16 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Close"].tap(); app.tabBars.buttons["Settings"].tap()
         app.buttons["settings.timers"].tap()
         let setting = element(app, "timers.auto-next")
-        XCTAssertTrue(setting.waitForExistence(timeout: 5)); setting.tap()
+        XCTAssertTrue(setting.waitForExistence(timeout: 5))
+        XCTAssertEqual(setting.value as? String, "1")
+        // SwiftUI's accessibility frame includes the label. Tap the actual
+        // switch track, rather than the label in the middle of that frame.
+        setting.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let off = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0"), object: setting)
+        XCTAssertEqual(XCTWaiter.wait(for: [off], timeout: 5), .completed)
         app.tabBars.buttons["Inbox"].tap(); app.buttons["inbox.timers"].tap()
         XCTAssertTrue(app.buttons["timers.done"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["timers.done"].label, "Done")
         app.buttons["timers.done"].tap()
         XCTAssertTrue(app.buttons["timers.start"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["timers.current"].exists)

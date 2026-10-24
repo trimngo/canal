@@ -11,6 +11,7 @@ final class WatchQuickLogUITests: XCTestCase {
         record("WatchTimerExpired", app)
         app.buttons["timers.restart"].tap()
         XCTAssertTrue(app.buttons["timers.pause-resume"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["timers.waiting.timer-email"].isHittable)
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         app.buttons["timers.done"].tap()
         let email = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Answer email"), object: app.staticTexts["timers.current"])
@@ -45,6 +46,7 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(suggestion.isHittable)
         record("WatchTimerSystemInputVisible", app)
         suggestion.tap()
+        allowTimerNotifications(app)
         let added = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "timers.waiting.", "Stretch")).firstMatch
         for _ in 0..<5 { if added.exists { break }; app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(added.waitForExistence(timeout: 10))

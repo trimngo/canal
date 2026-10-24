@@ -31,15 +31,6 @@ struct TimerQueueView: View {
             }
         }
         #endif
-        #if os(watchOS)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button("Add timer", systemImage: "mic.fill") { dictate() }
-                .buttonStyle(.borderedProminent).controlSize(.small)
-                .disabled(inputOpen || !store.storageAvailable)
-                .accessibilityIdentifier("timers.dictate")
-                .padding(.horizontal, 4).padding(.top, 4).background(.black)
-        }
-        #endif
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
             Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nThe phone mirrors the last synced timer. Open Dash on iPhone once to start its Lock Screen Live Activity; updates need a connection. The Watch runs independently.")
         }
@@ -59,7 +50,8 @@ struct TimerQueueView: View {
     }
     #if os(watchOS)
     private func watchTimers(at now: Date) -> some View {
-        ScrollView {
+        VStack(spacing: 4) {
+          ScrollView {
             LazyVStack(alignment: .leading, spacing: 6) {
                 if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -77,6 +69,7 @@ struct TimerQueueView: View {
                     }
                     let progress = min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration)))
                     ProgressView(value: progress).progressViewStyle(.linear).tint(control.isFinished(at: now) ? .orange : .mint)
+                        .frame(height: 4).clipped()
                         .accessibilityLabel("Timer progress").accessibilityValue("\(Int(progress * 100)) percent complete")
                         .accessibilityIdentifier("timers.progress")
                     HStack(spacing: 6) {
@@ -87,11 +80,11 @@ struct TimerQueueView: View {
                         }
                         watchRestartButton
                         Button(doneTitle, systemImage: "checkmark") { act("done") }
-                            .labelStyle(.iconOnly).buttonStyle(.borderedProminent).accessibilityIdentifier("timers.done")
-                    }.buttonStyle(.bordered).controlSize(.small)
+                            .labelStyle(.iconOnly).buttonStyle(CompactTimerButtonStyle(prominent: true)).accessibilityIdentifier("timers.done")
+                    }.buttonStyle(CompactTimerButtonStyle())
                     Divider()
                 } else if !store.ledger.waitingTimers.isEmpty {
-                    Button("Start next task") { act("start") }.accessibilityIdentifier("timers.start")
+                    Button("Start next task") { act("start") }.buttonStyle(CompactTimerButtonStyle(prominent: true)).accessibilityIdentifier("timers.start")
                 } else { Text("No timers yet").foregroundStyle(.secondary) }
                 let waiting = store.ledger.waitingTimers
                 Text("Up next · \(waiting.count)").font(.caption2).foregroundStyle(.secondary)
@@ -110,18 +103,24 @@ struct TimerQueueView: View {
                 if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
                 if !draft.isEmpty {
                     TextField("Timer task", text: $draft, axis: .vertical).onSubmit(save).accessibilityIdentifier("timers.draft")
-                    Button("Queue timer", action: save).accessibilityIdentifier("timers.add")
+                    Button("Queue timer", action: save).buttonStyle(CompactTimerButtonStyle()).accessibilityIdentifier("timers.add")
                 }
                 if let control = store.ledger.timerControl, store.ledger.currentTimer != nil {
-                    Button("Skip current task") { if let id = store.ledger.currentTimer?.id { remove(id) } }.font(.caption)
+                    Button("Skip current task") { if let id = store.ledger.currentTimer?.id { remove(id) } }.font(.caption).buttonStyle(.plain).frame(minHeight: 32)
                     if control.owner != store.writer {
-                        Button("Use Watch for alerts") { act("here") }.font(.caption).accessibilityIdentifier("timers.use-watch")
+                        Button("Use Watch for alerts") { act("here") }.font(.caption).buttonStyle(.plain).frame(minHeight: 32).accessibilityIdentifier("timers.use-watch")
                     }
                     if !alarm.status.isEmpty { Text(alarm.status).font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("timers.alarm-status") }
                 }
                 NavigationLink("Timer settings", destination: TimerSettingsView()).font(.caption)
+                    .buttonStyle(.plain).frame(minHeight: 32)
                     .accessibilityIdentifier("timers.alarm-settings")
-            }.padding(.horizontal, 6)
+            }.padding(.leading, 6).padding(.trailing, 12)
+          }.frame(maxWidth: .infinity, maxHeight: .infinity)
+          Button("Add timer", systemImage: "mic.fill") { dictate() }
+              .font(.caption).buttonStyle(CompactTimerButtonStyle(prominent: true))
+              .disabled(inputOpen || !store.storageAvailable).accessibilityIdentifier("timers.dictate")
+              .padding(.horizontal, 6).padding(.bottom, 2)
         }
     }
     @ViewBuilder private var watchRestartButton: some View {
@@ -261,6 +260,18 @@ struct TimerQueueView: View {
     }
     #endif
 }
+
+#if os(watchOS)
+private struct CompactTimerButtonStyle: ButtonStyle {
+    var prominent = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.frame(maxWidth: .infinity).frame(height: 32)
+            .foregroundStyle(prominent ? Color.black : Color.mint)
+            .background(Capsule().fill(prominent ? Color.mint : Color.mint.opacity(0.18)))
+            .opacity(configuration.isPressed ? 0.65 : 1)
+    }
+}
+#endif
 
 struct TimerSettingsView: View {
     @EnvironmentObject private var store: LedgerStore
