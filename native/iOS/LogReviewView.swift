@@ -50,7 +50,6 @@ struct LogReviewView: View {
                     CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood,
                         saveActivity: { if event == nil { try store.updateLogActivity(id: entry.id, activity: $0) } },
                         activityDraft: Binding(get: { activityDraft }, set: { if current?.id == entry.id { activityDraft = $0 } }), showsKeyboardDone: false)
-                        .id(item?.id)
                         .safeAreaInset(edge: .top, spacing: 0) {
                             VStack(alignment: .leading, spacing: 6) {
                                 if let event {
@@ -74,6 +73,7 @@ struct LogReviewView: View {
                                 if event != nil { Button("Skip event") { saveAndAdvance(skip: true) }.accessibilityIdentifier("log-review.skip-event") }
                             }.padding().background(.bar)
                         }
+                        .id(item?.id)
                 } else { Color.clear }
             }
             .navigationTitle("Review logs").navigationBarTitleDisplayMode(.inline)

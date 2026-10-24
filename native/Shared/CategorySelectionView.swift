@@ -92,7 +92,7 @@ struct CategorySelectionList: View {
             #endif
         }
             #if os(iOS)
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.never)
             #endif
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {

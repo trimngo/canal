@@ -695,9 +695,10 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.updateCaptureText(id: capture.id, text: text, writer: writer); try commit(draft)
     }
 
-    func reviewCapture(_ capture: Capture, text: String, categoryIDs: [String]) throws {
+    func reviewCapture(_ capture: Capture, text: String, categoryIDs: [String], notes: String? = nil) throws {
         var draft = ledger
-        try draft.updateCaptureText(id: capture.id, text: text, writer: writer)
+        if let notes { try draft.updateCapture(id: capture.id, text: text, notes: notes, writer: writer) }
+        else { try draft.updateCaptureText(id: capture.id, text: text, writer: writer) }
         try draft.categorizeCapture(id: capture.id, categoryIDs: categoryIDs, writer: writer)
         try commit(draft)
     }

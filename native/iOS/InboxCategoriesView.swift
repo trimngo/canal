@@ -74,6 +74,8 @@ struct CaptureCategoryReviewView: View {
     @State private var index = 0
     @State private var categories: [String] = []
     @State private var text = ""
+    @State private var notesDraft = ""
+    @State private var detailsExpanded = false
     @State private var error: String?
     @State private var snoozing: Capture?
     private var current: Capture? {
@@ -89,14 +91,23 @@ struct CaptureCategoryReviewView: View {
                         activityDraft: Binding(get: { text }, set: { if current?.id == capture.id { text = $0 } }),
                         showsKeyboardDone: false,
                         selectionHelp: "These are the same categories as your logs. Categorization does not change ranking or add logged time.")
-                        .id(capture.id)
                         .safeAreaInset(edge: .top, spacing: 0) {
                             VStack(alignment: .leading, spacing: 0) {
                                 if let suggestion = capture.categorySuggestion { Text("Suggested · \(suggestion.reason)").font(.caption).foregroundStyle(.secondary) }
-                                CaptureReviewActions(capture: capture, identifier: "idea-review", onHandled: advance, onSnooze: { snoozing = $0 })
-                                InlineCaptureNotes(capture: capture, identifier: "idea-review.notes")
+                                CaptureReviewActions(capture: capture, identifier: "idea-review",
+                                    beforeChange: { try store.reviewCapture(capture, text: text, categoryIDs: categories, notes: notesDraft) },
+                                    onDetails: { detailsExpanded.toggle() }, onHandled: advance, onSnooze: { snoozing = $0 })
+                                if detailsExpanded {
+                                    InlineEntryText(text: capture.notes ?? "", identifier: "idea-review.notes", allowEmpty: true,
+                                        draftText: Binding(get: { notesDraft }, set: { if current?.id == capture.id { notesDraft = $0 } })) { value in
+                                            guard current?.id == capture.id else { return }
+                                            notesDraft = value
+                                            try store.updateCapture(capture, text: text, notes: value)
+                                        }.padding(.bottom, 8)
+                                }
                             }.padding(.horizontal).background(.bar)
                         }
+                        .id(capture.id)
                 } else { Color.clear }
             }.navigationTitle("Categorize ideas").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
@@ -115,7 +126,7 @@ struct CaptureCategoryReviewView: View {
                         Button("Save & next") {
                             UIApplication.shared.dismissLedgerKeyboard()
                             guard let capture = current else { return }
-                            do { try store.reviewCapture(capture, text: text, categoryIDs: categories); advance() }
+                            do { try store.reviewCapture(capture, text: text, categoryIDs: categories, notes: notesDraft); advance() }
                             catch { self.error = error.localizedDescription }
                         }.disabled(current == nil || !store.storageAvailable).accessibilityIdentifier("idea-review.save-next")
                     }
@@ -129,6 +140,6 @@ struct CaptureCategoryReviewView: View {
         let existing = Set(store.ledger.captures.filter { $0.deletedAt == nil }.map(\.id))
         while index < captureIDs.count, !existing.contains(captureIDs[index]) { index += 1 }
         guard let capture = current else { dismiss(); return }
-        categories = store.ledger.categoryIDs(for: capture); text = capture.text; error = nil
+        categories = store.ledger.categoryIDs(for: capture); text = capture.text; notesDraft = capture.notes ?? ""; detailsExpanded = false; error = nil
     }
 }
