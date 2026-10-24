@@ -41,7 +41,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     func configureActions() {
         let reply = UNTextInputNotificationAction(identifier: "QUICK_LOG", title: "Dictate log", options: [],
             textInputButtonTitle: "Save", textInputPlaceholder: "What are you doing now?")
-        let done = UNNotificationAction(identifier: "TIMER_DONE", title: "Done & Next", options: [.foreground])
+        let done = UNNotificationAction(identifier: "TIMER_DONE", title: "Done", options: [.foreground])
         let restart = UNNotificationAction(identifier: "TIMER_RESTART", title: "Restart", options: [.foreground])
         center.setNotificationCategories([UNNotificationCategory(identifier: "CHECKIN", actions: [reply], intentIdentifiers: []),
             UNNotificationCategory(identifier: "TASK_TIMER", actions: [done, restart], intentIdentifiers: [])])
@@ -247,6 +247,16 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     private func applyTimerSerially(_ ledger: Ledger, writer: String) async {
         configureActions()
         let pending = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("task-timer-") }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-quiet-timer-alerts") {
+            // Fake expired timers are for UI/control tests. Their simulator-only
+            // fallback banner must not cover the controls being exercised.
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier))
+            let delivered = await center.deliveredNotifications().filter { $0.request.identifier.hasPrefix("task-timer-") }
+            center.removeDeliveredNotifications(withIdentifiers: delivered.map { $0.request.identifier })
+            return
+        }
+        #endif
         let control = ledger.timerControl
         let wanted = ledger.currentTimer != nil && control?.owner == writer && control?.dueAt != nil ? control?.token : nil
         center.removePendingNotificationRequests(withIdentifiers: pending.filter { $0.identifier != wanted }.map(\.identifier))
