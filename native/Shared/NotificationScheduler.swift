@@ -257,7 +257,6 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             return
         }
         #if os(watchOS)
-        await WatchTimerAlarm.shared.waitForArming()
         if WatchTimerAlarm.shared.isArmed(for: control.token) {
             center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier))
             timerStatus = WatchTimerAlarm.shared.status; return

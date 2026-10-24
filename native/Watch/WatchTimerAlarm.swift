@@ -10,13 +10,11 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
     @Published private(set) var status = ""
     private var session: WKExtendedRuntimeSession?
     private var token: String?
-    private var arming: Task<Void, Never>?
     private let scheduledKey = "timers.watch-alarm.scheduled"
     private let silencedKey = "timers.watch-alarm.silenced"
     func isArmed(for token: String) -> Bool {
         UserDefaults.standard.string(forKey: scheduledKey) == token && UserDefaults.standard.string(forKey: silencedKey) != token
     }
-    func waitForArming() async { await arming?.value }
     func update(ledger: Ledger, writer: String) {
         guard ledger.currentTimer != nil, let control = ledger.timerControl, control.owner == writer, control.onWatch,
               let due = control.dueAt else { stop(); status = ledger.currentTimer == nil ? "" : "Paused"; return }
@@ -28,22 +26,16 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
         if isArmed(for: control.token) { status = due > Date() ? "Repeating alarm scheduled on Watch" : "Timer finished · waiting for you"; return }
         guard WKApplication.shared().applicationState == .active else { status = "Open Dash on Watch to arm the repeating alarm"; return }
         stop()
-        let expected = control.token
-        arming = Task { @MainActor [weak self] in
-            // Let invalidation finish before scheduling the next alarm.
-            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-            guard let self, LedgerStore.shared.ledger.timerControl?.token == expected,
-                  WKApplication.shared().applicationState == .active else { return }
-            let value = WKExtendedRuntimeSession()
-            self.session = value; self.token = expected; value.delegate = self
-            UserDefaults.standard.set(expected, forKey: self.scheduledKey)
-            self.status = "Repeating alarm scheduled on Watch"
-            value.start(at: max(due, Date().addingTimeInterval(1)))
-        }
+        // Arm before returning from the user's action. A delayed task can lose
+        // active state as soon as the person lowers their wrist after Done.
+        let value = WKExtendedRuntimeSession()
+        session = value; token = control.token; value.delegate = self
+        UserDefaults.standard.set(control.token, forKey: scheduledKey)
+        status = "Repeating alarm scheduled on Watch"
+        value.start(at: max(due, Date().addingTimeInterval(1)))
         #endif
     }
     private func stop() {
-        arming?.cancel(); arming = nil
         guard session == nil || WKApplication.shared().applicationState == .active else {
             status = "Open Dash on Watch to update the alarm"; return
         }

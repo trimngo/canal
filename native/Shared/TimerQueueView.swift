@@ -11,6 +11,7 @@ struct TimerQueueView: View {
     @State private var inputOpen = false
     @State private var showingHelp = false
     @State private var showingAlarmSettings = false
+    @State private var showingQueue = false
     @FocusState private var focused: Bool
     @ObservedObject private var notifications = NotificationScheduler.shared
     #if os(watchOS)
@@ -29,6 +30,28 @@ struct TimerQueueView: View {
                     Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
                         .buttonStyle(.bordered).accessibilityIdentifier("timers.restart")
                 }.padding(.horizontal, 8).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
+                VStack(spacing: 6) {
+                    Text(task.title).font(.headline).multilineTextAlignment(.center).lineLimit(2)
+                        .accessibilityIdentifier("timers.current")
+                    if let due = control.dueAt {
+                        Text(timerInterval: due.addingTimeInterval(-task.duration)...due, countsDown: true)
+                            .font(.largeTitle.monospacedDigit()).accessibilityIdentifier("timers.countdown")
+                    } else {
+                        Text("Paused · \(clock(control.remaining(at: timeline.date)))")
+                            .font(.title3.monospacedDigit()).accessibilityIdentifier("timers.paused")
+                    }
+                    HStack(spacing: 6) {
+                        Button(control.pausedRemaining == nil ? "Pause" : "Resume", systemImage: control.pausedRemaining == nil ? "pause" : "play") {
+                            act(control.pausedRemaining == nil ? "pause" : "resume")
+                        }.accessibilityIdentifier("timers.pause-resume")
+                        Button("Done", systemImage: "checkmark") { act("done") }
+                            .tint(.accentColor).accessibilityLabel("Done & Next").accessibilityIdentifier("timers.done")
+                    }.buttonStyle(.bordered)
+                    Button("Queue · \(store.ledger.waitingTimers.count)", systemImage: "list.bullet") { showingQueue = true }
+                        .font(.caption).buttonStyle(.plain).frame(minHeight: 32).accessibilityIdentifier("timers.queue")
+                    if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red).lineLimit(2) }
+                }.padding(.horizontal, 8).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else { queue(at: timeline.date) }
             #else
             queue(at: timeline.date)
@@ -46,6 +69,13 @@ struct TimerQueueView: View {
         }
         #if os(watchOS)
         .sheet(isPresented: $showingAlarmSettings) { TimerAlarmSettingsView() }
+        .sheet(isPresented: $showingQueue) {
+            NavigationStack {
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in queue(at: timeline.date) }
+                    .navigationTitle("Queued tasks")
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { showingQueue = false } } }
+            }
+        }
         #endif
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
             Text("The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nThe phone mirrors the last synced timer. Open Dash on iPhone once to start its Lock Screen Live Activity; updates need a connection. The Watch runs independently.")

@@ -123,7 +123,8 @@ extension Ledger {
         return queuedTimers?.first { $0.id == id && $0.completedAt == nil && $0.deletedAt == nil }
     }
     public var waitingTimers: [QueuedTimer] {
-        (queuedTimers ?? []).filter { $0.completedAt == nil && $0.deletedAt == nil && $0.id != currentTimer?.id }
+        let activeID = currentTimer?.id
+        return (queuedTimers ?? []).filter { $0.completedAt == nil && $0.deletedAt == nil && $0.id != activeID }
             .sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt < $1.createdAt }
     }
     public mutating func enqueueTimer(id: String = UUID().uuidString, title: String, duration: TimeInterval, writer: String, onWatch: Bool, now: Date = Date()) throws {
