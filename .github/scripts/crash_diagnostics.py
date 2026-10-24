@@ -86,6 +86,32 @@ def collect(api):
     return {"submitted_reports_checked": len(reports), "summaries": summaries}
 
 
+def collect_build_status(api):
+    """Read release availability without emitting tester data or API identifiers."""
+    apps = api.get("/v1/apps", {"filter[bundleId]": "com.trimngo.TimeLedger", "limit": 1})["data"]
+    if not apps:
+        raise RuntimeError("Time Ledger app record was not found.")
+    builds = api.get("/v1/builds", {"filter[app]": apps[0]["id"], "sort": "-uploadedDate", "limit": 3,
+                                   "fields[builds]": "version,processingState,expired"})["data"]
+    processing_states = {"PROCESSING", "FAILED", "INVALID", "VALID"}
+    beta_states = {"PROCESSING", "PROCESSING_EXCEPTION", "MISSING_EXPORT_COMPLIANCE", "READY_FOR_BETA_TESTING",
+                   "IN_BETA_TESTING", "EXPIRED", "IN_EXPORT_COMPLIANCE_REVIEW"}
+    statuses = []
+    for build in builds:
+        attributes = build.get("attributes", {})
+        version = attributes.get("version", "")
+        if not isinstance(version, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version):
+            continue
+        state = attributes.get("processingState")
+        status = {"build": version, "processing": state if state in processing_states else "UNKNOWN",
+                  "expired": attributes.get("expired") is True}
+        detail = api.get(f"/v1/builds/{build['id']}/buildBetaDetail").get("data") or {}
+        internal = detail.get("attributes", {}).get("internalBuildState")
+        status["internal_testing"] = internal if internal in beta_states else "UNKNOWN"
+        statuses.append(status)
+    return statuses
+
+
 def main():
     import jwt
     try:
@@ -96,7 +122,9 @@ def main():
     except Exception:
         raise RuntimeError("Could not authenticate the Apple diagnostic request. Check the configured API key secrets.") from None
     try:
-        result = collect(AppleAPI(token))
+        api = AppleAPI(token)
+        result = collect(api)
+        result["recent_builds"] = collect_build_status(api)
     except (KeyError, TypeError):
         raise RuntimeError("Unexpected Apple diagnostic response. No private response content was printed.") from None
     output = json.dumps(result, sort_keys=True)

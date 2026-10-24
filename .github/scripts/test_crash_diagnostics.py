@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock
 import urllib.error
 
-from crash_diagnostics import AppleAPI, NoRedirect, collect, summarize
+from crash_diagnostics import AppleAPI, NoRedirect, collect, collect_build_status, summarize
 
 
 class DiagnosticPrivacyTests(unittest.TestCase):
@@ -41,6 +41,37 @@ class DiagnosticPrivacyTests(unittest.TestCase):
 
     def test_credential_cannot_follow_redirect(self):
         self.assertIsNone(NoRedirect().redirect_request(None, None, 302, "", {}, "https://example.com"))
+
+    def test_build_status_distinguishes_upload_processing_and_testing(self):
+        api = MagicMock()
+        api.get.side_effect = [
+            {"data": [{"id": "private-app"}]},
+            {"data": [{"id": "private-build", "attributes": {"version": "69", "processingState": "VALID", "expired": False}}]},
+            {"data": {"attributes": {"internalBuildState": "IN_BETA_TESTING", "private": "tester@example.com"}}},
+        ]
+        status = collect_build_status(api)
+        self.assertEqual(status, [{"build": "69", "processing": "VALID", "expired": False, "internal_testing": "IN_BETA_TESTING"}])
+        self.assertNotIn("private", json.dumps(status))
+        self.assertNotIn("tester@example.com", json.dumps(status))
+
+    def test_build_status_hides_unexpected_response_strings(self):
+        api = MagicMock()
+        api.get.side_effect = [
+            {"data": [{"id": "123"}]},
+            {"data": [{"id": "build", "attributes": {"version": "69", "processingState": "private-response"}},
+                      {"id": "other", "attributes": {"version": "private@example.com"}}]},
+            {"data": {"attributes": {"internalBuildState": "private-response"}}},
+        ]
+        status = collect_build_status(api)
+        self.assertEqual(status[0]["processing"], "UNKNOWN")
+        self.assertEqual(status[0]["internal_testing"], "UNKNOWN")
+        self.assertEqual(len(status), 1)
+        self.assertNotIn("private", json.dumps(status))
+
+    def test_no_uploaded_builds(self):
+        api = MagicMock()
+        api.get.side_effect = [{"data": [{"id": "123"}]}, {"data": []}]
+        self.assertEqual(collect_build_status(api), [])
 
 
 if __name__ == "__main__":
