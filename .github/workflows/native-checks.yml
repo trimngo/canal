@@ -79,15 +79,12 @@ jobs:
             xcrun xcresulttool get test-results summary --path native/build/UITests.xcresult > native/build/ui-review/summary.json
             xcrun xcresulttool export attachments --path native/build/UITests.xcresult --output-path native/build/ui-attachments
             python3 native/scripts/export-ui-review.py native/build/ui-attachments native/build/ui-review
-            python3 - <<'PYDIAG'
-            from pathlib import Path
-            import shutil
-            destination = Path('native/build/ui-review')
-            reports = Path.home() / 'Library/Logs/DiagnosticReports'
-            for source in reports.glob('TimeLedger*.ips'):
-                shutil.copy2(source, destination / source.name)
-            PYDIAG
           fi
+      - name: Collect simulator crash reports
+        if: always()
+        run: |
+          mkdir -p native/build/ui-review
+          python3 -c 'from pathlib import Path; import shutil; destination=Path("native/build/ui-review"); reports=Path.home()/"Library/Logs/DiagnosticReports"; [shutil.copy2(source,destination/source.name) for source in reports.glob("TimeLedger*.ips")]'
       - name: Save interface screenshots and summary
         if: always()
         uses: actions/upload-artifact@v4

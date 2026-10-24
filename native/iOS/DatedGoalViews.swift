@@ -136,7 +136,7 @@ struct CommitmentsView: View {
                         Button {
                             selectedCategory = CategoryDetailRequest(id: id, name: store.ledger.categories.first { $0.id == id }?.name ?? "Category")
                         } label: {
-                            HStack { Text(store.ledger.categoryPath(id)); Spacer(); Image(systemName: "chevron.right") }
+                            HStack { Text(store.ledger.categoryPath(id)); Spacer(); Image(systemName: "chevron.right") }.contentShape(Rectangle())
                         }.textCase(nil).accessibilityIdentifier("commitments.category.\(id)")
                     }
                 }
@@ -184,7 +184,7 @@ struct CommitmentsView: View {
                 Text("\(store.duration(row.actualMinutes)) of \(store.duration(row.targetMinutes))").font(.caption).foregroundStyle(.secondary)
                 let pending = today.unreviewed(for: row.id, ledger: store.ledger)
                 if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
-            }.padding(.vertical, 4)
+            }.padding(.vertical, 4).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("commitments.target.\(row.id)")
     }
     private func datedProgress(_ row: DatedGoalProgress, now: Date) -> some View {

@@ -57,7 +57,7 @@ struct DailyComparisonView: View {
                     }
                 }
             } else { ProgressView().frame(maxHeight: .infinity) }
-        }.accessibilityIdentifier("report.view.comparison")
+        }.accessibilityElement(children: .contain)
         .task(id: revision) {
             let ledger = store.ledger, day = day
             let job = Task.detached(priority: .userInitiated) { ledger.dailyComparison(on: day) }
