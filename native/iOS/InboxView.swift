@@ -88,10 +88,12 @@ struct InboxView: View {
                     Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
                 }
                 if searching {
-                    Section("Search results (\(searchResults.count))") {
+                    Section {
                         if searchResults.isEmpty { Text("No matching ideas.").foregroundStyle(.secondary) }
                         ForEach(searchResults) { captureRow($0) }
-                    }.accessibilityIdentifier("inbox.search-results")
+                    } header: {
+                        Text("Search results (\(searchResults.count))").accessibilityIdentifier("inbox.search-results")
+                    }
                 } else if showDone {
                     Section("Completed (\(completed.count))") {
                         if completed.isEmpty { Text("No completed captures.").foregroundStyle(.secondary) }
@@ -266,19 +268,28 @@ struct InboxCaptureRow: View {
     let capture: Capture
     let onRank: () -> Void
     let onSnooze: (Capture) -> Void
+    @State private var detailsExpanded = false
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 6) {
             Button {
                 do { try store.setCaptureDone(capture, done: !capture.isDone) } catch { store.report(error) }
             } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3).frame(width: 44, height: 44) }
                 .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
                 InlineEntryText(text: capture.text, identifier: "inbox.details.\(capture.id)") {
                     try store.updateCaptureText(capture, text: $0)
                 }
                 Text(metadata).font(.caption).foregroundStyle(.secondary)
-                CaptureCategoryButton(capture: capture, identifier: "inbox.category.\(capture.id)")
-                InlineCaptureNotes(capture: capture, identifier: "inbox.notes.\(capture.id)")
+                HStack(spacing: 4) {
+                    CaptureCategoryButton(capture: capture, identifier: "inbox.category.\(capture.id)", compact: true)
+                    Spacer(minLength: 0)
+                    Button { detailsExpanded.toggle() } label: {
+                        Image(systemName: detailsExpanded ? "text.bubble.fill" : "text.bubble").frame(width: 44, height: 44)
+                    }.buttonStyle(.borderless).accessibilityLabel(detailsExpanded ? "Hide details" : "Edit details").accessibilityIdentifier("inbox.details-toggle.\(capture.id)")
+                }
+                if detailsExpanded {
+                    InlineCaptureNotes(capture: capture, identifier: "inbox.notes.\(capture.id)", initiallyExpanded: true)
+                }
             }.frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 if !capture.isDone {
@@ -301,7 +312,7 @@ struct InboxCaptureRow: View {
             } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
                 .buttonStyle(.borderless).accessibilityLabel("Idea actions")
                 .accessibilityIdentifier("inbox.actions.\(capture.id)")
-        }.padding(.vertical, 4)
+        }.padding(.vertical, 0)
             .swipeActions { Button("Delete", role: .destructive) { remove(capture) } }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 if !capture.isDone, capture.isReference != true {
@@ -333,11 +344,14 @@ struct InboxCaptureRow: View {
     }
 }
 
-private struct InlineCaptureNotes: View {
+struct InlineCaptureNotes: View {
     @EnvironmentObject private var store: LedgerStore
     let capture: Capture
     let identifier: String
-    @State private var expanded = false
+    @State private var expanded: Bool
+    init(capture: Capture, identifier: String, initiallyExpanded: Bool = false) {
+        self.capture = capture; self.identifier = identifier; _expanded = State(initialValue: initiallyExpanded)
+    }
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -484,25 +498,7 @@ struct RankingView: View {
                 .accessibilityLabel("Choose: \(capture.text)")
             CaptureCategoryButton(capture: capture, identifier: "\(id).category")
             InlineCaptureNotes(capture: capture, identifier: "\(id).notes")
-            HStack {
-                Button("Snooze", systemImage: "moon.zzz") { snoozing = capture }
-                    .accessibilityIdentifier("\(id).snooze")
-                Spacer()
-                Menu {
-                    Button("Mark done") {
-                        do { try store.setCaptureDone(capture, done: true) } catch { store.report(error) }
-                    }.accessibilityIdentifier("\(id).done")
-                    Button("Move to Reference") {
-                        do { try store.setCaptureReference(capture, reference: true) } catch { store.report(error) }
-                    }.accessibilityIdentifier("\(id).reference")
-                } label: { Label("More", systemImage: "ellipsis.circle").frame(minWidth: 44, minHeight: 44) }
-                    .accessibilityIdentifier("\(id).actions")
-                Button(role: .destructive) {
-                    do { try store.deleteCapture(capture) } catch { store.report(error) }
-                } label: { Image(systemName: "trash").frame(width: 44, height: 44).contentShape(Rectangle()) }
-                    .buttonStyle(.borderless).accessibilityLabel("Delete idea: \(capture.text)")
-                    .accessibilityIdentifier("\(id).delete")
-            }
+            CaptureReviewActions(capture: capture, identifier: id, onSnooze: { snoozing = $0 })
         }.id(capture.id)
     }
 }

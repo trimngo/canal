@@ -47,6 +47,7 @@ extension Ledger {
             let period = allocation(on: day, now: now, calendar: cal)
             result.trackedMinutes += period.trackedMinutes; result.representedDays += period.representedDays
             for (id, minutes) in period.directMinutes { result.directMinutes[id, default: 0] += minutes }
+            for (id, minutes) in period.unreviewedDirectMinutes { result.unreviewedDirectMinutes[id, default: 0] += minutes }
         }
         return AllocationReference(period: result)
     }

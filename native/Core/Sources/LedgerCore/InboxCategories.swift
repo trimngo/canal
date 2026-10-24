@@ -14,7 +14,7 @@ extension Ledger {
     /// A frozen, newest-first queue. Categorization is independent of review
     /// status and includes completed, reference and snoozed ideas when requested.
     public func inboxCategorizationIDs(uncategorizedOnly: Bool) -> [String] {
-        captures.filter { $0.deletedAt == nil && (!uncategorizedOnly || categoryIDs(for: $0).isEmpty) }
+        captures.filter { $0.deletedAt == nil && (!uncategorizedOnly || categoryIDs(for: $0).isEmpty || $0.categorySuggestion != nil) }
             .sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt > $1.createdAt }.map(\.id)
     }
 

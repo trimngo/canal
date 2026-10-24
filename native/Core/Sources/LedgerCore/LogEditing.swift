@@ -10,6 +10,7 @@ extension Ledger {
         guard !text.isEmpty, text.count <= 500 else { throw LedgerError.invalidActivity }
         guard entries[index].activity != text else { return }
         entries[index].activity = text
+        if entries[index].categorySuggestion != nil { entries[index].categorySuggestion = nil; entries[index].categoryID = nil; entries[index].categoryIDs = nil }
         entries[index].revision = nextRevision(writer: writer)
     }
 }

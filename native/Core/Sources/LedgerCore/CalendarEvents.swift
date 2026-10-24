@@ -57,6 +57,18 @@ extension Ledger {
         self = draft
     }
 
+    /// Every instantaneous observation takes over from the calendar at that point,
+    /// including a sample whose words say that the meeting is still happening.
+    public func calendarEventEnd(_ event: CalendarEventSnapshot) -> Date {
+        activeEntries.lazy.filter { $0.intervalStart == nil && $0.end >= event.start && $0.end < event.end }
+            .map(\.end).min() ?? event.end
+    }
+    public func effectiveIntervalEnd(for entry: CheckIn) -> Date {
+        guard entry.intervalStart != nil,
+              let event = calendarEvents?.first(where: { $0.logID == entry.id }) else { return entry.end }
+        return min(entry.end, calendarEventEnd(event.snapshot))
+    }
+
     /// Confirmed periods own their slots. More recently edited periods win when
     /// two confirmed events overlap; every original record remains stored.
     func daySegments(on day: Date, now: Date, calendar: Calendar, method: InferenceMethod?) -> [InferredSegment] {
@@ -82,7 +94,8 @@ extension Ledger {
             return values
         }
         for entry in explicit {
-            let start = max(bounds.start, entry.intervalStart!), end = min(cutoff, entry.end)
+            let start = max(bounds.start, entry.intervalStart!), end = min(cutoff, effectiveIntervalEnd(for: entry))
+            guard end > start else { continue }
             for piece in pieces(start, end) {
                 result.append(InferredSegment(sampleID: entry.id, start: piece.start, end: piece.end, categoryID: confirmedCategoryID(for: entry)))
             }

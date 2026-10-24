@@ -30,6 +30,9 @@ struct CheckInView: View {
                                 InlineEntryText(text: entry.activity, identifier: "logs.entry.\(entry.id)", maxLength: 500) {
                                     try store.updateLogActivity(id: entry.id, activity: $0)
                                 }
+                                if let suggestion = entry.categorySuggestion {
+                                    Text("Suggested · \(suggestion.reason)").font(.caption2).foregroundStyle(.secondary)
+                                }
                                 Button { editing = entry } label: {
                                     Text("\(store.dayLabel(entry.end)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
                                         .font(.caption).foregroundStyle(.secondary)
@@ -124,7 +127,7 @@ struct CheckInEditor: View {
             }
         }.ledgerInputDismissal().onDisappear { focused = false }.onAppear {
             if let entry {
-                activity = entry.activity; categoryIDs = store.ledger.confirmedCategoryIDs(for: entry)
+                activity = entry.activity; categoryIDs = store.ledger.effectiveCategoryIDs(for: entry)
                 timestamp = entry.end; recordNow = false
             } else if let draft = store.quickReplyDraft {
                 activity = draft; store.quickReplyDraft = nil

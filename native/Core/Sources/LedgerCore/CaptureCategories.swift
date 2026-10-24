@@ -3,14 +3,17 @@ import Foundation
 extension Ledger {
     public func categoryIDs(for capture: Capture) -> [String] {
         let existing = Set(categories.map(\.id))
-        return (capture.categoryIDs ?? []).filter(existing.contains)
+        let ids = Array(Set(capture.categoryIDs ?? [])).filter(existing.contains).sorted()
+        return ids.filter { id in !ids.contains { other in other != id && descendants(of: id).contains { $0.id == other } } }
     }
 
     public mutating func categorizeCapture(id: String, categoryIDs: [String], writer: String) throws {
         guard let index = captures.firstIndex(where: { $0.id == id }), captures[index].deletedAt == nil else { throw LedgerError.deletedCapture }
         let ids = Array(Set(categoryIDs)).sorted()
         try validateCategories(ids)
-        guard self.categoryIDs(for: captures[index]) != ids else { return }
+        guard self.categoryIDs(for: captures[index]) != ids || captures[index].categorySuggestion != nil || captures[index].categoriesReviewed != true else { return }
+        captures[index].categorySuggestion = nil
+        captures[index].categoriesReviewed = true
         captures[index].categoryIDs = ids
         captures[index].revision = nextRevision(writer: writer)
     }

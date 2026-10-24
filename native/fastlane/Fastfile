@@ -30,7 +30,7 @@ platform :ios do
         import_certificate(certificate_path: certificate_path, certificate_password: ENV.fetch("APPLE_DISTRIBUTION_P12_PASSWORD"), keychain_name: keychain_name, keychain_password: keychain_password)
         profiles = {}
         %w[com.trimngo.TimeLedger com.trimngo.TimeLedger.watchkitapp com.trimngo.TimeLedger.watchkitapp.capture com.trimngo.TimeLedger.watchkitapp.widgets].each do |identifier|
-          # Enable only Siri on the existing App IDs. Existing iCloud and other
+          # Enable Siri and the iPhone’s read-only HealthKit entitlement. Existing iCloud and other
           # capabilities remain intact. Credentials stay in this CI process.
           bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier)
           if !bundle_id && identifier == "com.trimngo.TimeLedger.watchkitapp.capture"
@@ -50,6 +50,14 @@ platform :ios do
             Spaceship::ConnectAPI::Provisioning::Client.new(token: Spaceship::ConnectAPI.token)
               .post("v1/bundleIdCapabilities", request)
             UI.message("Enabled Siri for #{identifier}")
+          end
+          if identifier == "com.trimngo.TimeLedger" && !bundle_id.get_capabilities.any? { |capability| capability.is_type?("HEALTHKIT") }
+            request = { data: { type: "bundleIdCapabilities",
+              attributes: { capabilityType: "HEALTHKIT" },
+              relationships: { bundleId: { data: { type: "bundleIds", id: bundle_id.id } } } } }
+            Spaceship::ConnectAPI::Provisioning::Client.new(token: Spaceship::ConnectAPI.token)
+              .post("v1/bundleIdCapabilities", request)
+            UI.message("Enabled HealthKit for the iPhone app")
           end
           get_provisioning_profile(api_key: api_key, app_identifier: identifier, provisioning_name: "TimeLedger-#{identifier}", output_path: directory, force: true)
           profiles[identifier] = lane_context[SharedValues::SIGH_NAME]

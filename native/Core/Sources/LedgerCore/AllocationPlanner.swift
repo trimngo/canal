@@ -40,6 +40,11 @@ public struct AllocationPeriod: Equatable, Sendable {
     }
     public var trackedMinutes = 0.0
     public var directMinutes: [String: Double] = [:]
+    public var unreviewedDirectMinutes: [String: Double] = [:]
+    public func unreviewed(for id: String, ledger: Ledger) -> Double {
+        let family = Set([id] + ledger.descendants(of: id).map(\.id))
+        return unreviewedDirectMinutes.filter { family.contains($0.key) }.values.reduce(0, +)
+    }
     public var representedDays = 0
     public var requestedDays = 1
     public var sufficient: Bool { representedDays > 0 }
@@ -113,7 +118,14 @@ extension Ledger {
     }
     /// Missing/deleted category shares remain Uncategorized, preserving the split.
     public func allocationCategoryIDs(for entry: CheckIn) -> [String] {
-        guard entry.categoryAssignment != .automatic else { return ["uncategorized"] }
+        guard entry.categoryAssignment != .automatic else {
+            let suggested = effectiveCategoryIDs(for: entry)
+            guard let suggestion = entry.categorySuggestion, suggestion.sourceText == OfflineGrouping.normalized(entry.activity) else { return ["uncategorized"] }
+            let known = Set(categories.map(\.id))
+            let missing = Set(suggestion.categoryIDs).filter { !known.contains($0) }.map { _ in "uncategorized" }
+            let result = suggested + missing
+            return result.isEmpty ? ["uncategorized"] : result
+        }
         let raw = Set(entry.categoryIDs ?? entry.categoryID.map { [$0] } ?? [])
         let known = Set(categories.map(\.id))
         let confirmed = confirmedCategoryIDs(for: entry)
@@ -244,7 +256,11 @@ extension Ledger {
             let minutes = end.timeIntervalSince(start) / 60
             let choices = allocationCategoryIDs(for: sample)
             let ids = choices.isEmpty ? ["uncategorized"] : choices
-            for id in ids { period.directMinutes[id, default: 0] += minutes / Double(ids.count) }
+            for id in ids {
+                let share = minutes / Double(ids.count)
+                period.directMinutes[id, default: 0] += share
+                if needsCategoryReview(sample), sample.categorySuggestion != nil { period.unreviewedDirectMinutes[id, default: 0] += share }
+            }
             period.trackedMinutes += minutes
         }
         period.representedDays = period.trackedMinutes > 0 ? 1 : 0
@@ -258,6 +274,7 @@ extension Ledger {
             let period = allocation(on: day, now: now, calendar: cal)
             result.trackedMinutes += period.trackedMinutes; result.representedDays += period.representedDays
             for (id, minutes) in period.directMinutes { result.directMinutes[id, default: 0] += minutes }
+            for (id, minutes) in period.unreviewedDirectMinutes { result.unreviewedDirectMinutes[id, default: 0] += minutes }
         }
         return result
     }

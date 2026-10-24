@@ -67,6 +67,7 @@ public struct ReminderTime: Equatable, Sendable {
 public enum CategoryAssignment: String, Codable, Sendable { case automatic, manual }
 
 public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
+    public var categorySuggestion: CategorySuggestion?
     /// Present only for a user-confirmed calendar period. Samples remain instantaneous.
     public var intervalStart: Date?
     public var goalID: String?
@@ -92,6 +93,9 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {
+    public var categorySuggestion: CategorySuggestion?
+    /// Explicitly clearing labels is also a confirmed choice. Nil supports old files.
+    public var categoriesReviewed: Bool?
     /// Shared category IDs; absent in older backups and Watch captures.
     public var categoryIDs: [String]?
     public var deletedAt: Date?
@@ -348,6 +352,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         guard let index = captures.firstIndex(where: { $0.id == id }), captures[index].deletedAt == nil else { throw LedgerError.deletedCapture }
         guard captures[index].text != cleaned else { return }
         captures[index].text = cleaned
+        if captures[index].categorySuggestion != nil { captures[index].categorySuggestion = nil; captures[index].categoryIDs = nil }
         captures[index].revision = nextRevision(writer: writer)
     }
 
@@ -359,6 +364,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         let savedNotes = notes.isEmpty ? nil : notes
         guard captures[index].text != cleaned || captures[index].notes != savedNotes else { return }
         let revision = nextRevision(writer: writer)
+        if captures[index].text != cleaned, captures[index].categorySuggestion != nil { captures[index].categorySuggestion = nil; captures[index].categoryIDs = nil }
         captures[index].text = cleaned; captures[index].notes = savedNotes; captures[index].revision = revision
     }
 

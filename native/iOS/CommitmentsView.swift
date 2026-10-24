@@ -71,12 +71,16 @@ struct GoalEditorView: View {
     private var displayedGoals: [String: Double] { percentageGoals.map { categoryIndex.goals($0) } ?? savedGoals }
 
     var body: some View {
+        VStack(spacing: 0) {
+            displayControls
         TimelineView(.periodic(from: clockStart, by: 60)) { context in
             // Draft edits invalidate this view. They must not rescan log history.
             let goals = displayedGoals
-            planList(today: today, week: reference.period, goals: goals)
+            planList(today: today, week: reference.period, goals: goals).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onChange(of: Int(context.date.timeIntervalSince1970 / 60)) { _, _ in reportRevision = UUID() }
         }
+            bottomActions
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Edit goals").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -93,28 +97,15 @@ struct GoalEditorView: View {
                 Button("Done") { endGoalEditing() }.accessibilityIdentifier("keyboard.done")
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) { displayControls }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 4) {
-                if selecting { selectionActions }
-                if selected.count <= 1 {
-                    HStack {
-                        Button(singleSelection == nil ? "Add category" : "Add child category", systemImage: "folder.badge.plus") {
-                            endGoalEditing(); actionRequest = .name(nil, parent: singleSelection?.id)
-                        }.accessibilityIdentifier(singleSelection == nil ? "plan.create-category" : "plan.create-child")
-                        Spacer()
-                        Button("Add goal", systemImage: "target") {
-                            endGoalEditing(); actionRequest = .goal(parent: singleSelection?.id)
-                        }.accessibilityIdentifier("plan.create-goal")
-                    }.font(.subheadline).frame(minHeight: 44)
-                }
-            }.padding(.horizontal, 12).padding(.vertical, 6).background(.bar)
-        }
         .onAppear {
             if !loaded {
                 categoryIndex = AllocationCategoryIndex(ledger: store.ledger)
                 latestReference.goalDayMinutes = store.ledger.goalDayWindow()?.minutes
                 refreshReference(); load(); loaded = true
+                for goal in store.ledger.activeDatedGoals {
+                    var node = goal.categoryID ?? ""
+                    while let parent = categoryIndex.parents[node] { expanded.insert(parent); node = parent }
+                }
             }
         }
         .task(id: reportRevision) { await prepareReports() }
@@ -125,6 +116,7 @@ struct GoalEditorView: View {
             weekTotals = categoryIndex.totals(reference.period.directMinutes)
             selected.formIntersection(categories.map(\.id)); load(); reportRevision = UUID()
         }
+        .onChange(of: store.ledger.datedGoals) { _, _ in reportRevision = UUID() }
         .onChange(of: store.ledger.entries) { _, _ in reportRevision = UUID() }
         .onChange(of: store.ledger.logDeletions) { _, _ in reportRevision = UUID() }
         .onChange(of: store.ledger.settings) { _, _ in reportRevision = UUID() }
@@ -166,28 +158,43 @@ struct GoalEditorView: View {
 
     }
 
+    private var bottomActions: some View {
+            VStack(spacing: 4) {
+                if selecting { selectionActions }
+                if selected.count <= 1 {
+                    HStack {
+                        Button(singleSelection == nil ? "Add category" : "Add child category", systemImage: "folder.badge.plus") {
+                            endGoalEditing(); actionRequest = .name(nil, parent: singleSelection?.id)
+                        }.accessibilityIdentifier(singleSelection == nil ? "plan.create-category" : "plan.create-child")
+                        Spacer()
+                        Button("Add goal", systemImage: "target") {
+                            endGoalEditing(); actionRequest = .goal(parent: singleSelection?.id)
+                        }.accessibilityIdentifier("plan.create-goal")
+                    }.font(.subheadline).frame(minHeight: 44)
+                }
+            }.padding(.horizontal, 12).padding(.vertical, 6).background(.bar)
+    }
+
     private func planList(today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> some View {
         List {
-            if !store.ledger.activeDatedGoals.isEmpty {
-                Section("Time goals") {
-                    ForEach(store.ledger.activeDatedGoals) { goal in
-                        Button { editingDatedGoal = goal } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(goal.name).foregroundStyle(.primary)
-                                Text("\(store.duration(goal.targetMinutes)) · \(goal.deadline.formatted(date: .abbreviated, time: .shortened))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                if let category = goal.categoryID { Text(store.ledger.categoryPath(category)).font(.caption).foregroundStyle(.secondary) }
-                            }
-                        }.accessibilityIdentifier("plan.dated-goal.\(goal.id)")
-                    }
-                }
-            }
+            let pending = today.unreviewedDirectMinutes.values.reduce(0, +)
+            if pending > 0 { Text("Today includes \(store.duration(pending)) awaiting category review").font(.caption).foregroundStyle(.secondary) }
             categoryOutline(today: today, week: week, goals: goals)
+            ForEach(store.ledger.activeDatedGoals.filter { goal in goal.categoryID == nil || !store.ledger.categories.contains { $0.id == goal.categoryID } }) { datedGoalRow($0, depth: 0) }
             if reportsLoading { ProgressView("Updating time totals…").accessibilityIdentifier("plan.loading") }
             CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
         }.listStyle(.plain).listSectionSpacing(0)
             .scrollDismissesKeyboard(.interactively).ledgerInputDismissal(showsKeyboardDone: false)
+    }
+
+    private func datedGoalRow(_ goal: DatedGoal, depth: Int) -> some View {
+        Button { editingDatedGoal = goal } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Label(goal.name, systemImage: "target").foregroundStyle(.primary)
+                Text("\(store.duration(goal.targetMinutes)) · \(goal.deadline.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+            }.padding(.leading, CGFloat(depth) * 16 + 28).padding(.vertical, 4)
+        }.buttonStyle(.borderless).accessibilityIdentifier("plan.dated-goal.\(goal.id)")
     }
 
     private var displayControls: some View {
@@ -270,6 +277,9 @@ struct GoalEditorView: View {
                 categoryRow(item, today: today, week: week, goals: goals)
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowBackground(SelectionRowBackground(selected: !item.direct && selected.contains(item.category.id)))
+                if !item.direct {
+                    ForEach(store.ledger.activeDatedGoals.filter { $0.categoryID == item.category.id }) { datedGoalRow($0, depth: item.depth + 1) }
+                }
             }
         } header: {
             if typeSize.isAccessibilitySize {
@@ -339,7 +349,8 @@ struct GoalEditorView: View {
         var retainedGoals = goals
         for id in dirtyGoals { retainedGoals[id] = 0 }
         var visible = Set(retainedGoals.keys)
-        for id in dirtyGoals {
+        for id in dirtyGoals.union(store.ledger.activeDatedGoals.compactMap(\.categoryID)) {
+            visible.insert(id)
             var node = id
             while let parent = categoryIndex.parents[node] { visible.insert(parent); node = parent }
         }

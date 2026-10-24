@@ -40,6 +40,9 @@ struct CategoryTrendView: View {
                 }.pickerStyle(.segmented).accessibilityIdentifier("report.trend.layout")
                 Text(percent ? "Share of each day’s tracked time" : "Hours in each category by day")
                     .font(.caption).foregroundStyle(.secondary)
+                ForEach(compared.filter { report.unreviewed(for: $0.id, in: store.ledger) > 0 }) { row in
+                    Text("\(row.name): includes \(store.duration(report.unreviewed(for: row.id, in: store.ledger))) awaiting category review").font(.caption2).foregroundStyle(.secondary)
+                }
                 if report.dailyTotals.isEmpty {
                     Text("Log an activity to start this view.").foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 150)
@@ -166,6 +169,8 @@ struct CategoryTrendView: View {
                     .foregroundStyle(.secondary).lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
         }
+        .id(points.map(\.id))
+        .transaction { $0.animation = nil }
         .chartLegend(.hidden)
         .chartXSelection(value: $chartDate)
         .chartXScale(domain: report.start...max(report.end, report.start.addingTimeInterval(3600)))

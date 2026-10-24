@@ -33,6 +33,7 @@ struct CategorySelectionList: View {
     var activity: String? = nil
     var timestamp: Date? = nil
     var mood: Binding<Int?>? = nil
+    var activityMaxLength: Int? = 500
     var saveActivity: ((String) throws -> Void)? = nil
     var activityDraft: Binding<String>? = nil
     var showsKeyboardDone = true
@@ -91,12 +92,12 @@ struct CategorySelectionList: View {
             #endif
         }
             #if os(iOS)
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.never)
             #endif
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     if let activity, !activity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        CategoryEntryContext(activity: activity, timestamp: timestamp, saveActivity: saveActivity, activityDraft: activityDraft)
+                        CategoryEntryContext(activity: activity, timestamp: timestamp, activityMaxLength: activityMaxLength, saveActivity: saveActivity, activityDraft: activityDraft)
                     }
                     #if os(iOS)
                     CategorySelectedTags(selection: $selection)
@@ -252,6 +253,7 @@ private struct CategoryEntryContext: View {
     @EnvironmentObject private var store: LedgerStore
     let activity: String
     let timestamp: Date?
+    var activityMaxLength: Int? = 500
     var saveActivity: ((String) throws -> Void)? = nil
     var activityDraft: Binding<String>? = nil
     @State private var expanded = false
@@ -293,7 +295,7 @@ private struct CategoryEntryContext: View {
     @ViewBuilder private var activityText: some View {
         #if os(iOS)
         if let saveActivity {
-            InlineEntryText(text: activity, identifier: "category-context.activity", maxLength: 500, draftText: activityDraft, save: saveActivity)
+            InlineEntryText(text: activity, identifier: "category-context.activity", maxLength: activityMaxLength, draftText: activityDraft, save: saveActivity)
         } else { activityLabel }
         #else
         activityLabel

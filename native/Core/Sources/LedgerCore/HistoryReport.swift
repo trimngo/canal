@@ -33,6 +33,12 @@ public struct HistoryReport: Sendable {
     /// Daily direct shares for the heatmap. The existing dailyTotals retain
     /// their parent rollups for the other charts.
     public var directDailyTotals: [DailyTotal] = []
+    public var unreviewedDirectMinutes: [String: Double] = [:]
+    public func unreviewed(for id: String, in ledger: Ledger, direct: Bool = false) -> Double {
+        if direct { return unreviewedDirectMinutes[id, default: 0] }
+        let family = Set([id] + ledger.descendants(of: id).map(\.id))
+        return unreviewedDirectMinutes.filter { family.contains($0.key) }.values.reduce(0, +)
+    }
 
     public func categoryOutline(in ledger: Ledger, expanded: Set<String>, hideZeroTime: Bool = false) -> [HistoryCategoryRow] {
         let period = AllocationPeriod(trackedMinutes: trackedMinutes, directMinutes: directMinutes)
@@ -94,13 +100,14 @@ extension Ledger {
         }
         let days = activityDays(from: lower, through: upper, calendar: cal).filter { $0 <= last }
         var totals: [String: Double] = [:], daily: [DailyTotal] = []
-        var tracked = 0.0, directMinutes: [String: Double] = [:]
+        var tracked = 0.0, directMinutes: [String: Double] = [:], unreviewed: [String: Double] = [:]
         var periods: [(day: Date, period: AllocationPeriod)] = []
         for day in days {
             let period = allocation(on: day, now: now, calendar: cal)
             guard period.trackedMinutes > 0 else { continue }
             periods.append((day, period))
             tracked += period.trackedMinutes
+            for (id, minutes) in period.unreviewedDirectMinutes { unreviewed[id, default: 0] += minutes }
             for (id, minutes) in period.directMinutes { directMinutes[id, default: 0] += minutes }
             for category in children(of: nil) {
                 let minutes = period.total(for: category.id, ledger: self)
@@ -141,6 +148,6 @@ extension Ledger {
             previous = day
         }
         return HistoryReport(rows: rows, dailyTotals: daily, samples: samples, start: lower, end: upper, trackedMinutes: tracked,
-                             directMinutes: directMinutes, directDailyTotals: directDaily)
+                             directMinutes: directMinutes, directDailyTotals: directDaily, unreviewedDirectMinutes: unreviewed)
     }
 }

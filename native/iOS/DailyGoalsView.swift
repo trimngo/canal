@@ -1,85 +1,15 @@
 import SwiftUI
 import LedgerCore
 
-/// The everyday view; detailed goal/category editing lives one level deeper.
-struct CategoryTargetsTodayView: View {
+/// Shared with the unified screen. Category demand is counted once; a dated
+/// goal's work is already part of its category, not additional budget time.
+struct DailyGoalCapacityView: View {
     @EnvironmentObject private var store: LedgerStore
-    @State private var editingGoals = false
-    @State private var editingWindow = false
+    let report: DailyGoalsReport
+    let editWindow: () -> Void
     @State private var showingExplanation = false
-    @State private var categoryDetail: CategoryDetailRequest?
-    @State private var reviewing: LogReviewRequest?
     private let colors: [Color] = [.teal, .indigo, .orange, .pink, .blue, .purple, .mint]
-
-    var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { context in
-            let now = reportDate(context.date)
-            if let report = store.ledger.dailyGoals(now: now, favoritesOnly: true) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        timeLeft(report)
-                        if report.commitments.isEmpty {
-                            ContentUnavailableView {
-                                Label("Choose your commitments", systemImage: "star")
-                            } description: {
-                                Text("Favorite goals in Edit goals to show them here. Your other goals stay saved.")
-                            } actions: {
-                                Button("Choose favorites") { editingGoals = true }.buttonStyle(.borderedProminent)
-                            }
-                        } else {
-                            VStack(alignment: .leading, spacing: 22) {
-                                ForEach(report.commitments) { goal in goalRow(goal, report: report) }
-                            }
-                        }
-                        if report.uncategorizedMinutes > 0 {
-                            Button {
-                                let ids = store.ledger.daySamples(on: now, now: now).filter {
-                                    store.ledger.confirmedCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized")
-                                }.map(\.id)
-                                reviewing = LogReviewRequest(entryIDs: ids)
-                            } label: {
-                                Label("Review uncategorized logs", systemImage: "tag")
-                                    .font(.subheadline)
-                            }.accessibilityIdentifier("goals.review-logs")
-                        }
-                    }.padding(20)
-                }.accessibilityIdentifier("goals.today")
-            } else {
-                ContentUnavailableView {
-                    Label("Set your day window", systemImage: "clock")
-                } description: {
-                    Text("Choose start and end times to estimate daily goals and time remaining.")
-                } actions: {
-                    Button("Set day window") { editingWindow = true }.buttonStyle(.borderedProminent)
-                }
-            }
-        }
-        .navigationTitle("Commitments").navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Edit goals") { editingGoals = true }.accessibilityIdentifier("goals.edit")
-            }
-        }
-        .sheet(isPresented: $editingGoals) {
-            NavigationStack {
-                GoalEditorView()
-                    .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Close") { editingGoals = false } } }
-            }
-        }
-        .sheet(isPresented: $editingWindow) { NavigationStack { DayWindowSettingsView() } }
-        .sheet(item: $categoryDetail) { CategoryDetailView(request: $0) }
-        .sheet(item: $reviewing) { request in LogReviewView(entryIDs: request.entryIDs) }
-    }
-
-    private func reportDate(_ date: Date) -> Date {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
-            return ISO8601DateFormatter().date(from: "2026-10-22T17:30:00Z")!
-        }
-        #endif
-        return date
-    }
-
+    var body: some View { timeLeft(report).buttonStyle(.borderless) }
     private func color(_ goal: DailyGoalProgress, in report: DailyGoalsReport) -> Color {
         guard !goal.isRollup, goal.targetMinutes > 0 else { return .secondary }
         let colored = report.commitments.filter { $0.targetMinutes > 0 }
@@ -93,7 +23,7 @@ struct CategoryTargetsTodayView: View {
                     Text("\(store.duration(report.window.remainingMinutes)) left today")
                         .font(.title2.bold()).monospacedDigit()
                         .accessibilityIdentifier("goals.time-left")
-                    Button { editingWindow = true } label: {
+                    Button { editWindow() } label: {
                         Text("\(store.time(report.window.interval.start))–\(store.time(report.window.interval.end))")
                             .font(.subheadline)
                     }.accessibilityLabel("Day window \(store.time(report.window.interval.start)) to \(store.time(report.window.interval.end)). Change")
@@ -106,7 +36,7 @@ struct CategoryTargetsTodayView: View {
                         ScrollView { VStack(alignment: .leading, spacing: 12) {
                             Text("Time left today").font(.headline)
                             Text("The upper bar is the entire configured day. Dark gray is elapsed clock time. The Now marker separates elapsed from remaining time. Colored sections after Now are time still needed for goals; light gray is left for other activities. These amounts are not an activity schedule or calendar availability.")
-                            Text("Favorite goals appear here. Select rows in Edit goals to favorite or unfavorite them; selecting a parent applies to its current children. Remaining goal time covers these favorites. Other goals and logged time stay saved.")
+                            Text("Favorite goals appear here. Select rows in Edit goals to favorite or unfavorite them; selecting a parent applies to its current children. Remaining goal time covers these favorites. Dated goals below them use the same category time and are not added a second time. Other goals and logged time stay saved.")
                             Text("Goal bar lengths share one scale: a two-hour goal is twice as long as a one-hour goal. Filled color is logged progress inside that goal. Tap a category for its inbox items and logs. If goals do not fit, their colored time stops at the day’s end and the shortfall shows the extra time needed.")
                             Text("Daily goal hours are your fixed percentages of this window. All of today’s logs count, including outside it. Unrecorded or uncategorized activity can make progress look lower.")
                             Text("Changing the shared window also changes check-in hours when All day notifications are off. It never blocks logging.")
@@ -191,24 +121,41 @@ struct CategoryTargetsTodayView: View {
         }
     }
 
-    private func goalRow(_ goal: DailyGoalProgress, report: DailyGoalsReport) -> some View {
+
+}
+
+struct DailyCategoryGoalRow: View {
+    @EnvironmentObject private var store: LedgerStore
+    let goal: DailyGoalProgress
+    let report: DailyGoalsReport
+    var showsName = true
+    var unreviewedMinutes = 0.0
+    let onSelect: () -> Void
+    private let colors: [Color] = [.teal, .indigo, .orange, .pink, .blue, .purple, .mint]
+    private func color(_ goal: DailyGoalProgress, in report: DailyGoalsReport) -> Color {
+        guard !goal.isRollup, goal.targetMinutes > 0 else { return .secondary }
+        let colored = report.commitments.filter { $0.targetMinutes > 0 }
+        return colors[(colored.firstIndex(where: { $0.id == goal.id }) ?? 0) % colors.count]
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 HStack(spacing: 8) {
                     Circle().fill(color(goal, in: report)).frame(width: 8, height: 8).accessibilityHidden(true)
-                    Text(goal.category.name).font(.body.weight(.medium))
+                    Text(showsName ? goal.category.name : "Daily target").font(.body.weight(.medium))
                 }
                 Spacer(minLength: 12)
                 Text(goal.isMet ? "Met" : "\(store.duration(goal.remainingMinutes)) left")
                     .font(.subheadline.weight(.medium)).monospacedDigit()
             }.contentShape(Rectangle())
-                .onTapGesture { categoryDetail = CategoryDetailRequest(id: goal.id, name: goal.category.name) }
+
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(goal.category.name)
                 .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today. \(goal.isMet ? "Goal met" : "\(store.duration(goal.remainingMinutes)) remaining")")
                 .accessibilityHint("Open inbox items and logs for this category")
                 .accessibilityAddTraits(.isButton)
-                .accessibilityAction { categoryDetail = CategoryDetailRequest(id: goal.id, name: goal.category.name) }
+                .accessibilityAction { onSelect() }
                 .accessibilityIdentifier("goals.progress.\(goal.id)")
             GeometryReader { proxy in
                 let width = proxy.size.width * report.goalWidthFraction(goal)
@@ -221,8 +168,10 @@ struct CategoryTargetsTodayView: View {
                     .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes))")
                     .accessibilityIdentifier("goals.target-bar.\(goal.id)")
             }.frame(height: 10)
+            Text("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today").font(.caption).foregroundStyle(.secondary)
+            if unreviewedMinutes > 0 { Text("Includes \(store.duration(unreviewedMinutes)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
 
-        }
+        }.contentShape(Rectangle()).onTapGesture(perform: onSelect)
     }
 
 }
