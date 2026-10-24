@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock
 import urllib.error
 
-from crash_diagnostics import AppleAPI, NoRedirect, collect, collect_build_status, summarize
+from crash_diagnostics import AppleAPI, NoRedirect, collect, collect_build_status, collect_upload_status, summarize
 
 
 class DiagnosticPrivacyTests(unittest.TestCase):
@@ -72,6 +72,29 @@ class DiagnosticPrivacyTests(unittest.TestCase):
         api = MagicMock()
         api.get.side_effect = [{"data": [{"id": "123"}]}, {"data": []}]
         self.assertEqual(collect_build_status(api), [])
+
+    def test_rejected_upload_is_visible_without_private_error_text(self):
+        api = MagicMock()
+        api.get.side_effect = [
+            {"data": [{"id": "private-app"}]},
+            {"data": [{"id": "private-upload", "attributes": {"cfBundleVersion": "69", "state": {
+                "state": "FAILED", "errors": [{"description": "ITMS-90683 NSHealthUpdateUsageDescription tester@example.com /Users/Private"}],
+                "warnings": []}}}]},
+        ]
+        self.assertEqual(collect_upload_status(api), [{"build": "69", "state": "FAILED", "error_count": 1,
+                         "warning_count": 0, "issue_codes": ["ITMS-90683"], "purpose_keys": ["NSHealthUpdateUsageDescription"]}])
+
+    def test_processing_upload_and_unknown_strings_are_safe(self):
+        api = MagicMock()
+        api.get.side_effect = [
+            {"data": [{"id": "123"}]},
+            {"data": [{"attributes": {"cfBundleVersion": "70", "state": {"state": "PROCESSING"}}},
+                      {"attributes": {"cfBundleVersion": "68", "state": {"state": "private-response"}}},
+                      {"attributes": {"cfBundleVersion": "private@example.com"}}]},
+        ]
+        statuses = collect_upload_status(api)
+        self.assertEqual([s["state"] for s in statuses], ["PROCESSING", "UNKNOWN"])
+        self.assertNotIn("private", json.dumps(statuses))
 
 
 if __name__ == "__main__":

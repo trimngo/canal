@@ -112,6 +112,31 @@ def collect_build_status(api):
     return statuses
 
 
+def collect_upload_status(api):
+    """Include rejected uploads, which may never become Build resources."""
+    apps = api.get("/v1/apps", {"filter[bundleId]": "com.trimngo.TimeLedger", "limit": 1})["data"]
+    if not apps:
+        raise RuntimeError("Time Ledger app record was not found.")
+    uploads = api.get(f"/v1/apps/{apps[0]['id']}/buildUploads", {"sort": "-uploadedDate", "limit": 3,
+                      "fields[buildUploads]": "cfBundleVersion,state"})["data"]
+    known_states = {"AWAITING_UPLOAD", "PROCESSING", "FAILED", "COMPLETE"}
+    purpose_keys = ("NSHealthUpdateUsageDescription", "NSHealthShareUsageDescription", "NSMicrophoneUsageDescription",
+                    "NSSpeechRecognitionUsageDescription", "NSRemindersFullAccessUsageDescription", "NSCalendarsFullAccessUsageDescription")
+    statuses = []
+    for upload in uploads:
+        attributes = upload.get("attributes", {})
+        version = attributes.get("cfBundleVersion", "")
+        if not isinstance(version, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version):
+            continue
+        state = attributes.get("state") or {}
+        details = json.dumps(state)
+        statuses.append({"build": version, "state": state.get("state") if state.get("state") in known_states else "UNKNOWN",
+                         "error_count": len(state.get("errors") or []), "warning_count": len(state.get("warnings") or []),
+                         "issue_codes": sorted(set(re.findall(r"\bITMS-[0-9]{5}\b", details))),
+                         "purpose_keys": [key for key in purpose_keys if key in details]})
+    return statuses
+
+
 def main():
     import jwt
     try:
@@ -125,6 +150,7 @@ def main():
         api = AppleAPI(token)
         result = collect(api)
         result["recent_builds"] = collect_build_status(api)
+        result["recent_uploads"] = collect_upload_status(api)
     except (KeyError, TypeError):
         raise RuntimeError("Unexpected Apple diagnostic response. No private response content was printed.") from None
     output = json.dumps(result, sort_keys=True)
