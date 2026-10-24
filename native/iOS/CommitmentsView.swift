@@ -177,8 +177,10 @@ struct GoalEditorView: View {
 
     private func planList(today: AllocationPeriod, week: AllocationPeriod, goals: [String: Double]) -> some View {
         List {
+            let pending = today.unreviewedDirectMinutes.values.reduce(0, +)
+            if pending > 0 { Text("Today includes \(store.duration(pending)) awaiting category review").font(.caption).foregroundStyle(.secondary) }
             categoryOutline(today: today, week: week, goals: goals)
-            ForEach(store.ledger.activeDatedGoals.filter { $0.categoryID == nil }) { datedGoalRow($0, depth: 0) }
+            ForEach(store.ledger.activeDatedGoals.filter { goal in goal.categoryID == nil || !store.ledger.categories.contains { $0.id == goal.categoryID } }) { datedGoalRow($0, depth: 0) }
             if reportsLoading { ProgressView("Updating time totals…").accessibilityIdentifier("plan.loading") }
             CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }

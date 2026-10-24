@@ -136,7 +136,7 @@ struct SettingsView: View {
                 }.accessibilityIdentifier("settings.day-window")
                 Button("Categories & targets") { managingGroups = true }
             } header: { Text("Time allocation") } footer: {
-                Text("The day window estimates daily goal hours and time remaining. Every log counts, including outside it. Offline category suggestions wait for your confirmation.")
+                Text("The day window estimates daily goal hours and time remaining. Every log counts, including outside it. Confident offline category suggestions count toward totals and stay marked for review until confirmed.")
             }
             Section("Your data") {
                 Text(store.syncStatus).font(.footnote)

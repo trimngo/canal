@@ -83,7 +83,7 @@ struct DaylightDashboardView: View {
             }
             if reader.loading { ProgressView().controlSize(.mini) }
         }
-        .task { await reader.refresh(calendar: store.ledger.reportingCalendar()) }
+        .task(id: Int(Date().timeIntervalSince1970 / 300)) { await reader.refresh(calendar: store.ledger.reportingCalendar()) }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await reader.refresh(calendar: store.ledger.reportingCalendar()) } } }
         .sheet(isPresented: $details) {
             NavigationStack {

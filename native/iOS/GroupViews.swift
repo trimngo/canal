@@ -67,7 +67,7 @@ struct GroupEntriesView: View {
                 }
                 if let error { Text(error).foregroundStyle(.red) }
                 Section {
-                    Text("Suggestions work offline and learn from confirmed choices. Every log stays Uncategorized until you confirm its group.")
+                    Text("Suggestions work offline and learn from confirmed choices. Confident suggestions count toward totals and stay marked for review until you confirm or correct them.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }.ledgerInputDismissal().safeAreaInset(edge: .bottom, spacing: 0) {
@@ -159,7 +159,12 @@ struct GroupEntriesView: View {
 
     @ViewBuilder
     private func suggestion(for entry: CheckIn) -> some View {
-        if let id = store.ledger.suggestedCategory(for: entry.activity) {
+        if let suggestion = entry.categorySuggestion {
+            Text("Suggested · \(suggestion.reason)").font(.caption).foregroundStyle(.secondary)
+            Button("Confirm categories") {
+                do { try store.categorize(entry, categoryIDs: store.ledger.effectiveCategoryIDs(for: entry)); error = nil } catch { self.error = error.localizedDescription }
+            }.buttonStyle(.bordered).accessibilityIdentifier("group.confirm.\(entry.id)")
+        } else if let id = store.ledger.suggestedCategory(for: entry.activity) {
             let name = store.categoryName(id)
             let matches = store.ledger.unconfirmedMatches(for: entry.activity).count
             if store.ledger.confirmedCategoryID(for: entry) == id {
