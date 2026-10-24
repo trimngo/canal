@@ -156,7 +156,7 @@ final class TimerQueueTests: XCTestCase {
         }
     }
     func testAmbiguousDurationRequiresCorrection() {
-        for text in ["Read for 20 minutes or 30 minutes", "Read 20 minutes or 30 minutes", "Read for -2 minutes", "Read for 25 hours", "Read for zero minutes", "20 minutes"] {
+        for text in ["Read for 20 minutes or 30 minutes", "Read 20 minutes or 30 minutes", "Read for -2 minutes", "Read -2 minutes", "-2 minutes read", "Read for 25 hours", "Read for zero minutes", "20 minutes"] {
             XCTAssertThrowsError(try TimerDraft.parse(text), text)
         }
     }
