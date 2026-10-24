@@ -28,8 +28,9 @@ final class TimeLedgerUITests: XCTestCase {
         let phrase = app.textFields["matching.new-rule-phrase"]; reveal(phrase, in: app)
         phrase.tap(); phrase.typeText("cello")
         if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
-        let category = app.buttons["matching.new-rule-category"]; reveal(category, in: app); category.tap()
-        app.buttons["Music"].tap()
+        let category = element(app, "matching.new-rule-category"); reveal(category, in: app); category.tap()
+        let music = element(app, "matching.category-option.music")
+        XCTAssertTrue(music.waitForExistence(timeout: 5)); music.tap()
         let add = app.buttons["matching.add-rule"]; reveal(add, in: app); add.tap()
         recordScreen("AutomaticMatchingSettings", in: app)
         let urgency = app.buttons["matching.urgency"]; reveal(urgency, in: app); urgency.tap()

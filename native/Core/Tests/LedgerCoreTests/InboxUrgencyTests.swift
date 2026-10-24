@@ -16,6 +16,7 @@ final class InboxUrgencyTests: XCTestCase {
             XCTAssertNil(OfflineInboxUrgency.suggestion(text: text), text)
         }
         XCTAssertEqual(OfflineInboxUrgency.suggestion(text: "Remember to reply to Alan")?.reason, .communication)
+        XCTAssertEqual(OfflineInboxUrgency.suggestion(text: "Call the dentist")?.reason, .communication)
         XCTAssertEqual(OfflineInboxUrgency.suggestion(text: "Check the files ASAP")?.reason, .explicit)
     }
     func testCustomPhrasesCanReplaceRemoveOrDisableDefaults() {

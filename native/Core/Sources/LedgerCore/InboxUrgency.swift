@@ -49,7 +49,7 @@ public enum OfflineInboxUrgency {
         Rule("Reach out to", action + #"reach\s+out\s+to\s+\S"#, .communication)
         ]
         for verb in ["Call", "Email", "Text", "Message", "Contact"] {
-            rules.append(Rule(verb, action + NSRegularExpression.escapedPattern(for: verb) + #"\s+(?!(?:lenses|lens|for|it|this|that|a|an|the)\b)\S"#, .communication))
+            rules.append(Rule(verb, action + NSRegularExpression.escapedPattern(for: verb) + #"\s+(?!(?:lenses|lens|for|it)\b)\S"#, .communication))
         }
         for verb in ["Schedule", "Arrange", "Book", "Reschedule", "Set up"] {
             rules.append(Rule(verb + " meeting", action + NSRegularExpression.escapedPattern(for: verb) + #"\s+(?:(?:a|an|the|my|our)\s+)?(?:meeting|appointment|call|interview)\b"#, .meeting))
@@ -96,12 +96,15 @@ extension Ledger {
     /// Show all active dated/ASAP ideas, including ones that have never been ranked.
     /// Dated items come first by deadline; older ASAP items remain easy to find.
     public func urgentCaptures(at now: Date = Date()) -> [Capture] {
-        activeCaptures(at: now).filter { urgency(for: $0) != nil }.sorted {
-            let a = urgency(for: $0)?.timing.dueAt, b = urgency(for: $1)?.timing.dueAt
+        let assessed: [(Capture, InboxUrgency)] = activeCaptures(at: now).compactMap { capture in
+            urgency(for: capture).map { (capture, $0) }
+        }
+        return assessed.sorted {
+            let a = $0.1.timing.dueAt, b = $1.1.timing.dueAt
             if let a, let b, a != b { return a < b }
             if (a != nil) != (b != nil) { return a != nil }
-            return $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt < $1.createdAt
-        }
+            return $0.0.createdAt == $1.0.createdAt ? $0.0.id < $1.0.id : $0.0.createdAt < $1.0.createdAt
+        }.map { $0.0 }
     }
     public func urgency(for capture: Capture) -> InboxUrgency? { capture.urgency(phrases: settings.urgencyPhrases) }
     public mutating func setCaptureTiming(_ id: String, timing: CaptureTiming?, writer: String) throws {

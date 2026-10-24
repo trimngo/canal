@@ -21,7 +21,7 @@ struct TimerQueueView: View {
             #if os(watchOS)
             if let task = store.ledger.currentTimer, store.ledger.timerControl?.isFinished(at: timeline.date) == true {
                 VStack(spacing: 6) {
-                    Text(task.title).font(.title3.bold()).multilineTextAlignment(.center).lineLimit(4)
+                    Text(task.title).font(.headline).multilineTextAlignment(.center).lineLimit(2)
                         .accessibilityIdentifier("timers.current")
                     Text("Finished").foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
                     Button("Done & Next", systemImage: "checkmark") { act("done") }

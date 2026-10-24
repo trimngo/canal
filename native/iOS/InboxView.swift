@@ -37,7 +37,8 @@ struct InboxView: View {
                         .focused($focused).accessibilityIdentifier("inbox.text").id("inbox.capture")
                     Button("Save") {
                         do { try store.addCapture(text); text = ""; focused = true } catch { store.report(error) }
-                    }.disabled(!store.storageAvailable)
+                    }.disabled(!store.storageAvailable || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .ledgerPreserveKeyboard()
                         .accessibilityIdentifier("inbox.save")
                 }
                 Section {

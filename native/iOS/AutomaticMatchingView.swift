@@ -67,7 +67,7 @@ struct AutomaticMatchingView: View {
                     InlineEntryText(text: value, identifier: "matching.urgency-phrase.\(index)") { replacement in
                         var settings = store.ledger.settings
                         var values = settings.effectiveUrgencyPhrases
-                        guard values.indices.contains(index) else { return }
+                        guard values.indices.contains(index), values[index] == value else { return }
                         values[index] = replacement; settings.urgencyPhrases = values
                         try store.saveSettings(settings)
                     }
@@ -86,13 +86,13 @@ struct AutomaticMatchingView: View {
         }.navigationTitle("Urgency phrases").scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
     }
     private func categoryMenu(_ id: String, choose: @escaping (String) -> Void) -> some View {
-        Menu {
+        Picker("Category", selection: Binding(get: { id }, set: choose)) {
+            Text("Choose category").tag("")
             ForEach(store.ledger.orderedCategories) { category in
-                Button(store.ledger.categoryPath(category.id)) { choose(category.id) }
+                Text(store.ledger.categoryPath(category.id)).tag(category.id)
+                    .accessibilityIdentifier("matching.category-option.\(category.id)")
             }
-        } label: {
-            Label(id.isEmpty ? "Choose category" : store.ledger.categoryPath(id), systemImage: "tag")
-        }.buttonStyle(.borderless)
+        }.pickerStyle(.navigationLink)
     }
     private func saveRule(_ rule: CategoryMatchRule, phrase: String, categoryID: String) throws {
         var settings = store.ledger.settings, values = rules
