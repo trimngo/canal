@@ -75,7 +75,11 @@ platform :ios do
         UI.message("Verified packaged build number: #{actual_build}")
         sh("python3", File.join(native_directory, "scripts", "validate-siri-support.py"), "--ipa", lane_context[SharedValues::IPA_OUTPUT_PATH])
         sh("python3", File.join(native_directory, "scripts", "validate-watch-complication.py"), "--ipa", lane_context[SharedValues::IPA_OUTPUT_PATH])
-        upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
+        sh("python3", File.join(native_directory, "scripts", "validate-healthkit.py"), "--ipa", lane_context[SharedValues::IPA_OUTPUT_PATH])
+        # An accepted upload can still fail Apple's later validation. Wait for
+        # that result before reporting delivery success.
+        upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: false,
+          wait_processing_timeout_duration: 900, distribute_external: false, submit_beta_review: false)
       ensure
         delete_keychain(name: keychain_name)
       end

@@ -56,6 +56,7 @@ targets:
         INIntentsSupported: [INCreateNoteIntent]
         NSSiriUsageDescription: Save ideas and log current activities in Dash using Siri.
         NSHealthShareUsageDescription: Dash reads Time in Daylight to show your recorded daylight exposure and previous-week average. Health data is not added to activity logs or app backups.
+        NSHealthUpdateUsageDescription: Dash uses HealthKit only to read your recorded Time in Daylight. Dash does not save or change health data.
         NSCalendarsFullAccessUsageDescription: Dash reads selected calendars to suggest ended events for your confirmation. Only confirmed events become logged time. Your calendars are never modified.
         NSCalendarsUsageDescription: Dash reads selected calendar events so you can confirm whether they happened.
         NSRemindersFullAccessUsageDescription: Dash transfers unfinished reminders from your chosen capture list into your idea inbox, deleting originals only after saving them. It can create a Dash Inbox list when you ask.
