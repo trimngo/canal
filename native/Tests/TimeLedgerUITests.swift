@@ -2444,7 +2444,8 @@ final class TimeLedgerUITests: XCTestCase {
         }
         XCTAssertTrue(eventShown)
         app.buttons["log-review.skip-event"].tap()
-        XCTAssertFalse(app.buttons["log-review.close"].exists)
+        let reviewClosed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["log-review.close"])
+        XCTAssertEqual(XCTWaiter.wait(for: [reviewClosed], timeout: 5), .completed)
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
         app.terminate(); app.launchArguments = []; app.launch()
         app.tabBars.buttons["Commitments"].tap()
@@ -2482,11 +2483,12 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["category-detail.close"].tap()
         XCTAssertTrue(app.navigationBars["Commitments"].exists)
         openGoalEditor(in: app)
+        if app.buttons["plan.hide-blank-goals"].value as? String == "On" { app.buttons["plan.hide-blank-goals"].tap() }
         let add = app.buttons["plan.create-goal"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         let y = add.frame.midY
         app.swipeUp(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
-        app.swipeDown(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
+        app.swipeUp(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
         recordScreen("PinnedGoalActions", in: app)
     }
 

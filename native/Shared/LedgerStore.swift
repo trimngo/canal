@@ -187,6 +187,7 @@ final class LedgerStore: ObservableObject {
                 try fixture.saveSample(id: "ui-goal-review", at: now.addingTimeInterval(-60), activity: "Preparing slides to categorize", categoryID: nil, writer: "fixture", now: now)
                 try fixture.saveAllocationGoals(["work": 20], writer: "fixture")
                 if ProcessInfo.processInfo.arguments.contains("--ui-feedback-fixture") {
+                    for index in 0..<30 { fixture.categories.append(LedgerCategory(id: "extra-\(index)", name: String(format: "Extra category %02d", index))) }
                     try fixture.setCategoryFavorites(["work"], favorite: true, writer: "fixture")
                     let sample = fixture.entries.first { $0.id == "ui-goal-review" }!
                     try fixture.suggestCategories(CategorySuggestion(categoryIDs: ["work"], reason: "Matched confirmed vocabulary: preparing, slides", sourceText: sample.activity), logID: sample.id, writer: "fixture")

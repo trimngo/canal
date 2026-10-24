@@ -88,10 +88,12 @@ struct InboxView: View {
                     Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
                 }
                 if searching {
-                    Section("Search results (\(searchResults.count))") {
+                    Section {
                         if searchResults.isEmpty { Text("No matching ideas.").foregroundStyle(.secondary) }
                         ForEach(searchResults) { captureRow($0) }
-                    }.accessibilityIdentifier("inbox.search-results")
+                    } header: {
+                        Text("Search results (\(searchResults.count))").accessibilityIdentifier("inbox.search-results")
+                    }
                 } else if showDone {
                     Section("Completed (\(completed.count))") {
                         if completed.isEmpty { Text("No completed captures.").foregroundStyle(.secondary) }
