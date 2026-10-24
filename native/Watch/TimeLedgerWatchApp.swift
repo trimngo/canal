@@ -28,6 +28,9 @@ struct TimeLedgerWatchApp: App {
                     NotificationScheduler.shared.configureActions()
                     do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) }
                     #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--ui-timer-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-timer-open") {
+                        store.openTimers(dictate: ProcessInfo.processInfo.arguments.contains("--ui-timer-dictation"))
+                    }
                     if !testedLaunchRoute, ProcessInfo.processInfo.arguments.contains("--ui-watch-quick-log") {
                         testedLaunchRoute = true; openQuickLog(WatchLogShortcut.url)
                     }
@@ -50,6 +53,9 @@ struct TimeLedgerWatchApp: App {
         WKNotificationScene(controller: CheckInNotificationController.self, category: "CHECKIN")
     }
     private func openQuickLog(_ url: URL) {
+        if TimerQueueShortcut.matches(url) {
+            quickLog = nil; store.openTimers(dictate: url.host?.lowercased() == "queue-timer"); return
+        }
         guard WatchLogShortcut.matches(url), quickLog == nil else { return }
         store.start(); quickLog = WatchQuickLogRequest()
     }

@@ -190,6 +190,8 @@ struct InboxView: View {
                 .sheet(isPresented: $showingCategories) { InboxCategoriesView() }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Timer queue", systemImage: "timer") { endInput(); store.openTimers() }
+                            .accessibilityIdentifier("inbox.timers")
                         if !showDone, !searching, !waiting.isEmpty {
                             Button("New \(waiting.count)") {
                                 focused = false

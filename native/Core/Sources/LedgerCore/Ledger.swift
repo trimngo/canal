@@ -211,6 +211,8 @@ public struct InferredSegment: Equatable, Sendable {
 }
 
 public struct Ledger: Codable, Equatable, Sendable {
+    public var queuedTimers: [QueuedTimer]?
+    public var timerControl: TimerQueueControl?
     public var datedGoals: [DatedGoal]?
     public var calendarEvents: [CalendarEventRecord]?
     public var weeklyCommitments: [WeeklyCommitment]?
@@ -228,6 +230,8 @@ public struct Ledger: Codable, Equatable, Sendable {
 
     public func nextRevision(writer: String) -> Revision {
         var values = categories.map(\.revision.counter)
+        values.append(contentsOf: (queuedTimers ?? []).map(\.revision.counter))
+        values.append(timerControl?.revision.counter ?? 0)
         values.append(contentsOf: (datedGoals ?? []).map(\.revision.counter))
         values.append(contentsOf: (calendarEvents ?? []).map(\.revision.counter))
         values.append(contentsOf: (weeklyCommitments ?? []).map(\.revision.counter))
@@ -384,6 +388,9 @@ public struct Ledger: Codable, Equatable, Sendable {
             return result.values.sorted { $0.id < $1.id }
         }
         categories = merged(categories, other.categories, revision: { $0.revision })
+        let timers = merged(queuedTimers ?? [], other.queuedTimers ?? [], revision: { $0.revision })
+        queuedTimers = timers.isEmpty ? nil : timers
+        if let control = other.timerControl, timerControl == nil || timerControl!.revision < control.revision { timerControl = control }
         let goals = merged(datedGoals ?? [], other.datedGoals ?? [], revision: { $0.revision })
         datedGoals = goals.isEmpty ? nil : goals
         let events = merged(calendarEvents ?? [], other.calendarEvents ?? [], revision: { $0.revision })

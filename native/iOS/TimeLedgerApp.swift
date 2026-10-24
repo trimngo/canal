@@ -85,9 +85,20 @@ struct RootView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) { LogDeletionUndoBar() }
         .onChange(of: tab) { _, _ in UIApplication.shared.dismissLedgerKeyboard() }
-        .onAppear { showRequestedCapture() }
+        .onAppear {
+            showRequestedCapture()
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-timer-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-timer-open") { store.openTimers() }
+            #endif
+        }
         .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
         .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
+        .sheet(isPresented: $store.showingTimerQueue) {
+            NavigationStack {
+                TimerQueueView().toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { store.showingTimerQueue = false } } }
+            }
+        }
+        .onOpenURL { url in if TimerQueueShortcut.matches(url) { store.openTimers() } }
     }
     @ViewBuilder private func destination(_ screen: LedgerScreen) -> some View {
         switch screen {
@@ -99,6 +110,7 @@ struct RootView: View {
     }
     private func showRequestedCapture() {
         guard store.pendingLogRequest else { return }
+        store.showingTimerQueue = false
         tab = .today; path.removeAll(); capturing = true; store.pendingLogRequest = false
     }
 }

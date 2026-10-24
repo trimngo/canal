@@ -1,6 +1,44 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testTimerQueueRestartDoneNextPauseAndPersistence() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        recordScreen("PhoneTimerExpired", in: app)
+        app.buttons["timers.restart"].tap()
+        XCTAssertTrue(app.buttons["timers.pause-resume"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        app.buttons["timers.done"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.buttons["timers.pause-resume"].tap()
+        XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 10))
+        recordScreen("PhoneTimerPaused", in: app)
+        app.terminate(); app.launchArguments = ["--ui-timer-open"]; app.launch()
+        XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.buttons["timers.pause-resume"].tap()
+        XCTAssertFalse(app.staticTexts["timers.paused"].exists)
+        app.buttons["timers.done"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Take a walk")
+    }
+    func testTimerQueueCanRemoveWaitingTaskAndDoesNotCreateActivityLogs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]
+        app.launch()
+        let removeEmail = app.buttons["timers.delete.timer-email"]
+        XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 20))
+        reveal(removeEmail, in: app); removeEmail.tap()
+        XCTAssertFalse(removeEmail.exists)
+        reveal(app.buttons["timers.done"], in: app); app.buttons["timers.done"].tap()
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Take a walk")
+        app.buttons["Close"].tap()
+        app.tabBars.buttons["Today"].tap()
+        recordScreen("PhoneTimerQueueDoesNotLogPlannedTime", in: app)
+        XCTAssertFalse(app.staticTexts["Practice guitar"].exists)
+    }
     private func recordScreen(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.state == .runningForeground ? app.screenshot() : XCUIScreen.main.screenshot())
         attachment.name = "Review-\(name).png"; attachment.lifetime = .keepAlways

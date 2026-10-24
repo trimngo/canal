@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import LedgerCore
+#if os(watchOS)
+import WidgetKit
+#endif
 
 @MainActor
 final class LedgerStore: ObservableObject {
@@ -15,6 +18,12 @@ final class LedgerStore: ObservableObject {
     }
     @Published var sampleRequestID = UUID()
     @Published var pendingLogRequest = false
+    @Published var timerRequestID = UUID()
+    @Published var showingTimerQueue = false
+    @Published var timerDictationRequested = false
+    private var timerSupportInitialized = false
+    private var timerSupportControl: TimerQueueControl?
+    private var timerSupportTask: QueuedTimer?
     @Published var quickReplyDraft: String?
     @Published var error: String?
     @Published var syncStatus = "Saved on this device"
@@ -35,7 +44,7 @@ final class LedgerStore: ObservableObject {
     var canUndoCategoryMove: Bool { categoryMoveUndo.map { ledger.canUndoCategoryMove($0) } ?? false }
     private var groupingUndo: [(before: CheckIn, after: CheckIn)] = []
     private let file: URL
-    private let writer: String
+    let writer: String
     private var saveObserver: (() -> Void)?
     #if os(iOS)
     private var automaticCategoryWork: Task<Void, Never>?
@@ -366,6 +375,14 @@ final class LedgerStore: ObservableObject {
                 fixture.setCaptureDeleted("removed", deleted: true, writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-timer-fixture") {
+                var fixture = Ledger()
+                let earlier = Date().addingTimeInterval(-1500)
+                try fixture.enqueueTimer(id: "timer-guitar", title: "Practice guitar", duration: 1200, writer: writer, onWatch: Self.isWatch, now: earlier)
+                try fixture.enqueueTimer(id: "timer-email", title: "Answer email", duration: 600, writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(1))
+                try fixture.enqueueTimer(id: "timer-walk", title: "Take a walk", duration: 300, writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(2))
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-backup-fixture") {
                 var fixture = Ledger()
                 let earlier = Date().addingTimeInterval(-2 * 86400)
@@ -451,6 +468,7 @@ final class LedgerStore: ObservableObject {
         }
         importSiriCaptures()
         companion?.start(); cloud?.requestSync()
+        refreshTimerSupport(force: true)
         #if os(iOS)
         scheduleAutomaticCategories()
         #endif
@@ -461,6 +479,7 @@ final class LedgerStore: ObservableObject {
 
     func refresh() {
         start(); importSiriCaptures(); companion?.refresh(); cloud?.requestSync()
+        refreshTimerSupport(force: true)
         do { try resumeRanking() } catch { report(error) }
         #if os(iOS)
         if storageAvailable { backup?.request(ledger) }
@@ -494,6 +513,7 @@ final class LedgerStore: ObservableObject {
         draft.normalizeInboxRanking(writer: writer)
         try JSONEncoder().encode(draft).write(to: file, options: [.atomic])
         ledger = draft
+        if started { refreshTimerSupport() }
         #if os(iOS)
         scheduleAutomaticCategories()
         #endif
@@ -534,6 +554,66 @@ final class LedgerStore: ObservableObject {
     }
 
     func beginSample() { pendingLogRequest = true; sampleRequestID = UUID() }
+
+    static var isWatch: Bool {
+        #if os(watchOS)
+        return true
+        #else
+        return false
+        #endif
+    }
+    func openTimers(dictate: Bool = false) {
+        start(); timerDictationRequested = dictate; showingTimerQueue = true; timerRequestID = UUID()
+    }
+    func addTimer(_ text: String) throws {
+        let parsed = try TimerDraft.parse(text)
+        start(); var draft = ledger
+        try draft.enqueueTimer(title: parsed.title, duration: parsed.duration, writer: writer, onWatch: Self.isWatch)
+        try commit(draft)
+    }
+    func changeTimer(_ action: String, expectedToken: String? = nil) throws {
+        start()
+        // A repeated notification callback must not complete a newer task.
+        guard expectedToken == nil || expectedToken == ledger.timerControl?.token else { return }
+        // The Watch arms alarms while active. Phone-side edits must not silently
+        // leave an obsolete standalone Watch alarm scheduled in the background.
+        guard Self.isWatch || ledger.timerControl?.onWatch != true else { return }
+        var draft = ledger
+        switch action {
+        case "done": draft.finishTimer(writer: writer, onWatch: Self.isWatch)
+        case "restart": draft.restartTimer(writer: writer, onWatch: Self.isWatch)
+        case "pause": draft.pauseTimer(writer: writer, onWatch: Self.isWatch)
+        case "resume": draft.resumeTimer(writer: writer, onWatch: Self.isWatch)
+        case "start": draft.startNextTimer(writer: writer, onWatch: Self.isWatch)
+        case "here": draft.moveTimerAlerts(writer: writer, onWatch: Self.isWatch)
+        default: return
+        }
+        if draft != ledger { try commit(draft) }
+    }
+    func deleteTimer(_ id: String) throws {
+        if !Self.isWatch, ledger.timerControl?.onWatch == true, ledger.currentTimer?.id == id { return }
+        var draft = ledger; draft.deleteQueuedTimer(id, writer: writer, onWatch: Self.isWatch)
+        if draft != ledger { try commit(draft) }
+    }
+    func refreshTimerSupport(force: Bool = false) {
+        let current = ledger.currentTimer, control = ledger.timerControl
+        guard force || !timerSupportInitialized || timerSupportTask != current || timerSupportControl != control else { return }
+        timerSupportInitialized = true; timerSupportTask = current; timerSupportControl = control
+        #if os(watchOS)
+        WatchTimerAlarm.shared.update(ledger: ledger, writer: writer)
+        #if !targetEnvironment(simulator)
+        let snapshot = current.map { TimerWidgetSnapshot(title: $0.title, duration: $0.duration, dueAt: control?.dueAt, pausedRemaining: control?.pausedRemaining) }
+        if (try? TimerWidgetStore.write(snapshot)) == true { WidgetCenter.shared.reloadTimelines(ofKind: "DashCurrentTimer") }
+        #endif
+        #endif
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await NotificationScheduler.shared.applyTimer(self.ledger, writer: self.writer)
+            #if os(iOS)
+            await TimerLiveActivity.shared.refresh(self.ledger)
+            #endif
+        }
+    }
 
     func saveSample(id: String? = nil, at timestamp: Date = Date(), activity: String, categoryID: String?) throws {
         var draft = ledger
