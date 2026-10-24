@@ -2,7 +2,7 @@ import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
     private func recordScreen(_ name: String, in app: XCUIApplication) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: app.state == .runningForeground ? app.screenshot() : XCUIScreen.main.screenshot())
         attachment.name = "Review-\(name).png"; attachment.lifetime = .keepAlways
         add(attachment)
     }
@@ -2439,7 +2439,13 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars.buttons["log-review.save-next"].exists)
         recordScreen("ReviewSaveNextInTopBar", in: app)
         next.tap()
-        XCTAssertTrue(app.buttons["log-review.skip-event"].waitForExistence(timeout: 5))
+        let eventShown = app.buttons["log-review.skip-event"].waitForExistence(timeout: 5)
+        if !eventShown {
+            recordScreen("GoalReviewFailure", in: app)
+            print("GOAL REVIEW APP STATE: \(app.state.rawValue)")
+            if app.state == .runningForeground { print("GOAL REVIEW UI: \(app.debugDescription)") }
+        }
+        XCTAssertTrue(eventShown)
         app.buttons["log-review.skip-event"].tap()
         XCTAssertFalse(app.buttons["log-review.close"].exists)
         XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
@@ -2491,7 +2497,9 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-feedback-fixture"]; app.launch()
         app.buttons["Show day comparison"].tap()
         let baseline = element(app, "comparison.baseline")
-        XCTAssertTrue(baseline.waitForExistence(timeout: 10))
+        let opened = baseline.waitForExistence(timeout: 10)
+        if !opened { recordScreen("ComparisonFailure", in: app); print("COMPARISON UI: \(app.debugDescription)") }
+        XCTAssertTrue(opened)
         let original = baseline.label
         XCTAssertTrue(app.staticTexts["Today so far"].exists)
         recordScreen("DailyNumericComparison", in: app)
