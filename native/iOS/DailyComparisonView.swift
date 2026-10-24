@@ -29,8 +29,8 @@ struct DailyComparisonView: View {
                 .pickerStyle(.segmented).accessibilityIdentifier("comparison.unit")
             if let report {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(report.isToday ? "Today so far" : report.day.formatted(date: .abbreviated, time: .omitted)).font(.headline)
-                    Text("Compared with average of \(report.baselineStart.formatted(.dateTime.month(.abbreviated).day()))–\(report.baselineEnd.formatted(.dateTime.month(.abbreviated).day())) · \(report.representedDays) of 7 days")
+                    Text(report.isToday ? "Today so far" : store.dayLabel(report.day)).font(.headline)
+                    Text("Compared with average of \(shortDate(report.baselineStart))–\(shortDate(report.baselineEnd)) · \(report.representedDays) of 7 days")
                         .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("comparison.baseline")
                     if report.isToday { Text("Today is incomplete and is not part of the baseline.").font(.caption2).foregroundStyle(.secondary) }
                     if !report.hasData { Text("No log data for this day.").font(.subheadline).foregroundStyle(.secondary) }
@@ -67,6 +67,11 @@ struct DailyComparisonView: View {
         .onChange(of: day) { _, _ in revision = UUID() }
         .onChange(of: store.ledger) { _, _ in revision = UUID() }
         .onAppear { revision = UUID() }
+    }
+    private func shortDate(_ date: Date) -> String {
+        let formatter = DateFormatter(); formatter.timeZone = store.ledger.reportingCalendar().timeZone
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
     }
     private func move(_ amount: Int) { day = store.ledger.reportingCalendar().date(byAdding: .day, value: amount, to: day) ?? day }
     private func actual(_ row: DailyComparisonRow) -> String { unit == .time ? store.duration(row.minutes) : String(format: "%.1f%%", row.percent) }

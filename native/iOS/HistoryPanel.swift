@@ -32,11 +32,15 @@ struct HistoryPanel: View {
                     HStack(spacing: 0) {
                         breakdown.padding(.horizontal, 20)
                             .frame(width: geometry.size.width, height: geometry.size.height).id(0)
-                        pie(diameter: max(160, min(360, geometry.size.width - 40, geometry.size.height * 0.6)))
-                            .padding(.horizontal, 20)
+                        Group {
+                            if page == 1 { pie(diameter: max(160, min(360, geometry.size.width - 40, geometry.size.height * 0.6))) }
+                            else { Color.clear.accessibilityHidden(true) }
+                        }.padding(.horizontal, 20)
                             .frame(width: geometry.size.width, height: geometry.size.height).id(1)
-                        CategoryTrendView(report: report, isVisible: page == 2, chartHeight: max(220, min(360, geometry.size.height * 0.45)))
-                            .padding(.horizontal, 20)
+                        Group {
+                            if page == 2 { CategoryTrendView(report: report, isVisible: true, chartHeight: max(220, min(360, geometry.size.height * 0.45))) }
+                            else { Color.clear.accessibilityHidden(true) }
+                        }.padding(.horizontal, 20)
                             .frame(width: geometry.size.width, height: geometry.size.height).id(2)
                         CategoryHeatmapView(report: report) { item in
                             if item.direct { selectDirect(item.row) }
@@ -143,7 +147,13 @@ struct HistoryPanel: View {
                                         .accessibilityHidden(true)
                                 }
                             }
-                        }.accessibilityIdentifier("report.pie.chart")
+                        }
+                        // Recreate sector geometry when categories merge or
+                        // disappear. Reusing the old Charts plot can trap while
+                        // interpolating a removed sector on iOS 18.
+                        .id(report.rows.map(\.id))
+                        .transaction { $0.animation = nil }
+                        .accessibilityIdentifier("report.pie.chart")
                         // Keep the label outside Chart's generated accessibility
                         // tree so VoiceOver can read the selected group as well.
                         VStack(spacing: 3) {

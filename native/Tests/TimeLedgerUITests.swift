@@ -96,10 +96,7 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func openCategoryTargets(in app: XCUIApplication) {
-        if !element(app, "goals.time-left").exists {
-            let link = app.buttons["dated-goals.category-targets"]
-            XCTAssertTrue(link.waitForExistence(timeout: 5)); link.tap()
-        }
+        XCTAssertTrue(element(app, "goals.time-left").waitForExistence(timeout: 10))
     }
 
     private func openGoalEditor(in app: XCUIApplication) {
@@ -2475,11 +2472,11 @@ final class TimeLedgerUITests: XCTestCase {
     func testUnifiedCommitmentsAndPinnedGoalActions() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-feedback-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
-        XCTAssertTrue(app.buttons["commitments.target.work"].waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "goals.progress.work").waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "dated-goals.progress.")).count == 2)
         XCTAssertFalse(app.buttons["dated-goals.category-targets"].exists)
         recordScreen("UnifiedCommitments", in: app)
-        app.buttons["commitments.target.work"].tap()
+        element(app, "goals.progress.work").tap()
         XCTAssertTrue(element(app, "category-detail.count").waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["category-detail.logs"].exists)
         app.buttons["category-detail.close"].tap()
@@ -2545,8 +2542,26 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["idea-review.undo-delete"].tap()
         app.buttons["idea-review.close"].tap()
         let search = app.textFields["inbox.search"]; reveal(search, in: app); search.tap(); search.typeText("Extra detail saved")
+        app.buttons["keyboard.done"].firstMatch.tap()
         XCTAssertTrue(element(app, "inbox.details.uncategorized").waitForExistence(timeout: 5))
         recordScreen("CompactInboxSearch", in: app)
+    }
+
+    func testPieStaysUsableWhenReviewMergesTheLastUncategorizedSector() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
+        app.buttons["Show pie chart"].tap()
+        XCTAssertTrue(element(app, "report.pie.chart").waitForExistence(timeout: 5))
+        app.buttons["dashboard.review.uncategorized"].tap()
+        element(app, "log-review.goal").tap(); app.buttons["Prepare SDES lecture"].tap()
+        let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.buttons["log-review.skip-event"].waitForExistence(timeout: 5))
+        app.buttons["log-review.skip-event"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "report.pie.chart").exists)
+        app.buttons["report.pie.group.work"].tap()
+        XCTAssertTrue(element(app, "report.pie.selection").label.contains("Work"))
+        recordScreen("PieAfterCategoryMerge", in: app)
     }
 
 }

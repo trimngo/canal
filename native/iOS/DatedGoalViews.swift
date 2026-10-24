@@ -100,6 +100,7 @@ struct LogGoalPicker: View {
 struct CommitmentsView: View {
     @EnvironmentObject private var store: LedgerStore
     @State private var editing = false
+    @State private var editingWindow = false
     @State private var selectedCategory: CategoryDetailRequest?
     @State private var editingGoal: DatedGoal?
     @State private var progress: [DatedGoalProgress] = []
@@ -113,18 +114,10 @@ struct CommitmentsView: View {
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { clock in
             List {
-                if let window = store.ledger.goalDayWindow(on: clock.date, now: clock.date) {
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("\(store.duration(window.remainingMinutes)) left today").font(.headline)
-                            ProgressView(value: window.elapsedMinutes, total: max(1, window.minutes)).tint(.secondary)
-                            HStack {
-                                Text("\(store.duration(window.elapsedMinutes)) elapsed")
-                                Spacer()
-                                Text("Until \(window.interval.end.formatted(date: .omitted, time: .shortened))")
-                            }.font(.caption).foregroundStyle(.secondary)
-                        }.padding(.vertical, 4)
-                    }
+                if let daily {
+                    Section { DailyGoalCapacityView(report: daily) { editingWindow = true }.padding(.vertical, 4) }
+                } else {
+                    Button("Set day window") { editingWindow = true }
                 }
                 ForEach(categoryIDs, id: \.self) { id in
                     Section {
@@ -146,7 +139,7 @@ struct CommitmentsView: View {
                 }
                 if categoryIDs.isEmpty && progress.isEmpty {
                     Text("Favorite a category target or add a goal in Edit goals.").foregroundStyle(.secondary)
-                    Button("Edit goals") { editing = true }
+                    Button("Choose favorites") { editing = true }
                 }
             }.listStyle(.plain)
                 .onChange(of: Int(clock.date.timeIntervalSince1970 / 60)) { _, _ in calculationID = UUID() }
@@ -158,8 +151,9 @@ struct CommitmentsView: View {
         }
         .sheet(item: $editingGoal) { DatedGoalEditorView(goal: $0) }
         .sheet(item: $selectedCategory) { CategoryDetailView(request: $0) }
+        .sheet(isPresented: $editingWindow) { NavigationStack { DayWindowSettingsView() } }
         .task(id: calculationID) {
-            let ledger = store.ledger, now = Date()
+            let ledger = store.ledger, now = reportDate(Date())
             let work = Task.detached(priority: .userInitiated) {
                 (ledger.datedGoalProgress(now: now), ledger.dailyGoals(now: now, favoritesOnly: true), ledger.allocation(on: now, now: now))
             }
@@ -168,24 +162,21 @@ struct CommitmentsView: View {
         }
         .onChange(of: store.ledger) { _, _ in calculationID = UUID() }
     }
-    private func categoryProgress(_ row: DailyGoalProgress) -> some View {
-        Button {
-            selectedCategory = CategoryDetailRequest(id: row.id, name: row.category.name)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(row.isMet ? "Daily target met" : "\(store.duration(row.remainingMinutes)) left today").foregroundStyle(.primary)
-                    Spacer()
-                    if let percentage = store.ledger.currentGoals()[row.id] { Text("\(percentage, specifier: "%.0f")% goal").font(.caption).foregroundStyle(.secondary) }
+    private func reportDate(_ date: Date) -> Date {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
+            return ISO8601DateFormatter().date(from: "2026-10-22T17:30:00Z")!
+        }
+        #endif
+        return date
+    }
+    @ViewBuilder private func categoryProgress(_ row: DailyGoalProgress) -> some View {
+        if let daily {
+            DailyCategoryGoalRow(goal: row, report: daily, showsName: false,
+                unreviewedMinutes: today.unreviewed(for: row.id, ledger: store.ledger)) {
+                    selectedCategory = CategoryDetailRequest(id: row.id, name: row.category.name)
                 }
-                GeometryReader { geometry in
-                    ProgressView(value: row.fraction).frame(width: max(2, geometry.size.width * (daily?.goalWidthFraction(row) ?? 1)), alignment: .leading)
-                }.frame(height: 5)
-                Text("\(store.duration(row.actualMinutes)) of \(store.duration(row.targetMinutes))").font(.caption).foregroundStyle(.secondary)
-                let pending = today.unreviewed(for: row.id, ledger: store.ledger)
-                if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
-            }.padding(.vertical, 4).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityIdentifier("commitments.target.\(row.id)")
+        }
     }
     private func datedProgress(_ row: DatedGoalProgress, now: Date) -> some View {
         Button { editingGoal = row.goal } label: {
