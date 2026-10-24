@@ -156,4 +156,41 @@ final class FeedbackReviewTests: XCTestCase {
         XCTAssertEqual(value.allocation(on: start, now: now, calendar: cal).trackedMinutes, 15)
         XCTAssertTrue(value.inferredSegments(on: start, now: now, calendar: cal).allSatisfy { $0.end > $0.start })
     }
+    func testMovingSuggestedLogConfirmsOnlyTheMovedBranchAndRetainsOtherLabels() throws {
+        var value = ledger()
+        try value.saveSample(id: "s", at: now, activity: "Preparing", categoryIDs: [], writer: "p", now: now)
+        try value.suggestCategories(CategorySuggestion(categoryIDs: ["digs", "music"], reason: "Matched", sourceText: "Preparing"), logID: "s", writer: "p")
+        try value.moveLogs(["s"], from: "digs", to: "work", writer: "p")
+        XCTAssertEqual(value.confirmedCategoryIDs(for: value.entries[0]), ["music", "work"])
+        XCTAssertNil(value.entries[0].categorySuggestion)
+    }
+    func testDeletingSuggestedCategoryPreservesItsTimeShare() throws {
+        var value = ledger(); let timestamp = now.addingTimeInterval(-3600)
+        try value.saveSample(id: "s", at: timestamp, activity: "Preparing", categoryIDs: [], writer: "p", now: now)
+        try value.suggestCategories(CategorySuggestion(categoryIDs: ["digs", "music"], reason: "Matched", sourceText: "Preparing"), logID: "s", writer: "p")
+        try value.deleteCategory(id: "digs", writer: "p")
+        let period = value.allocation(on: timestamp, now: now, calendar: cal)
+        XCTAssertEqual(period.directMinutes["music"], 7.5)
+        XCTAssertEqual(period.directMinutes["uncategorized"], 7.5)
+        XCTAssertEqual(period.trackedMinutes, 15)
+    }
+    func testEditingOnlyIdeaNotesKeepsSuggestionAndConflictingNamesStayAmbiguous() throws {
+        var value = ledger(); let idea = try value.addCapture(text: "DIGS lecture", writer: "p", now: now)
+        try value.suggestCategories(CategorySuggestion(categoryIDs: ["digs"], reason: "Matched", sourceText: idea.text), captureID: idea.id, writer: "p")
+        try value.updateCapture(id: idea.id, text: idea.text, notes: "Made slides", writer: "p")
+        XCTAssertNotNil(value.captures[0].categorySuggestion)
+        XCTAssertNil(OfflineCategoryModel(ledger: value).suggest("Music and DIGS", semantic: [.init(categoryIDs: ["music"], similarity: 0.99)]))
+    }
+    func testSuggestedFieldsAlsoTravelThroughWatchQuickPackets() throws {
+        var value = ledger()
+        try value.saveSample(id: "s", at: now, activity: "DIGS", categoryIDs: [], writer: "p", now: now)
+        try value.suggestCategories(CategorySuggestion(categoryIDs: ["digs"], reason: "Matched DIGS", sourceText: "DIGS"), logID: "s", writer: "p")
+        var delivery = CompanionQuickDelivery()
+        let data = try XCTUnwrap(delivery.prepare(value, id: "packet"))
+        let packet = try JSONDecoder().decode(CompanionQuickPacket.self, from: data)
+        var watch = ledger(); watch.merge(packet.ledger)
+        XCTAssertEqual(watch.entries[0].categorySuggestion, value.entries[0].categorySuggestion)
+        XCTAssertEqual(watch.effectiveCategoryIDs(for: watch.entries[0]), ["digs"])
+    }
+
 }

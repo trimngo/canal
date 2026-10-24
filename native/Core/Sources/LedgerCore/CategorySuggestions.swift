@@ -64,8 +64,8 @@ public struct OfflineCategoryModel: Sendable {
             let name = OfflineGrouping.normalized($0.name)
             return name.count >= 3 && (" " + normalized + " ").contains(" " + name + " ")
         }.sorted { $0.name.count > $1.name.count }
-        if let name = names.first,
-           names.dropFirst().allSatisfy({ OfflineGrouping.normalized(name.name).contains(OfflineGrouping.normalized($0.name)) }) {
+        if let name = names.first {
+            guard names.dropFirst().allSatisfy({ OfflineGrouping.normalized(name.name).contains(OfflineGrouping.normalized($0.name)) }) else { return nil }
             return result([name.id], "Matched \(name.name)")
         }
         // Distinctive vocabulary learned across categories; generic shared

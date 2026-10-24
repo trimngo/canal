@@ -12,7 +12,7 @@ extension Ledger {
         for id in ids.sorted() {
             guard !isLogDeleted(id), let index = draft.entries.firstIndex(where: { $0.id == id }) else { throw LedgerError.deletedSample }
             let original = draft.entries[index]
-            let raw = original.categoryAssignment == .automatic ? [] : (original.categoryIDs ?? original.categoryID.map { [$0] } ?? [])
+            let raw = original.categoryAssignment == .automatic ? (original.categorySuggestion?.categoryIDs ?? []) : (original.categoryIDs ?? original.categoryID.map { [$0] } ?? [])
             let matches = source == "uncategorized" ? (raw.isEmpty || raw.contains { !known.contains($0) }) : raw.contains { branch.contains($0) }
             guard matches else { throw LedgerError.invalidCategory }
             var labels = raw.filter { source == "uncategorized" ? known.contains($0) : !branch.contains($0) }
@@ -21,6 +21,7 @@ extension Ledger {
             draft.entries[index].categoryIDs = labels
             draft.entries[index].categoryID = labels.first { known.contains($0) }
             draft.entries[index].categoryAssignment = .manual
+            draft.entries[index].categorySuggestion = nil
             if original.goalID != nil { draft.entries[index].goalShare = draft.datedGoalShare(for: draft.entries[index], goalID: original.goalID) }
             draft.entries[index].revision = draft.nextRevision(writer: writer)
         }

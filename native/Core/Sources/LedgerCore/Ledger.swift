@@ -364,7 +364,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         let savedNotes = notes.isEmpty ? nil : notes
         guard captures[index].text != cleaned || captures[index].notes != savedNotes else { return }
         let revision = nextRevision(writer: writer)
-        if captures[index].categorySuggestion != nil { captures[index].categorySuggestion = nil; captures[index].categoryIDs = nil }
+        if captures[index].text != cleaned, captures[index].categorySuggestion != nil { captures[index].categorySuggestion = nil; captures[index].categoryIDs = nil }
         captures[index].text = cleaned; captures[index].notes = savedNotes; captures[index].revision = revision
     }
 

@@ -120,7 +120,11 @@ extension Ledger {
     public func allocationCategoryIDs(for entry: CheckIn) -> [String] {
         guard entry.categoryAssignment != .automatic else {
             let suggested = effectiveCategoryIDs(for: entry)
-            return suggested.isEmpty ? ["uncategorized"] : suggested
+            guard let suggestion = entry.categorySuggestion, suggestion.sourceText == OfflineGrouping.normalized(entry.activity) else { return ["uncategorized"] }
+            let known = Set(categories.map(\.id))
+            let missing = Set(suggestion.categoryIDs).filter { !known.contains($0) }.map { _ in "uncategorized" }
+            let result = suggested + missing
+            return result.isEmpty ? ["uncategorized"] : result
         }
         let raw = Set(entry.categoryIDs ?? entry.categoryID.map { [$0] } ?? [])
         let known = Set(categories.map(\.id))

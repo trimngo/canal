@@ -30,6 +30,9 @@ struct CheckInView: View {
                                 InlineEntryText(text: entry.activity, identifier: "logs.entry.\(entry.id)", maxLength: 500) {
                                     try store.updateLogActivity(id: entry.id, activity: $0)
                                 }
+                                if let suggestion = entry.categorySuggestion {
+                                    Text("Suggested · \(suggestion.reason)").font(.caption2).foregroundStyle(.secondary)
+                                }
                                 Button { editing = entry } label: {
                                     Text("\(store.dayLabel(entry.end)) · \(store.time(entry.end)) · \(store.categoryNames(for: entry))")
                                         .font(.caption).foregroundStyle(.secondary)
