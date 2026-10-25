@@ -31,5 +31,6 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimersHaveOwnTabCanCreateEditReorderAndPersist \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxCaptureCanReturnToTimersTab \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHomeShowsDashboardAndKeepsLoggingSeparateFromTimers test
 fi
