@@ -86,7 +86,6 @@ struct TimerQueueView: View {
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4)
-            .accessibilityIdentifier("timers.current-screen")
     }
     private func watchQueue(at now: Date) -> some View {
         List {
@@ -128,7 +127,7 @@ struct TimerQueueView: View {
             NavigationLink(destination: TimerSettingsView()) {
                 Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
             }.accessibilityIdentifier("timers.alarm-settings")
-        }.listStyle(.carousel).accessibilityIdentifier("timers.queue-screen")
+        }.listStyle(.carousel)
             // Up is navigation on this page, even when more rows remain.
             // The Digital Crown still scrolls the full queue; horizontal row
             // swipes retain their native Delete action.
@@ -140,9 +139,7 @@ struct TimerQueueView: View {
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
     }
     private func watchCountdown(_ task: QueuedTimer, control: TimerQueueControl, at now: Date, large: Bool) -> some View {
-        Button {
-            if !control.isFinished(at: now) { act(control.pausedRemaining == nil ? "pause" : "resume") }
-        } label: {
+        HStack(spacing: 6) {
             Group {
                 if control.isFinished(at: now) {
                     Text("Finished").foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
@@ -154,9 +151,13 @@ struct TimerQueueView: View {
                 }
             }.font(.system(size: large ? 42 : 28, weight: .medium, design: .rounded).monospacedDigit())
                 .lineLimit(1).minimumScaleFactor(0.6).frame(maxWidth: .infinity, alignment: .leading)
-        }.buttonStyle(.plain).disabled(control.isFinished(at: now))
-            .accessibilityLabel(control.pausedRemaining == nil ? "Pause timer" : "Resume timer")
-            .accessibilityIdentifier("timers.pause-resume")
+            if !control.isFinished(at: now) {
+                Button(control.pausedRemaining == nil ? "Pause timer" : "Resume timer", systemImage: control.pausedRemaining == nil ? "pause.circle" : "play.circle") {
+                    act(control.pausedRemaining == nil ? "pause" : "resume")
+                }.labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 32, height: 40)
+                    .accessibilityIdentifier("timers.pause-resume")
+            }
+        }
     }
     private func watchProgress(_ task: QueuedTimer, control: TimerQueueControl, at now: Date) -> some View {
         let progress = min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration)))

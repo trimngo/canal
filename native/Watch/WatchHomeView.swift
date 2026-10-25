@@ -97,7 +97,7 @@ struct WatchHomeView: View {
             .toolbar {
                 if tab == 3 || tab == 4 {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()) }
+                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
                             .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
                     }
                 }
