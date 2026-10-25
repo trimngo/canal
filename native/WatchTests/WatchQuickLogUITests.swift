@@ -51,18 +51,27 @@ final class WatchQuickLogUITests: XCTestCase {
         record("WatchTimerSystemInputVisible", app)
         suggestion.tap()
         allowTimerNotifications(app)
+        // Advance the two existing tasks so the newly captured row is the
+        // next visible item. A full swipe can overshoot a lazy, half-height list.
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        app.buttons["timers.done"].tap()
+        let email = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Answer email"), object: app.staticTexts["timers.current"])
+        XCTAssertEqual(XCTWaiter.wait(for: [email], timeout: 10), .completed)
+        app.staticTexts["timers.current"].swipeLeft()
+        XCTAssertTrue(app.buttons["timers.swipe-done"].waitForExistence(timeout: 5)); app.buttons["timers.swipe-done"].tap()
+        let walk = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Take a walk"), object: app.staticTexts["timers.current"])
+        XCTAssertEqual(XCTWaiter.wait(for: [walk], timeout: 10), .completed)
         let added = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "timers.waiting.", "Stretch")).firstMatch
-        for _ in 0..<5 { if added.exists { break }; app.descendants(matching: .any).matching(identifier: "timers.queue-pane").firstMatch.swipeUp() }
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         let id = added.identifier.replacingOccurrences(of: "timers.waiting.", with: "")
         XCTAssertEqual(app.staticTexts["timers.duration.\(id)"].label, "5:00")
         XCTAssertTrue(app.staticTexts["timers.current"].isHittable)
-        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Take a walk")
         XCTAssertTrue(app.buttons["timers.dictate"].isHittable)
         let add = app.buttons["timers.dictate"]
         XCTAssertGreaterThan(add.frame.midY, app.staticTexts["timers.current"].frame.maxY)
         XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
-        XCTAssertFalse(app.buttons["timers.delete.timer-email"].isHittable)
+        XCTAssertFalse(app.buttons["timers.delete.\(id)"].isHittable)
         record("WatchTimersTopHalfAndFloatingAdd", app)
     }
     func testWatchHomeCanAddATimerInOneTap() {

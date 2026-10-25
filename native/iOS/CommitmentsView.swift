@@ -100,7 +100,6 @@ struct GoalEditorView: View {
                 categoryIndex = AllocationCategoryIndex(ledger: store.ledger)
                 latestReference.goalDayMinutes = store.ledger.goalDayWindow()?.minutes
                 refreshReference(); load(); loaded = true
-
             }
         }
         .task(id: reportRevision) { await prepareReports() }
@@ -158,7 +157,6 @@ struct GoalEditorView: View {
                         Button(singleSelection == nil ? "Add category" : "Add child category", systemImage: "folder.badge.plus") {
                             endGoalEditing(); actionRequest = .name(nil, parent: singleSelection?.id)
                         }.accessibilityIdentifier(singleSelection == nil ? "plan.create-category" : "plan.create-child")
-
                     }.font(.subheadline).frame(minHeight: 44)
                 }
             }.padding(.horizontal, 12).padding(.vertical, 6).background(.bar)
