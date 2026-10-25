@@ -195,6 +195,10 @@ extension Ledger {
         let wasCurrent = currentTimer?.id == id
         let revision = nextRevision(writer: writer)
         queuedTimers?[i].deletedAt = now; queuedTimers?[i].revision = revision
-        if wasCurrent { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
+        // Deleting is not completing: cancel this alarm and leave the queue
+        // waiting for an explicit Start, regardless of the Done & Next setting.
+        if wasCurrent {
+            timerControl = TimerQueueControl(taskID: nil, dueAt: nil, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        }
     }
 }

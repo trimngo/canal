@@ -6,6 +6,7 @@ struct CaptureCategoryButton: View {
     let capture: Capture
     let identifier: String
     var compact = false
+    var showsAllCategories = false
     @State private var showing = false
     @State private var selection: [String] = []
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
@@ -16,7 +17,7 @@ struct CaptureCategoryButton: View {
             selection = store.ledger.categoryIDs(for: current); showing = true
         } label: {
             Label((current.categorySuggestion == nil ? "" : "Suggested · ") + (names.isEmpty ? "Categorize" : names), systemImage: "tag")
-                .font(compact ? .caption : .subheadline).lineLimit(compact ? 1 : 2).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                .font(compact ? .caption : .subheadline).lineLimit(showsAllCategories ? nil : compact ? 1 : 2).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
         }.buttonStyle(.borderless).accessibilityIdentifier(identifier)
             .accessibilityLabel(names.isEmpty ? "Categorize idea" : "Categories: \(names)")
             .sheet(isPresented: $showing) {

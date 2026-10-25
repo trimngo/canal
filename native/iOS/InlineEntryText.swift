@@ -9,6 +9,7 @@ struct InlineEntryText: View {
     var font: Font = .body
     var maxLength: Int? = nil
     var allowEmpty = false
+    var displayLineLimit: Int? = 3
     let draftText: Binding<String>?
     let save: (String) throws -> Void
     @State private var draft: String
@@ -16,8 +17,8 @@ struct InlineEntryText: View {
     @State private var editing = false
     @FocusState private var focused: Bool
 
-    init(text: String, identifier: String, font: Font = .body, maxLength: Int? = nil, allowEmpty: Bool = false, draftText: Binding<String>? = nil, save: @escaping (String) throws -> Void) {
-        self.text = text; self.identifier = identifier; self.font = font; self.maxLength = maxLength; self.allowEmpty = allowEmpty; self.draftText = draftText; self.save = save
+    init(text: String, identifier: String, font: Font = .body, maxLength: Int? = nil, allowEmpty: Bool = false, displayLineLimit: Int? = 3, draftText: Binding<String>? = nil, save: @escaping (String) throws -> Void) {
+        self.text = text; self.identifier = identifier; self.font = font; self.maxLength = maxLength; self.allowEmpty = allowEmpty; self.displayLineLimit = displayLineLimit; self.draftText = draftText; self.save = save
         _draft = State(initialValue: text)
     }
     var body: some View {
@@ -29,7 +30,7 @@ struct InlineEntryText: View {
                     .onSubmit { if finish() { focused = false; editing = false } }
                     .task { focused = true }
             } else {
-                Text(text.isEmpty ? "Add notes…" : text).font(font).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                Text(text.isEmpty ? "Add notes…" : text).font(font).lineLimit(displayLineLimit).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     .onTapGesture { draft = text; editing = true }
                     .accessibilityIdentifier(identifier).accessibilityHint("Tap to edit inline")
                     .accessibilityAction(named: "Edit text") { draft = text; editing = true }

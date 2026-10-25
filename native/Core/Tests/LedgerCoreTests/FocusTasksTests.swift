@@ -170,4 +170,33 @@ final class FocusTasksTests: XCTestCase {
         XCTAssertTrue(ledger.inboxExport.text.contains("Focus: Yes"))
         XCTAssertTrue(ledger.inboxExport.text.contains("Work estimate: 240"))
     }
+    func testAutomaticStartUsesDailyWindowIncludingWeekends() throws {
+        var ledger = Ledger(); _ = try task(&ledger)
+        for (creation, expected) in [
+            ("2026-10-23T14:00:00Z", "2026-10-23T14:00:00Z"),
+            ("2026-10-23T06:00:00Z", "2026-10-23T07:00:00Z"),
+            ("2026-10-23T22:00:00Z", "2026-10-24T07:00:00Z"),
+            ("2026-10-24T23:30:00Z", "2026-10-25T07:00:00Z")
+        ] {
+            ledger.captures[0].createdAt = date(creation)
+            XCTAssertEqual(ledger.taskPacingStart(for: ledger.captures[0]), date(expected))
+        }
+        ledger.captures[0].snoozedUntil = date("2026-10-27T08:00:00Z")
+        XCTAssertEqual(ledger.taskPacingStart(for: ledger.captures[0]), date("2026-10-25T07:00:00Z"))
+        XCTAssertTrue(ledger.inboxExport.text.contains("Work starts: 2026-10-25T07:00:00Z"))
+        try ledger.setTaskPlan("prep", estimatedMinutes: 240, startDate: start, writer: "p")
+        XCTAssertEqual(ledger.taskPacingStart(for: ledger.captures[0]), start)
+    }
+    func testWeekendWindowAccumulatesPaceAndOutOfWindowLogsStillCount() throws {
+        var ledger = Ledger(); _ = try task(&ledger); try log(&ledger, taskID: "prep")
+        ledger.captures[0].createdAt = date("2026-10-23T23:00:00Z")
+        try ledger.setCaptureTiming("prep", timing: .due(date("2026-10-25T22:00:00Z")), writer: "p")
+        let row = ledger.focusTaskProgress(now: date("2026-10-24T22:00:00Z"))[0]
+        XCTAssertEqual(row.goal.startDate, date("2026-10-24T07:00:00Z"))
+        XCTAssertEqual(row.expectedMinutes, 120, accuracy: 0.001)
+        XCTAssertEqual(row.remainingWorkdays, 1)
+        XCTAssertEqual(row.actualMinutes, 60)
+        let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        XCTAssertEqual(restored.focusTaskProgress(now: date("2026-10-24T22:00:00Z")), [row])
+    }
 }

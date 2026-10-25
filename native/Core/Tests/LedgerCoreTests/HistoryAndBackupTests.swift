@@ -31,6 +31,25 @@ final class HistoryAndBackupTests: XCTestCase {
         XCTAssertEqual(report.trackedMinutes, 75, accuracy: 0.001)
         XCTAssertFalse(report.samples.contains { $0.activity == "Boundary" })
     }
+    func testDayNavigationUsesSelectedDayWithoutChangingTheObservationClock() throws {
+        let ledger = try fixture(), now = date("2026-10-15T11:00:00Z")
+        let yesterday = ledger.history(range: .today, now: now, calendar: calendar, anchor: date("2026-10-14T11:00:00Z"))
+        XCTAssertEqual(yesterday.start, date("2026-10-14T00:00:00Z"))
+        XCTAssertEqual(yesterday.end, date("2026-10-15T00:00:00Z"))
+        XCTAssertEqual(yesterday.samples.count, 2)
+        XCTAssertEqual(yesterday.trackedMinutes, 75, accuracy: 0.001)
+        let future = ledger.history(range: .today, now: now, calendar: calendar, anchor: date("2026-11-01T00:00:00Z"))
+        XCTAssertEqual(future.start, date("2026-10-15T00:00:00Z")); XCTAssertEqual(future.end, now)
+        XCTAssertEqual(ledger.history(range: .allTime, now: now, calendar: calendar, anchor: yesterday.start).samples.count, 6)
+    }
+    func testSevenDayNavigationIncludesSevenCalendarDatesAcrossDST() {
+        var ledger = Ledger(); ledger.settings.reportingTimeZoneIdentifier = "Europe/Berlin"
+        let report = ledger.history(range: .week, now: date("2026-11-02T12:00:00Z"), anchor: date("2026-10-25T12:00:00Z"))
+        XCTAssertEqual(report.start, date("2026-10-18T22:00:00Z"))
+        XCTAssertEqual(report.end, date("2026-10-25T23:00:00Z"))
+        XCTAssertEqual(report.end.timeIntervalSince(report.start) / 3600, 169)
+        XCTAssertTrue(report.samples.isEmpty)
+    }
     func testLegacyRemainingTimePreferenceDoesNotChangeTrackedPercentages() throws {
         var ledger = Ledger()
         var berlin = calendar; berlin.timeZone = TimeZone(identifier: "Europe/Berlin")!

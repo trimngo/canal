@@ -6,6 +6,9 @@ import WatchKit
 
 struct TimerQueueView: View {
     @EnvironmentObject private var store: LedgerStore
+    var watchShowsQueue = false
+    var showCurrentTimer: (() -> Void)? = nil
+    var showTimerQueue: (() -> Void)? = nil
     @State private var draft = ""
     @State private var inputError: String?
     @State private var inputOpen = false
@@ -15,11 +18,14 @@ struct TimerQueueView: View {
     @ObservedObject private var notifications = NotificationScheduler.shared
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
+    @State private var queuePosition = 0.0
+    @FocusState private var queueFocused: Bool
     #endif
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { timeline in
             #if os(watchOS)
-            watchTimers(at: timeline.date)
+            if watchShowsQueue { watchQueue(at: timeline.date) }
+            else { watchCurrentTimer(at: timeline.date) }
             #else
             queue(at: timeline.date)
             #endif
@@ -40,114 +46,156 @@ struct TimerQueueView: View {
         .task {
             store.refreshTimerSupport(force: true); await notifications.refreshStatus()
             #if os(watchOS)
-            if store.timerDictationRequested { dictate() }
+            if !watchShowsQueue, store.timerDictationRequested { dictate() }
             #endif
         }
         .onChange(of: store.timerRequestID) { _, _ in
             #if os(watchOS)
-            if store.timerDictationRequested { dictate() }
+            if !watchShowsQueue, store.timerDictationRequested { dictate() }
             #else
             focused = store.timerDictationRequested; store.timerDictationRequested = false
             #endif
         }
     }
     #if os(watchOS)
-    private func watchTimers(at now: Date) -> some View {
-        GeometryReader { geometry in
-            let currentHeight = geometry.size.height / 2
-            VStack(spacing: 0) {
-                List {
-                    if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(task.title).font(.system(size: 21, weight: .semibold)).lineLimit(2).minimumScaleFactor(0.7)
-                                .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("timers.current")
-                            HStack(spacing: 6) {
-                                if control.isFinished(at: now) {
-                                    Text("Finished").font(.title3.bold()).foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
-                                } else if let due = control.dueAt {
-                                    Text(timerInterval: due.addingTimeInterval(-task.duration)...due, countsDown: true)
-                                        .font(.system(size: 29, weight: .medium, design: .rounded).monospacedDigit())
-                                        .minimumScaleFactor(0.6).accessibilityIdentifier("timers.countdown")
-                                } else {
-                                    Text(clock(control.remaining(at: now))).font(.title2.monospacedDigit()).accessibilityIdentifier("timers.paused")
-                                }
-                                Spacer(minLength: 0)
-                                // A visible target keeps the system double-tap shortcut
-                                // available without opening the swipe actions first.
-                                watchRestartButton.buttonStyle(.plain).frame(width: 28, height: 28)
-                                if control.isFinished(at: now) {
-                                    Button(doneTitle, systemImage: "checkmark.circle.fill") { act("done") }
-                                        .labelStyle(.iconOnly).font(.title2).foregroundStyle(.mint).buttonStyle(.plain)
-                                        .accessibilityIdentifier("timers.done")
-                                }
-                            }
-                            let progress = min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration)))
-                            ProgressView(value: progress).progressViewStyle(.linear).tint(control.isFinished(at: now) ? .orange : .mint)
-                                .frame(height: 4).clipped().accessibilityLabel("Timer progress")
-                                .accessibilityValue("\(Int(progress * 100)) percent complete").accessibilityIdentifier("timers.progress")
-                        }.frame(height: max(60, currentHeight), alignment: .center)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 10)).listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(doneTitle, systemImage: "checkmark") { act("done") }.tint(.green)
-                                    .accessibilityIdentifier("timers.swipe-done")
-                                if !control.isFinished(at: now) {
-                                    Button(control.pausedRemaining == nil ? "Pause" : "Resume", systemImage: control.pausedRemaining == nil ? "pause" : "play") {
-                                        act(control.pausedRemaining == nil ? "pause" : "resume")
-                                    }.tint(.orange).accessibilityIdentifier("timers.pause-resume")
-                                }
-                                Button("Skip", systemImage: "trash", role: .destructive) { remove(task.id) }
-                            }
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(store.ledger.waitingTimers.isEmpty ? "No timers yet" : "Ready for the next task").font(.title3)
-                            if !store.ledger.waitingTimers.isEmpty {
-                                Button("Start next task", systemImage: "play.fill") { act("start") }.accessibilityIdentifier("timers.start")
-                            }
-                        }.frame(height: max(60, currentHeight - 12)).listRowBackground(Color.clear)
-                    }
-                }.listStyle(.plain).scrollDisabled(true).frame(height: currentHeight)
-                    .accessibilityIdentifier("timers.current-pane")
-                Divider()
-                List {
-                    ForEach(store.ledger.waitingTimers) { task in
-                        HStack(spacing: 8) {
-                            Text(task.title).font(.system(size: 19, weight: .medium)).lineLimit(2)
-                                .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("timers.waiting.\(task.id)")
-                            Text(clock(task.duration)).font(.system(size: 16, design: .rounded).monospacedDigit())
-                                .accessibilityIdentifier("timers.duration.\(task.id)")
-                        }.foregroundStyle(.secondary).frame(minHeight: 38)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 10))
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
-                                    .accessibilityIdentifier("timers.delete.\(task.id)")
-                            }
-                    }
-                    if store.ledger.waitingTimers.isEmpty { Text("No upcoming timers").font(.caption).foregroundStyle(.secondary).listRowBackground(Color.clear) }
-                    if let inputError { Text(inputError).font(.caption).foregroundStyle(.red) }
-                    if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
-                        Text(alarm.status).font(.caption2).foregroundStyle(.orange).accessibilityIdentifier("timers.alarm-status")
-                    }
-                    if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
-                        Button("Use Watch for alerts") { act("here") }.accessibilityIdentifier("timers.use-watch")
-                    }
-                    NavigationLink(destination: TimerSettingsView()) {
-                        Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
-                    }.accessibilityIdentifier("timers.alarm-settings")
-                    // The last row can always scroll clear of the floating button.
-                    Color.clear.frame(height: 44).listRowBackground(Color.clear).accessibilityHidden(true)
-                }.listStyle(.plain).accessibilityIdentifier("timers.queue-pane")
-                    .overlay(alignment: .bottomTrailing) {
-                        Button { dictate() } label: {
-                            Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black)
-                                .frame(width: 42, height: 42).background(.mint, in: Circle())
-                                .shadow(color: .black.opacity(0.5), radius: 4)
-                        }.buttonStyle(.plain).accessibilityLabel("Add timer")
-                            .disabled(!store.storageAvailable).accessibilityIdentifier("timers.dictate")
-                            .padding(.trailing, 6).padding(.bottom, 4)
+    private func watchCurrentTimer(at now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
+                Spacer(minLength: 0)
+                Text(task.title).font(.system(size: 24, weight: .semibold)).lineLimit(3).minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("timers.current")
+                watchCountdown(task, control: control, at: now, large: true)
+                watchProgress(task, control: control, at: now)
+                Spacer(minLength: 0)
+                HStack {
+                    Button(doneTitle, systemImage: "checkmark.circle.fill") { act("done") }
+                        .labelStyle(.iconOnly).font(.title2).foregroundStyle(.mint)
+                        .accessibilityIdentifier("timers.done")
+                    Spacer()
+                    watchRestartButton.font(.title2)
+                }.buttonStyle(.plain)
+            } else if let next = store.ledger.waitingTimers.first {
+                Spacer(minLength: 0)
+                Text(next.title).font(.title2.bold()).accessibilityIdentifier("timers.ready")
+                Text(clock(next.duration)).font(.largeTitle.monospacedDigit()).foregroundStyle(.secondary)
+                Button("Start", systemImage: "play.fill") { act("start") }
+                    .buttonStyle(.borderedProminent).accessibilityIdentifier("timers.start")
+                Spacer(minLength: 0)
+            } else {
+                Spacer()
+                Text("No timers yet").font(.title3).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Spacer()
+            }
+            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
+        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4)
+            .contentShape(Rectangle())
+            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
+                if value.translation.height > 45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    showTimerQueue?()
+                }
+            })
+    }
+    private func watchQueue(at now: Date) -> some View {
+        let scrollIDs = watchQueueScrollIDs
+        return ScrollViewReader { proxy in
+        List {
+            if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.title).font(.system(size: 20, weight: .semibold)).lineLimit(2)
+                        .accessibilityIdentifier("timers.queue-current")
+                    watchCountdown(task, control: control, at: now, large: false)
+                    watchProgress(task, control: control, at: now)
+                }.padding(.vertical, 2).id(task.id)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
+                            .accessibilityIdentifier("timers.delete.\(task.id)")
                     }
             }
+            ForEach(store.ledger.waitingTimers) { task in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(task.title).font(.system(size: 19, weight: .medium)).lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("timers.waiting.\(task.id)")
+                    Text(clock(task.duration)).font(.system(size: 23, design: .rounded).monospacedDigit())
+                        .accessibilityIdentifier("timers.duration.\(task.id)")
+                }.foregroundStyle(.secondary).padding(.vertical, 2).id(task.id)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
+                            .accessibilityIdentifier("timers.delete.\(task.id)")
+                    }
+            }
+            if store.ledger.currentTimer == nil, store.ledger.waitingTimers.isEmpty {
+                Text("No queued timers").foregroundStyle(.secondary).id("empty")
+            }
+            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red).id("input-error") }
+            if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
+                Text(alarm.status).font(.caption2).foregroundStyle(.orange).id("alarm-status").accessibilityIdentifier("timers.alarm-status")
+            }
+            if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
+                Button("Use Watch for alerts") { act("here") }.id("use-watch").accessibilityIdentifier("timers.use-watch")
+            }
+            NavigationLink(destination: TimerSettingsView()) {
+                Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
+            }.id("settings").accessibilityIdentifier("timers.alarm-settings")
+        }.listStyle(.carousel).scrollDisabled(true)
+            // Touch swipes navigate pages. Crown rotation scrolls rows without
+            // the List's native vertical pan swallowing the return gesture.
+            .focusable().focused($queueFocused).focusEffectDisabled()
+            .digitalCrownRotation($queuePosition, from: 0, through: Double(max(1, scrollIDs.count - 1)), by: 1,
+                                  sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
+            .onChange(of: queuePosition) { _, value in
+                let index = min(max(0, Int(value.rounded())), scrollIDs.count - 1)
+                proxy.scrollTo(scrollIDs[index], anchor: .top)
+            }
+            .onAppear { queuePosition = 0; queueFocused = true }
+            .onDisappear { queueFocused = false }
+            // Up is navigation on this page, even when more rows remain.
+            // The Digital Crown still scrolls the full queue; horizontal row
+            // swipes retain their native Delete action.
+            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
+                if value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    showCurrentTimer?()
+                }
+            })
+            .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
         }
+    }
+    private var watchQueueScrollIDs: [String] {
+        var ids = store.ledger.currentTimer.map { [$0.id] } ?? []
+        ids += store.ledger.waitingTimers.map(\.id)
+        if ids.isEmpty { ids.append("empty") }
+        if inputError != nil { ids.append("input-error") }
+        if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") { ids.append("alarm-status") }
+        if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer { ids.append("use-watch") }
+        return ids + ["settings"]
+    }
+    private func watchCountdown(_ task: QueuedTimer, control: TimerQueueControl, at now: Date, large: Bool) -> some View {
+        HStack(spacing: 6) {
+            Group {
+                if control.isFinished(at: now) {
+                    Text("Finished").foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
+                } else if let due = control.dueAt {
+                    Text(timerInterval: due.addingTimeInterval(-task.duration)...due, countsDown: true)
+                        .accessibilityIdentifier("timers.countdown")
+                } else {
+                    Text(clock(control.remaining(at: now))).foregroundStyle(.secondary).accessibilityIdentifier("timers.paused")
+                }
+            }.font(.system(size: large ? 42 : 28, weight: .medium, design: .rounded).monospacedDigit())
+                .lineLimit(1).minimumScaleFactor(0.6).frame(maxWidth: .infinity, alignment: .leading)
+            if !control.isFinished(at: now) {
+                Button(control.pausedRemaining == nil ? "Pause timer" : "Resume timer", systemImage: control.pausedRemaining == nil ? "pause.circle" : "play.circle") {
+                    act(control.pausedRemaining == nil ? "pause" : "resume")
+                }.labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 32, height: 40)
+                    .accessibilityIdentifier("timers.pause-resume")
+            }
+        }
+    }
+    private func watchProgress(_ task: QueuedTimer, control: TimerQueueControl, at now: Date) -> some View {
+        let progress = min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration)))
+        return ProgressView(value: progress).progressViewStyle(.linear).tint(control.isFinished(at: now) ? .orange : .mint)
+            .accessibilityLabel("Timer progress").accessibilityValue("\(Int(progress * 100)) percent complete")
+            .accessibilityIdentifier("timers.progress")
     }
     @ViewBuilder private var watchRestartButton: some View {
         let button = Button("Restart", systemImage: "arrow.clockwise") { act("restart") }

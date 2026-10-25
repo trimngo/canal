@@ -128,13 +128,32 @@ extension Ledger {
         return totals
     }
 
-    /// Reuse the proven workday pacing calculation; the source of truth is Capture.
+    /// Use the creation instant inside the daily window; otherwise the next
+    /// opening. This is deterministic across devices and never skips weekends.
+    /// An explicitly entered start remains authoritative.
+    public func taskPacingStart(for task: Capture) -> Date {
+        if let explicit = task.workPlan?.startDate { return explicit }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: task.workPlan?.timeZoneIdentifier ?? reportingCalendar().timeZone.identifier) ?? TimeZone(secondsFromGMT: 0)!
+        let first = task.workPlan?.dayStartMinute ?? settings.startMinute
+        let last = task.workPlan?.dayEndMinute ?? settings.endMinute
+        guard (0..<1440).contains(first), last > first, last < 1440,
+              let opening = cal.date(bySettingHour: first / 60, minute: first % 60, second: 0, of: task.createdAt),
+              let closing = cal.date(bySettingHour: last / 60, minute: last % 60, second: 0, of: task.createdAt) else { return task.createdAt }
+        if task.createdAt < opening { return opening }
+        if task.createdAt < closing { return task.createdAt }
+        guard let tomorrow = cal.date(byAdding: .day, value: 1, to: task.createdAt),
+              let nextOpening = cal.date(bySettingHour: first / 60, minute: first % 60, second: 0, of: tomorrow) else { return task.createdAt }
+        return nextOpening
+    }
+
+    /// Reuse daily-window pacing; the source of truth is Capture.
     public func focusTaskProgress(now: Date = Date(), calendar: Calendar = .current) -> [DatedGoalProgress] {
         let totals = taskLoggedMinutes(now: now, calendar: calendar)
         return focusTasks(now: now).map { task in
             let plan = task.workPlan!
             let goal = DatedGoal(id: task.id, name: task.text, categoryID: categoryIDs(for: task).first,
-                targetMinutes: plan.estimatedMinutes!, startDate: plan.startDate ?? task.createdAt, deadline: task.timing!.dueAt!,
+                targetMinutes: plan.estimatedMinutes!, startDate: taskPacingStart(for: task), deadline: task.timing!.dueAt!,
                 dayStartMinute: plan.dayStartMinute, dayEndMinute: plan.dayEndMinute, timeZoneIdentifier: plan.timeZoneIdentifier,
                 deleted: false, revision: task.revision)
             return progress(for: goal, minutes: totals[task.id, default: 0], now: now)

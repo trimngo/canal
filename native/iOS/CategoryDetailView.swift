@@ -16,8 +16,8 @@ struct CategoryDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let request: CategoryDetailRequest
     @State private var showingLogs = false
-    @State private var ranking = false
     @State private var snoozing: Capture?
+    @State private var editingCapture: Capture?
     @State private var categorizing: CaptureCategoryReviewRequest?
     @State private var showOtherLists = false
     @State private var progress: [DatedGoalProgress] = []
@@ -78,10 +78,8 @@ struct CategoryDetailView: View {
                     Button("View log entries", systemImage: "list.bullet") { showingLogs = true }
                         .accessibilityIdentifier("category-detail.logs")
                 }
-                if store.canUndoCaptureDeletion {
-                    Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
-                }
             }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
+                .safeAreaInset(edge: .bottom, spacing: 0) { CaptureDeletionUndoBar() }
                 .navigationTitle(store.ledger.categories.first { $0.id == request.id }?.name ?? request.name)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) {
@@ -97,12 +95,12 @@ struct CategoryDetailView: View {
                     GroupEntriesView(day: request.start ?? Date(), groupID: request.id, initialName: request.name,
                         rangeStart: request.start, rangeEnd: request.end, allTime: request.allTime, directOnly: request.directOnly)
                 }
-                .sheet(isPresented: $ranking) { RankingView() }
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
+                .sheet(item: $editingCapture) { TaskPlanningView(capture: $0) }
                 .sheet(item: $categorizing) { CaptureCategoryReviewView(captureIDs: $0.captureIDs) }
         }
     }
     private func ideaRow(_ capture: Capture) -> some View {
-        InboxCaptureRow(capture: capture, onRank: { ranking = true }, onSnooze: { snoozing = $0 })
+        InboxCaptureRow(capture: capture, onEdit: { editingCapture = $0 }, onSnooze: { snoozing = $0 })
     }
 }

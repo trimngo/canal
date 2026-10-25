@@ -10,6 +10,7 @@ struct WatchHomeView: View {
     @State private var tab = 2
     @State private var notificationSettings = false
     var body: some View {
+        NavigationStack {
         TabView(selection: $tab) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -52,7 +53,7 @@ struct WatchHomeView: View {
                         Button("Log now") { store.beginSample() }
                         Button("Add timer", systemImage: "mic.fill") { store.openTimers(dictate: true) }
                             .accessibilityIdentifier("watch.timer-add")
-                        Button("Timer queue", systemImage: "timer") { tab = 3 }
+                        Button("Timer queue", systemImage: "timer") { tab = 4 }
                             .accessibilityIdentifier("watch.timers")
                         Button("Watch alerts") { notificationSettings = true }
                             .accessibilityIdentifier("watch.notifications")
@@ -77,10 +78,13 @@ struct WatchHomeView: View {
                     }
                 }
             }.tag(2)
-            NavigationStack { TimerQueueView() }.tag(3)
+            // Queue is the preceding page: swipe down from the single timer
+            // to its rows, then swipe up to return. Avoid nested vertical pagers.
+            TimerQueueView(watchShowsQueue: true, showCurrentTimer: { withAnimation { tab = 4 } }).id("timer-queue").tag(3)
+            TimerQueueView(showTimerQueue: { withAnimation { tab = 3 } }).id("timer-current").tag(4)
         }.tabViewStyle(.verticalPage)
-            .onAppear { if store.showingTimerQueue { tab = 3 } }
-            .onChange(of: store.timerRequestID) { _, _ in tab = 3 }
+            .onAppear { if store.showingTimerQueue { tab = 4 } }
+            .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
@@ -90,5 +94,14 @@ struct WatchHomeView: View {
                 tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
                 categoryIDs = []; saved = false
             }
+            .toolbar {
+                if tab == 3 || tab == 4 {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
+                            .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
+                    }
+                }
+            }
+        }
     }
 }

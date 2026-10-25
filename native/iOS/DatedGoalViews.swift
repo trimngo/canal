@@ -3,47 +3,105 @@ import UIKit
 import LedgerCore
 
 struct TaskPlanningView: View {
+    private enum TimingChoice: String, CaseIterable { case automatic = "Automatic", noDate = "No date", asap = "ASAP", due = "Due date" }
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
     let capture: Capture
     @State private var hours: String
-    @State private var hasDueDate: Bool
+    @State private var timingChoice: TimingChoice
     @State private var dueDate: Date
     @State private var hasStart: Bool
     @State private var startDate: Date
     @State private var error: String?
     @State private var loggedMinutes: Double?
+    @State private var ranking = false
+    @State private var snoozing = false
     @FocusState private var hoursFocused: Bool
     init(capture: Capture) {
         self.capture = capture
         _hours = State(initialValue: capture.workPlan?.estimatedMinutes.map { ($0 / 60).formatted(.number.grouping(.never).precision(.fractionLength(0...2))) } ?? "")
-        _hasDueDate = State(initialValue: capture.timing?.kind == .dueDate)
+        _timingChoice = State(initialValue: capture.timing.map { $0.kind == .dueDate ? .due : $0.kind == .asap ? .asap : .noDate } ?? .automatic)
         _dueDate = State(initialValue: capture.timing?.dueAt ?? Calendar.current.date(byAdding: .day, value: 7, to: Date())!)
         _hasStart = State(initialValue: capture.workPlan?.startDate != nil)
         _startDate = State(initialValue: capture.workPlan?.startDate ?? capture.createdAt)
+    }
+    private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
+    private var listName: String {
+        if current.isDone { return "Completed" }
+        if current.isReference == true { return "Reference" }
+        if current.isSnoozed(at: Date()) { return "Snoozed" }
+        if store.inbox.ranked.contains(where: { $0.id == capture.id }) { return "Top priorities" }
+        if store.inbox.backlog.contains(where: { $0.id == capture.id }) { return "Backlog" }
+        if store.inbox.inProgress.contains(where: { $0.id == capture.id }) { return "In progress" }
+        return "New ideas"
     }
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    InlineEntryText(text: store.ledger.captures.first { $0.id == capture.id }?.text ?? capture.text, identifier: "task-planning.title") {
+                    InlineEntryText(text: current.text, identifier: "task-planning.title", displayLineLimit: nil) {
                         try store.updateCaptureText(capture, text: $0)
                     }
                     if let loggedMinutes { Text("Time logged: \(store.duration(loggedMinutes))").font(.subheadline).accessibilityIdentifier("task-planning.logged") }
                 }
+                Section("Categories") {
+                    CaptureCategoryButton(capture: current, identifier: "task-planning.categories", showsAllCategories: true)
+                    if let suggestion = current.categorySuggestion {
+                        Text("Suggested · " + suggestion.reason).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Section("Notes") {
+                    InlineEntryText(text: current.notes ?? "", identifier: "task-planning.notes", allowEmpty: true, displayLineLimit: nil) {
+                        try store.updateCapture(current, text: current.text, notes: $0)
+                    }
+                }
                 Section {
                     HStack { Text("Estimated work (hours)"); TextField("Optional", text: $hours).keyboardType(.decimalPad).multilineTextAlignment(.trailing).focused($hoursFocused).accessibilityIdentifier("task-planning.hours") }
-                    Toggle("Due date", isOn: $hasDueDate).accessibilityIdentifier("task-planning.has-due-date")
-                    if hasDueDate { DatePicker("Due", selection: $dueDate).accessibilityIdentifier("task-planning.due") }
+                    Picker("Timing", selection: $timingChoice) {
+                        ForEach(TimingChoice.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }.accessibilityIdentifier("task-planning.timing")
+                    if timingChoice == .due { DatePicker("Due", selection: $dueDate).accessibilityIdentifier("task-planning.due") }
                     Toggle("Set a start date", isOn: $hasStart).accessibilityIdentifier("task-planning.has-start")
                     if hasStart { DatePicker("Start", selection: $startDate).accessibilityIdentifier("task-planning.start") }
                 } footer: {
-                    Text("A due date and work estimate put this task in Focus. A blank start uses its creation date. Pace follows workdays; all linked logs count, including work outside the day window.")
+                    Text("A due date and work estimate put this task in Focus. Without a start override, pacing starts when the task was created inside your daily window, or at the next opening. Every day counts, including weekends. All linked logs count at any time.")
                 }
-                InlineCaptureNotes(capture: capture, identifier: "task-planning.notes", initiallyExpanded: true)
+                Section("Details") {
+                    LabeledContent("List", value: listName)
+                    LabeledContent("Created", value: current.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    if (store.ledger.reminderImports ?? []).contains(where: { $0.captureID == capture.id }) { Text("Imported from Reminders") }
+                    if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { LabeledContent("Overall priority", value: "#\(rank + 1)") }
+                    if let due = current.snoozeReturnDate(), current.isSnoozed(at: Date()) { LabeledContent("Returns", value: due.formatted(date: .abbreviated, time: .shortened)) }
+                    if let urgency = store.ledger.urgency(for: current), urgency.isSuggested {
+                        Text("Suggested ASAP · " + urgency.reason.rawValue).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    Button(current.isDone ? "Reopen idea" : "Mark done") { perform { try store.setCaptureDone(current, done: !current.isDone) } }
+                        .accessibilityIdentifier("task-planning.complete")
+                    if !current.isDone {
+                        Button(current.isReference == true ? "Move to New Ideas" : "Move to Reference") {
+                            perform { try store.setCaptureReference(current, reference: current.isReference != true) }
+                        }.accessibilityIdentifier("task-planning.reference")
+                        if current.isReference != true {
+                            Button(current.isSnoozed(at: Date()) ? "Change snooze" : "Snooze") { snoozing = true }
+                                .accessibilityIdentifier("task-planning.snooze")
+                            if current.isSnoozed(at: Date()) {
+                                Button("Bring back now") { perform { try store.bringBackCapture(current) } }
+                                    .accessibilityIdentifier("task-planning.bring-back")
+                            } else {
+                                Button("Re-rank this idea") {
+                                    do { try store.rerankCapture(capture.id); ranking = true } catch { self.error = error.localizedDescription }
+                                }.accessibilityIdentifier("task-planning.rerank")
+                            }
+                        }
+                    }
+                    Button("Delete idea", role: .destructive) { perform { try store.deleteCapture(current) } }
+                        .accessibilityIdentifier("task-planning.delete")
+                }
                 if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("task-planning.error") }
             }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
-                .navigationTitle("Task details").navigationBarTitleDisplayMode(.inline)
+                .navigationTitle("Edit idea").navigationBarTitleDisplayMode(.inline)
                 .onChange(of: hoursFocused) { _, focused in
                     if focused { DispatchQueue.main.async { UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil) } }
                 }
@@ -55,17 +113,23 @@ struct TaskPlanningView: View {
                     let ledger = store.ledger
                     loggedMinutes = await Task.detached(priority: .userInitiated) { ledger.taskLoggedMinutes()[capture.id, default: 0] }.value
                 }
+                .sheet(isPresented: $snoozing) { CaptureSnoozeView(capture: current) }
+                .sheet(isPresented: $ranking) { RankingView() }
         }
+    }
+    private func perform(_ action: () throws -> Void) {
+        do { try action(); dismiss() } catch { self.error = error.localizedDescription }
     }
     private func save() {
         do {
             let text = hours.trimmingCharacters(in: .whitespacesAndNewlines)
             let minutes = text.isEmpty ? nil : Double(text.replacingOccurrences(of: ",", with: ".")).map { $0 * 60 }
             if !text.isEmpty, minutes == nil { throw TaskPlanError.invalidEstimate }
-            if minutes != nil, hasDueDate, hasStart, dueDate <= startDate {
+            if minutes != nil, timingChoice == .due, hasStart, dueDate <= startDate {
                 error = "Choose a due date after the task’s start date."; return
             }
-            let timing: CaptureTiming? = hasDueDate ? .due(dueDate) : (capture.timing?.kind == .dueDate ? .noDate : capture.timing)
+            let timing: CaptureTiming?
+            switch timingChoice { case .automatic: timing = nil; case .noDate: timing = .noDate; case .asap: timing = .asap; case .due: timing = .due(dueDate) }
             try store.saveTaskPlanning(capture, timing: timing, estimatedMinutes: minutes, startDate: hasStart ? startDate : nil)
             dismiss()
         } catch { self.error = error.localizedDescription }
@@ -158,7 +222,7 @@ struct FocusTaskProgressView: View {
         if row.isMet { return "Work estimate reached" }
         if row.goal.deadline <= Date() { return "Overdue · \(store.duration(row.remainingMinutes)) remaining" }
         let status = abs(row.differenceMinutes) < 1 ? "On pace" : "\(store.duration(abs(row.differenceMinutes))) \(row.differenceMinutes > 0 ? "ahead" : "behind")"
-        return row.dailyMinutesNeeded.map { "\(status) · \(store.duration($0))/workday needed" } ?? status
+        return row.dailyMinutesNeeded.map { "\(status) · \(store.duration($0))/day needed" } ?? status
     }
 }
 

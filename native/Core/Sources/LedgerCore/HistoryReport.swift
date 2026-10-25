@@ -76,14 +76,15 @@ public struct HistoryCategoryRow: Identifiable, Equatable, Sendable {
 }
 
 extension Ledger {
-    public func history(range: HistoryRange, start: Date = Date(), end: Date = Date(), now: Date = Date(), calendar: Calendar = .current) -> HistoryReport {
+    public func history(range: HistoryRange, start: Date = Date(), end: Date = Date(), now: Date = Date(), calendar: Calendar = .current, anchor: Date? = nil) -> HistoryReport {
         let cal = reportingCalendar(calendar)
         let today = reportingDay(containing: now, calendar: cal)
+        let selectedDay = min(today, cal.startOfDay(for: anchor ?? now))
         let lower: Date
         let last: Date
         switch range {
-        case .today: lower = today; last = today
-        case .week: lower = cal.date(byAdding: .day, value: -6, to: today) ?? today; last = today
+        case .today: lower = selectedDay; last = selectedDay
+        case .week: lower = cal.date(byAdding: .day, value: -6, to: selectedDay) ?? selectedDay; last = selectedDay
         case .allTime:
             lower = activeEntries.filter { $0.end <= now }.map { reportingDay(containing: $0.intervalStart ?? $0.end, calendar: cal) }.min() ?? today
             last = today
