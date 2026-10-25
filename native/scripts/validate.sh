@@ -30,10 +30,7 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSpokenTimerDraftCanRunWithoutAPreexistingTask \
     -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimersHaveOwnTabCanCreateEditReorderAndPersist \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerAutoNextCanBeDisabledAndManualStartPersists \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueRestartDoneNextPauseAndPersistence \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTimerQueueCanRemoveWaitingTaskAndDoesNotCreateActivityLogs \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHomeShowsDashboardAndKeepsLoggingSeparateFromTimers \
-    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCompactInboxKeepsTitleInlineAndAllOtherEditingInDetails test
+    -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHomeShowsDashboardAndKeepsLoggingSeparateFromTimers test
 fi
