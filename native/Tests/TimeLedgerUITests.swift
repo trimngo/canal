@@ -1563,7 +1563,8 @@ final class TimeLedgerUITests: XCTestCase {
         app.sheets.buttons["Cancel"].tap()
         XCTAssertTrue(app.buttons["plan.selection-done"].exists)
         app.buttons["plan.delete"].tap(); app.sheets.buttons["Delete category"].tap()
-        XCTAssertFalse(app.buttons["plan.selection-done"].exists)
+        let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["plan.selection-done"])
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 10), .completed)
         XCTAssertFalse(renamed.exists)
         let promoted = app.textFields["categories.target.teaching"]; reveal(promoted, in: app)
         XCTAssertTrue(promoted.exists)
@@ -1576,9 +1577,18 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func selectPlanCategory(_ id: String, in app: XCUIApplication) {
-        if app.buttons["plan.select"].exists { app.buttons["plan.select"].tap() }
+        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element(app, "plan.loading"))
+        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 15), .completed)
+        if app.buttons["plan.select"].exists {
+            let select = app.buttons["plan.select"]
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: select)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+            select.tap()
+        }
+        XCTAssertTrue(app.buttons["plan.selection-done"].waitForExistence(timeout: 10))
         let row = element(app, "plan.name.\(id)"); reveal(row, in: app); row.tap()
-        XCTAssertEqual(row.value as? String, "Selected")
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Selected"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
     }
 
     private func tapCategory(_ id: String, in app: XCUIApplication) {
