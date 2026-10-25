@@ -83,6 +83,13 @@ struct WatchHomeView: View {
             TimerQueueView(watchShowsQueue: true, showCurrentTimer: { withAnimation { tab = 4 } }).id("timer-queue").tag(3)
             TimerQueueView(showTimerQueue: { withAnimation { tab = 3 } }).id("timer-current").tag(4)
         }.tabViewStyle(.verticalPage)
+            .contentShape(Rectangle())
+            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
+                if tab == 4, value.translation.height > 45,
+                   abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    withAnimation { tab = 3 }
+                }
+            })
             .onAppear { if store.showingTimerQueue { tab = 4 } }
             .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }

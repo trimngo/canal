@@ -16,7 +16,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Timers"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.tabBars.buttons["More"].exists)
         app.tabBars.buttons["Inbox"].tap(); XCTAssertFalse(app.buttons["inbox.timers"].exists)
+        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        else { app.swipeUp() }
         app.tabBars.buttons["Timers"].tap()
+        XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 10))
         XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
         let email = element(app, "timers.waiting.timer-email"), walk = element(app, "timers.waiting.timer-walk")
         reveal(walk, in: app)
@@ -38,6 +41,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(element(app, "timers.current").label, "Walk outside")
         let field = element(app, "timers.draft"); reveal(field, in: app); field.tap(); field.typeText("Make tea")
         app.buttons["timers.add"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if springboard.alerts.buttons["Allow"].waitForExistence(timeout: 2) { springboard.alerts.buttons["Allow"].tap() }
         recordScreen("PhoneTimersOwnTab", in: app)
         app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 20))
@@ -339,7 +344,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
         let pages = element(app, "report.pages")
-        XCTAssertGreaterThan(pages.frame.height, app.frame.height * 0.55)
+        XCTAssertGreaterThan(pages.frame.height, app.frame.height * 0.5)
+        XCTAssertGreaterThanOrEqual(pages.frame.maxY, app.tabBars.firstMatch.frame.minY - 40)
         XCTAssertEqual(pages.frame.width, app.frame.width, accuracy: 2)
         let calendar = app.buttons["dashboard.calendar"]
         XCTAssertTrue(calendar.isHittable)
