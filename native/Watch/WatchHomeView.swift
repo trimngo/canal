@@ -11,6 +11,36 @@ struct WatchHomeView: View {
     @State private var notificationSettings = false
     var body: some View {
         NavigationStack {
+        timerPages
+            .contentShape(Rectangle())
+            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
+                if tab == 4, value.translation.height > 45,
+                   abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    withAnimation { tab = 3 }
+                }
+            })
+            .onAppear { if store.showingTimerQueue { tab = 4 } }
+            .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
+            .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
+            .onChange(of: activity) { old, value in
+                if !value.isEmpty { saved = false }
+                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
+            }
+            .onChange(of: store.sampleRequestID) { _, _ in
+                tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
+                categoryIDs = []; saved = false
+            }
+            .toolbar {
+                if tab == 3 || tab == 4 {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
+                            .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
+                    }
+                }
+            }
+        }
+    }
+    private var timerPages: some View {
         TabView(selection: $tab) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -83,32 +113,6 @@ struct WatchHomeView: View {
             TimerQueueView(watchShowsQueue: true, showCurrentTimer: { withAnimation { tab = 4 } }).id("timer-queue").tag(3)
             TimerQueueView(showTimerQueue: { withAnimation { tab = 3 } }).id("timer-current").tag(4)
         }.tabViewStyle(.verticalPage)
-            .contentShape(Rectangle())
-            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
-                if tab == 4, value.translation.height > 45,
-                   abs(value.translation.height) > abs(value.translation.width) * 1.3 {
-                    withAnimation { tab = 3 }
-                }
-            })
-            .onAppear { if store.showingTimerQueue { tab = 4 } }
-            .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
-            .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
-            .onChange(of: activity) { old, value in
-                if !value.isEmpty { saved = false }
-                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
-            }
-            .onChange(of: store.sampleRequestID) { _, _ in
-                tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
-                categoryIDs = []; saved = false
-            }
-            .toolbar {
-                if tab == 3 || tab == 4 {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
-                            .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
-                    }
-                }
-            }
-        }
     }
+
 }

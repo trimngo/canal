@@ -206,7 +206,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(removeEmail.exists)
         reveal(app.buttons["timers.done"], in: app); app.buttons["timers.done"].tap()
         XCTAssertEqual(element(app, "timers.current").label, "Take a walk")
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
         recordScreen("PhoneTimerQueueDoesNotLogPlannedTime", in: app)
         XCTAssertFalse(app.staticTexts["Practice guitar"].exists)
     }
@@ -277,7 +277,7 @@ final class TimeLedgerUITests: XCTestCase {
         let save = app.buttons["checkin.save"]
         reveal(save, in: app); save.tap()
         XCTAssertTrue(app.staticTexts["Saved. You can change it anytime."].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
     }
 
     private func dashboardGroup(_ id: String, in app: XCUIApplication) -> XCUIElement {
@@ -315,9 +315,17 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.segmentedControls["plan.unit"].waitForExistence(timeout: 5))
     }
 
+    private func showToday(_ app: XCUIApplication) {
+        app.tabBars.buttons["Today"].tap()
+        // Log is now a page within Today, so return using its normal back button.
+        if app.navigationBars["Log"].exists, app.navigationBars.buttons["Today"].exists {
+            app.navigationBars.buttons["Today"].tap()
+        }
+    }
+
     private func openLogPage(_ app: XCUIApplication) {
         if app.navigationBars["Log"].exists { return }
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
         let log = app.buttons["today.log"]
         XCTAssertTrue(log.waitForExistence(timeout: 5)); log.tap()
     }
@@ -535,7 +543,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-quick-reply"]; app.launch()
         openLogs(app)
         XCTAssertTrue(app.staticTexts["Direct notification reply UI fixture"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
         let pending = app.buttons["dashboard.review.uncategorized"]; reveal(pending, in: app); XCTAssertTrue(pending.exists)
         app.terminate(); app.launchArguments = []; app.launch()
         openLogs(app)
@@ -972,7 +980,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(element(app, "group.log.teaching-log").exists)
         closeCategoryLogs(in: app)
         app.navigationBars["Inbox categories"].buttons["Close"].tap()
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
         dashboardGroup("music", in: app).tap()
         XCTAssertEqual(element(app, "category-detail.count").label, "4 inbox items")
         let other = element(app, "category-detail.other-lists"); reveal(other, in: app); other.tap()
@@ -1077,7 +1085,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("RestorePreview", in: app)
         app.buttons["backup.confirm-restore"].tap()
         XCTAssertTrue(app.staticTexts["Restored. Your newer edits and existing logs were kept."].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
         openHistory(app)
         element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
         openLogPage(app)
@@ -1107,7 +1115,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("LogDeletedUndo", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
-        app.tabBars.buttons["Today"].tap(); app.buttons["dashboard.groups"].tap()
+        showToday(app); app.buttons["dashboard.groups"].tap()
         let work = app.buttons["categories.edit.work"]; reveal(work, in: app); work.tap()
         app.buttons["View all logs (1)"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
@@ -1171,7 +1179,7 @@ final class TimeLedgerUITests: XCTestCase {
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         XCTAssertEqual(field.value as? String, "Keep my draft")
-        app.tabBars.buttons["Today"].tap(); openInbox(app)
+        showToday(app); openInbox(app)
         XCTAssertEqual(field.value as? String, "Keep my draft")
         field.tap()
         let done = app.buttons["keyboard.done"]
@@ -2058,7 +2066,7 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func openHistory(_ app: XCUIApplication) {
-        app.tabBars.buttons["Today"].tap()
+        showToday(app)
         reveal(element(app, "report.range"), in: app)
     }
     private func openIdeaEditor(_ id: String, prefix: String = "inbox", in app: XCUIApplication) {
