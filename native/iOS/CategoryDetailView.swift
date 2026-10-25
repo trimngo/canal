@@ -78,10 +78,8 @@ struct CategoryDetailView: View {
                     Button("View log entries", systemImage: "list.bullet") { showingLogs = true }
                         .accessibilityIdentifier("category-detail.logs")
                 }
-                if store.canUndoCaptureDeletion {
-                    Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
-                }
             }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
+                .safeAreaInset(edge: .bottom, spacing: 0) { CaptureDeletionUndoBar() }
                 .navigationTitle(store.ledger.categories.first { $0.id == request.id }?.name ?? request.name)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) {
