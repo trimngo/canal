@@ -8,6 +8,7 @@ struct TimerQueueView: View {
     @EnvironmentObject private var store: LedgerStore
     var watchShowsQueue = false
     var showCurrentTimer: (() -> Void)? = nil
+    var showTimerQueue: (() -> Void)? = nil
     @State private var draft = ""
     @State private var inputError: String?
     @State private var inputOpen = false
@@ -86,6 +87,12 @@ struct TimerQueueView: View {
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4)
+            .contentShape(Rectangle())
+            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
+                if value.translation.height > 45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    showTimerQueue?()
+                }
+            })
     }
     private func watchQueue(at now: Date) -> some View {
         List {
