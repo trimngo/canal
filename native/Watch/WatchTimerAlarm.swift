@@ -108,7 +108,7 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
     }
     func adopt(_ value: WKExtendedRuntimeSession) {
         // Set the delegate synchronously, before the launch handler returns.
-        session = value; token = scheduledToken ?? UUID().uuidString()
+        session = value; token = scheduledToken ?? UUID().uuidString
         preferences.set(token, forKey: scheduledKey)
         if preferences.object(forKey: scheduledDueKey) == nil {
             preferences.set(value.expirationDate?.addingTimeInterval(-1800) ?? Date(), forKey: scheduledDueKey)

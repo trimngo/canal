@@ -93,7 +93,7 @@ struct TimerQueueView: View {
                 Spacer()
             }
             if alarm.needsAlarmUpdate {
-                Text(alarm.status).font(.caption2).foregroundStyle(.orange)
+                Text(alarm.status).font(.caption2).foregroundStyle(.orange).lineLimit(2)
                     .accessibilityIdentifier("timers.alarm-update")
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
@@ -159,7 +159,7 @@ struct TimerQueueView: View {
             }.accessibilityIdentifier("timers.alarm-settings")
             Button("Watch Home") { store.showingTimerQueue = false }
                 .accessibilityIdentifier("timers.watch-home")
-        }.listStyle(.plain).listRowSpacing(0)
+        }.listStyle(.plain)
             .environment(\.defaultMinListRowHeight, 44)
             .contentMargins(.vertical, 0, for: .scrollContent)
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
