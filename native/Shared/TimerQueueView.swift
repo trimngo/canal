@@ -117,6 +117,7 @@ struct TimerQueueView: View {
                     watchCountdown(task, control: control, at: now, large: false)
                     watchProgress(task, control: control, at: now)
                 }.padding(.vertical, 2).id(task.id)
+                    .simultaneousGesture(queueReturnGesture)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
@@ -136,6 +137,7 @@ struct TimerQueueView: View {
                     .listRowBackground(draggingTimer == task.id ? Color.mint.opacity(0.3) : nil)
                     .offset(y: draggingTimer == task.id ? dragY - (rowFrames[task.id]?.midY ?? dragY) : 0)
                     .zIndex(draggingTimer == task.id ? 1 : 0)
+                    .simultaneousGesture(queueReturnGesture)
                     .simultaneousGesture(timerReorderGesture(task.id))
                     .accessibilityAction(named: "Move earlier") { moveWaitingTimer(task.id, by: -1) }
                     .accessibilityAction(named: "Move later") { moveWaitingTimer(task.id, by: 1) }
@@ -189,13 +191,16 @@ struct TimerQueueView: View {
             // Up is navigation on this page, even when more rows remain.
             // The Digital Crown still scrolls the full queue; horizontal row
             // swipes retain their native Delete action.
-            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
-                if draggingTimer == nil, Date() > suppressPageSwipeUntil,
-                   value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
-                    showCurrentTimer?()
-                }
-            })
+            .simultaneousGesture(queueReturnGesture)
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
+        }
+    }
+    private var queueReturnGesture: some Gesture {
+        DragGesture(minimumDistance: 35).onEnded { value in
+            if draggingTimer == nil, Date() > suppressPageSwipeUntil,
+               value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                showCurrentTimer?()
+            }
         }
     }
     private var watchWaitingTimers: [QueuedTimer] {

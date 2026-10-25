@@ -15,8 +15,6 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.tabBars.buttons["Timers"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.tabBars.buttons["More"].exists)
-        openInbox(app); XCTAssertFalse(app.buttons["inbox.timers"].exists)
-        app.tabBars.buttons["Timers"].tap()
         XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 10))
         XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
         let email = element(app, "timers.waiting.timer-email"), walk = element(app, "timers.waiting.timer-walk")
@@ -47,6 +45,21 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(element(app, "timers.current").label, "Walk outside")
         reveal(email, in: app); XCTAssertTrue(email.exists)
         let tea = app.staticTexts["Make tea"]; reveal(tea, in: app); XCTAssertTrue(tea.exists)
+    }
+    func testInboxCaptureCanReturnToTimersTab() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 20))
+        openInbox(app, capture: true)
+        let field = element(app, "inbox.text"); XCTAssertTrue(field.waitForExistence(timeout: 10)); field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        let done = app.buttons["keyboard.done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+        let timers = app.tabBars.buttons["Timers"]
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: timers)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 10), .completed)
+        XCTAssertFalse(app.buttons["inbox.timers"].exists); timers.tap()
+        XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 10))
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
     }
     func testCompactInboxKeepsTitleInlineAndAllOtherEditingInDetails() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
