@@ -98,7 +98,7 @@ struct TimerQueueView: View {
                 Spacer()
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
-        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4).background(.black)
             .contentShape(Rectangle())
             .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
                 if value.translation.height > 45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
@@ -129,7 +129,7 @@ struct TimerQueueView: View {
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
                     Text(clock(task.duration)).font(.system(size: 23, design: .rounded).monospacedDigit())
                         .accessibilityIdentifier("timers.duration.\(task.id)")
-                }.foregroundStyle(draggingTimer == task.id ? .primary : .secondary).padding(.vertical, 2).id(task.id)
+                }.foregroundStyle(draggingTimer == task.id ? .primary : .secondary).padding(.vertical, 2).contentShape(Rectangle()).id(task.id)
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: TimerRowFrames.self, value: [task.id: geometry.frame(in: .named("timer.queue"))])
                     })
