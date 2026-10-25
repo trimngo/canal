@@ -84,7 +84,7 @@ struct TimerQueueView: View {
                             ProgressView(value: progress).progressViewStyle(.linear).tint(control.isFinished(at: now) ? .orange : .mint)
                                 .frame(height: 4).clipped().accessibilityLabel("Timer progress")
                                 .accessibilityValue("\(Int(progress * 100)) percent complete").accessibilityIdentifier("timers.progress")
-                        }.frame(height: max(60, currentHeight - 12), alignment: .center)
+                        }.frame(height: max(60, currentHeight), alignment: .center)
                             .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 10)).listRowBackground(Color.clear)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(doneTitle, systemImage: "checkmark") { act("done") }.tint(.green)
