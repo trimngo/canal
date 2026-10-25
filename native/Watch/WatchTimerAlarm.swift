@@ -40,14 +40,16 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
     func update(ledger: Ledger, writer: String) {
         guard supportsRepeatingAlarm else { status = "Repeating alarm requires a physical Watch"; return }
         let requested = requestedControl(ledger, writer: writer)
-        // Older builds saved only the token. Recover its exact deadline when
-        // the current control still describes that same scheduled alarm.
-        if scheduledToken == ledger.timerControl?.token, preferences.object(forKey: scheduledDueKey) == nil,
-           let due = ledger.timerControl?.dueAt { preferences.set(due, forKey: scheduledDueKey) }
+        // Migrate token-only records once. A changed phone control cannot
+        // supply the old deadline; use a bounded, conservative horizon.
+        if let scheduledToken, preferences.object(forKey: scheduledDueKey) == nil {
+            preferences.set(WatchTimerAlarmPolicy.deadlineForLegacyRecord(
+                scheduledToken: scheduledToken, control: ledger.timerControl), forKey: scheduledDueKey)
+        }
         // After process termination, only discard an unadopted alarm record
         // once the system's entire runtime window has elapsed.
         if session == nil, let due = preferences.object(forKey: scheduledDueKey) as? Date,
-           Date().timeIntervalSince(due) >= 1800 { clearScheduled() }
+           WatchTimerAlarmPolicy.scheduledRecordHasExpired(dueAt: due) { clearScheduled() }
 
         switch WatchTimerAlarmPolicy.update(scheduledToken: scheduledToken, requestedToken: requested?.token,
                                             isActive: isActive, hasSession: session != nil) {
@@ -110,8 +112,10 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
         // Set the delegate synchronously, before the launch handler returns.
         session = value; token = scheduledToken ?? UUID().uuidString
         preferences.set(token, forKey: scheduledKey)
-        if preferences.object(forKey: scheduledDueKey) == nil {
-            preferences.set(value.expirationDate?.addingTimeInterval(-1800) ?? Date(), forKey: scheduledDueKey)
+        if let expiration = value.expirationDate {
+            preferences.set(expiration.addingTimeInterval(-WatchTimerAlarmPolicy.runtimeLimit), forKey: scheduledDueKey)
+        } else if preferences.object(forKey: scheduledDueKey) == nil {
+            preferences.set(Date(), forKey: scheduledDueKey)
         }
         value.delegate = self
         if value.state == .running { ring(value) }

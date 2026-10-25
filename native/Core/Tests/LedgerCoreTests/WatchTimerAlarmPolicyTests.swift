@@ -14,6 +14,31 @@ final class WatchTimerAlarmPolicyTests: XCTestCase {
                                                 failedToken: failed, now: date ?? now)?.token
     }
 
+    func testLegacyAlarmRecoversItsExactDeadlineWhileTheControlStillMatches() throws {
+        let control = try XCTUnwrap(fixture().timerControl)
+        XCTAssertEqual(WatchTimerAlarmPolicy.deadlineForLegacyRecord(
+            scheduledToken: control.token, control: control, now: now), control.dueAt)
+    }
+
+    func testLegacyAlarmChangedOnPhoneEventuallyRecoversWithoutSchedulingADuplicateEarly() throws {
+        var ledger = try fixture()
+        let old = try XCTUnwrap(ledger.timerControl?.token)
+        ledger.restartTimer(writer: "phone", onWatch: false, now: now)
+        let due = WatchTimerAlarmPolicy.deadlineForLegacyRecord(scheduledToken: old, control: ledger.timerControl, now: now)
+        XCTAssertEqual(due, now.addingTimeInterval(36 * 60 * 60))
+        XCTAssertEqual(WatchTimerAlarmPolicy.deadlineForLegacyRecord(scheduledToken: old, control: nil, now: now), due)
+        XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: old, requestedToken: "new",
+            isActive: true, hasSession: false), .waitForSession)
+        XCTAssertFalse(WatchTimerAlarmPolicy.scheduledRecordHasExpired(dueAt: due,
+            now: due.addingTimeInterval(1799)))
+        XCTAssertTrue(WatchTimerAlarmPolicy.scheduledRecordHasExpired(dueAt: due,
+            now: due.addingTimeInterval(1800)))
+        // Once that entire system window passes, discarding the record permits
+        // a new foreground alarm instead of waiting forever for a lost handle.
+        XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: nil, requestedToken: "new",
+            isActive: true, hasSession: false), .schedule)
+    }
+
     func testPhoneEditsRetainAlarmInBackgroundAndCancelWhenWatchBecomesActive() throws {
         for action in ["pause", "restart", "done", "delete", "edit", "takeover"] {
             var ledger = try fixture()

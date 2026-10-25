@@ -28,6 +28,11 @@ latest timer. If the process was terminated and no session handle is available,
 Dash preserves its saved alarm record until WatchKit hands back the session or
 its runtime window expires; it does not falsely claim cancellation or schedule
 a duplicate. The timer screen and settings show when the old alarm is pending.
+When migrating a token-only record from build 78 or earlier, a matching timer
+supplies its exact deadline. Otherwise Dash saves a conservative 36-hour
+deadline once and waits through its 30-minute runtime window, so an orphaned
+legacy record can eventually expire. Adopting the real session restores its
+actual deadline. These bounds follow [WatchKit's session limits](https://developer.apple.com/documentation/watchkit/using-extended-runtime-sessions).
 Stop silences only that alarm; a callback for an old alarm cannot silence a newer
 timer. Notification fallback is reserved for an unavailable alarm, not user Stop.
 

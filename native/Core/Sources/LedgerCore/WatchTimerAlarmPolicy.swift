@@ -3,6 +3,21 @@ import Foundation
 /// Watch alarms outlive the app process and can only be changed while the
 /// app is active and holds the system session. Synced timer state is separate.
 public enum WatchTimerAlarmPolicy {
+    public static let runtimeLimit: TimeInterval = 30 * 60
+
+    /// Token-only records from older builds have no known deadline after a
+    /// phone edit. Retain them for WatchKit's maximum 36-hour scheduling
+    /// horizon, then allow recovery after the runtime window also expires.
+    public static func deadlineForLegacyRecord(scheduledToken: String, control: TimerQueueControl?,
+                                               now: Date = Date()) -> Date {
+        if control?.token == scheduledToken, let due = control?.dueAt { return due }
+        return now.addingTimeInterval(36 * 60 * 60)
+    }
+
+    public static func scheduledRecordHasExpired(dueAt: Date, now: Date = Date()) -> Bool {
+        now.timeIntervalSince(dueAt) >= runtimeLimit
+    }
+
     public enum Update: Equatable {
         case unchanged, schedule, cancel, replace, waitForForeground, waitForSession
     }
@@ -13,7 +28,7 @@ public enum WatchTimerAlarmPolicy {
         guard ledger.currentTimer != nil, let control = ledger.timerControl,
               control.owner == writer, control.onWatch, let due = control.dueAt,
               control.token != silencedToken, control.token != failedToken,
-              now.timeIntervalSince(due) < 1800 else { return nil }
+              !scheduledRecordHasExpired(dueAt: due, now: now) else { return nil }
         return control
     }
 
