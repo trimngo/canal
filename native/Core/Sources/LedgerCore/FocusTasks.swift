@@ -76,6 +76,9 @@ extension Ledger {
 
     public mutating func assignTask(_ taskID: String?, to entryID: String, writer: String) throws {
         guard let index = entries.firstIndex(where: { $0.id == entryID }), !isLogDeleted(entryID) else { throw LedgerError.deletedSample }
+        // Reviewing an existing link must not apply a task's newer categories
+        // retroactively. Explicit log-category edits already recalculate credit.
+        if taskID != nil, entries[index].goalID == taskID, entries[index].goalShare != nil { return }
         if let taskID {
             guard let task = captures.first(where: { $0.id == taskID }) else {
                 if entries[index].goalID == taskID { return }

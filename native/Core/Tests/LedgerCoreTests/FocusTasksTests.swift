@@ -150,6 +150,17 @@ final class FocusTasksTests: XCTestCase {
         let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
         XCTAssertEqual(restored.captures[0].workPlan?.startDate, workStart)
     }
+    func testReviewAfterMovingTaskKeepsHistoricalCategoriesAndCredit() throws {
+        var ledger = Ledger(); _ = try task(&ledger); try log(&ledger, taskID: "prep")
+        try ledger.categorizeCapture(id: "prep", categoryIDs: ["social"], writer: "p")
+        let before = ledger.entries[0]
+        try ledger.assignTask("prep", to: before.id, writer: "p")
+        XCTAssertEqual(ledger.entries[0], before)
+        XCTAssertEqual(ledger.taskLoggedMinutes(now: now)["prep"], 60)
+        try ledger.confirmCategories(for: before.id, categoryIDs: ["work", "social"], writer: "p")
+        try ledger.assignTask("prep", to: before.id, writer: "p")
+        XCTAssertEqual(ledger.taskLoggedMinutes(now: now)["prep"], 30)
+    }
     func testAnOverdueDateBeforeCreationStillAppearsAndIsBehindPace() throws {
         var ledger = Ledger(); _ = try task(&ledger)
         try ledger.setCaptureTiming("prep", timing: .due(start.addingTimeInterval(-3600)), writer: "p")
