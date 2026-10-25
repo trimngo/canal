@@ -82,6 +82,11 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
         app.staticTexts["timers.current"].swipeDown()
         let email = app.staticTexts["timers.waiting.timer-email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        // Returning must work before scrolling to the end of a longer queue.
+        app.staticTexts["timers.queue-current"].swipeUp()
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 5))
+        app.staticTexts["timers.current"].swipeDown()
         XCTAssertTrue(email.waitForExistence(timeout: 5)); email.swipeLeft()
         let deleteEmail = app.buttons["timers.delete.timer-email"]
         XCTAssertTrue(deleteEmail.waitForExistence(timeout: 5)); deleteEmail.tap()
