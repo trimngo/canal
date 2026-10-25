@@ -173,7 +173,18 @@ struct TimerQueueView: View {
                 let index = min(max(0, Int(value.rounded())), scrollIDs.count - 1)
                 proxy.scrollTo(scrollIDs[index], anchor: .top)
             }
-            .onAppear { queuePosition = 0; queueFocused = true }
+            .onAppear {
+                queuePosition = 0; queueFocused = true
+                #if DEBUG
+                // XCTest has no Crown-rotation action. Start this fixture at
+                // the first upcoming row; the test still performs a real drag.
+                if ProcessInfo.processInfo.arguments.contains("--ui-timer-scroll-upcoming"), scrollIDs.count > 1 {
+                    Task { @MainActor in
+                        await Task.yield(); proxy.scrollTo(scrollIDs[1], anchor: .top); queuePosition = 1
+                    }
+                }
+                #endif
+            }
             .onDisappear { queueFocused = false; draggingTimer = nil; queueReorder = nil }
             // Up is navigation on this page, even when more rows remain.
             // The Digital Crown still scrolls the full queue; horizontal row

@@ -3,17 +3,18 @@ import XCTest
 final class WatchQuickLogUITests: XCTestCase {
     func testUpcomingRowsCanBeDraggedWithoutMovingCurrentOrNavigatingAway() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts", "--ui-timer-scroll-upcoming"]; app.launch()
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
         swipeTimerPage(app, toQueue: true)
         let walk = app.staticTexts["timers.waiting.timer-walk"], email = app.staticTexts["timers.waiting.timer-email"]
         XCTAssertTrue(walk.waitForExistence(timeout: 5)); XCTAssertTrue(email.exists)
         walk.press(forDuration: 0.7, thenDragTo: email)
-        XCTAssertTrue(app.staticTexts["timers.queue-current"].exists)
-        XCTAssertEqual(app.staticTexts["timers.queue-current"].label, "Practice guitar")
+        XCTAssertTrue(email.exists); XCTAssertTrue(walk.exists)
+        XCTAssertFalse(app.staticTexts["timers.current"].exists)
         record("WatchReorderedUpcomingTimers", app)
         swipeTimerPage(app, toQueue: false)
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         app.buttons["timers.done"].tap()
         let next = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Take a walk"), object: app.staticTexts["timers.current"])
         XCTAssertEqual(XCTWaiter.wait(for: [next], timeout: 10), .completed)
