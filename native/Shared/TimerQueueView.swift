@@ -124,6 +124,9 @@ struct TimerQueueView: View {
                     }
                     if store.ledger.waitingTimers.isEmpty { Text("No upcoming timers").font(.caption).foregroundStyle(.secondary).listRowBackground(Color.clear) }
                     if let inputError { Text(inputError).font(.caption).foregroundStyle(.red) }
+                    if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
+                        Text(alarm.status).font(.caption2).foregroundStyle(.orange).accessibilityIdentifier("timers.alarm-status")
+                    }
                     if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
                         Button("Use Watch for alerts") { act("here") }.accessibilityIdentifier("timers.use-watch")
                     }
@@ -304,6 +307,7 @@ struct TimerSettingsView: View {
     #if os(watchOS)
     @AppStorage("timers.haptic-pattern") private var pattern = "standard"
     @AppStorage("timers.haptic-repeat") private var interval = 3.0
+    @ObservedObject private var alarm = WatchTimerAlarm.shared
     #endif
     var body: some View {
             Form {
@@ -316,6 +320,7 @@ struct TimerSettingsView: View {
                     Text("When enabled, the checkmark completes this task and starts the next queued timer. When off, the next task waits for Start next. Expiry always waits for you to confirm. Restart repeats the current timer.")
                 }
                 #if os(watchOS)
+                if !alarm.status.isEmpty { Text(alarm.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("timers.alarm-status") }
                 Picker("Alert pattern", selection: $pattern) {
                     Text("Standard pulse").tag("standard")
                     Text("Attention pulse").tag("attention")

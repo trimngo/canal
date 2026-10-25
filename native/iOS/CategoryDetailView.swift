@@ -47,7 +47,7 @@ struct CategoryDetailView: View {
                         ForEach(focus.sorted { $0.timing!.dueAt! < $1.timing!.dueAt! }) { task in
                             VStack(alignment: .leading, spacing: 6) {
                                 ideaRow(task)
-                                if let row = progress.first(where: { $0.id == task.id }) { FocusTaskProgressView(row: row) }
+                                if let row = progress.first(where: { $0.id == task.id }) { FocusTaskProgressView(row: row, showsDeadline: true) }
                             }.accessibilityIdentifier("category-detail.focus.\(task.id)")
                         }
                     }

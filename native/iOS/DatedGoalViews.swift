@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import LedgerCore
 
 struct TaskPlanningView: View {
@@ -12,6 +13,7 @@ struct TaskPlanningView: View {
     @State private var startDate: Date
     @State private var error: String?
     @State private var loggedMinutes: Double?
+    @FocusState private var hoursFocused: Bool
     init(capture: Capture) {
         self.capture = capture
         _hours = State(initialValue: capture.workPlan?.estimatedMinutes.map { ($0 / 60).formatted(.number.grouping(.never).precision(.fractionLength(0...2))) } ?? "")
@@ -30,7 +32,7 @@ struct TaskPlanningView: View {
                     if let loggedMinutes { Text("Time logged: \(store.duration(loggedMinutes))").font(.subheadline).accessibilityIdentifier("task-planning.logged") }
                 }
                 Section {
-                    HStack { Text("Estimated work (hours)"); TextField("Optional", text: $hours).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityIdentifier("task-planning.hours") }
+                    HStack { Text("Estimated work (hours)"); TextField("Optional", text: $hours).keyboardType(.decimalPad).multilineTextAlignment(.trailing).focused($hoursFocused).accessibilityIdentifier("task-planning.hours") }
                     Toggle("Due date", isOn: $hasDueDate).accessibilityIdentifier("task-planning.has-due-date")
                     if hasDueDate { DatePicker("Due", selection: $dueDate).accessibilityIdentifier("task-planning.due") }
                     Toggle("Set a start date", isOn: $hasStart).accessibilityIdentifier("task-planning.has-start")
@@ -42,6 +44,9 @@ struct TaskPlanningView: View {
                 if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("task-planning.error") }
             }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
                 .navigationTitle("Task details").navigationBarTitleDisplayMode(.inline)
+                .onChange(of: hoursFocused) { _, focused in
+                    if focused { DispatchQueue.main.async { UIApplication.shared.sendAction(#selector(UIResponderStandardEditActions.selectAll(_:)), to: nil, from: nil, for: nil) } }
+                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) { Button("Save", action: save).disabled(!store.storageAvailable).accessibilityIdentifier("task-planning.save") }
@@ -134,8 +139,12 @@ struct PacedProgressBar: View {
 struct FocusTaskProgressView: View {
     @EnvironmentObject private var store: LedgerStore
     let row: DatedGoalProgress
+    var showsDeadline = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if showsDeadline {
+                Text("Due \(row.goal.deadline.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+            }
             PacedProgressBar(actual: row.fraction, expected: row.expectedMinutes / row.goal.targetMinutes, tint: row.isMet ? .green : .teal)
             HStack {
                 Text("\(store.duration(row.actualMinutes)) / \(store.duration(row.goal.targetMinutes))")

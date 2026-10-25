@@ -2509,7 +2509,8 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.dated-goal.")).count, 0)
         element(app, "plan.name.work").tap()
         XCTAssertTrue(app.buttons["category-detail.logs"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "category-detail.focus.")).count, 2)
+        let focusRows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "category-detail.focus.")).allElementsBoundByIndex
+        XCTAssertEqual(Set(focusRows.map(\.identifier)).count, 2)
         recordScreen("SharedCategoryFocusTasks", in: app)
         app.buttons["category-detail.close"].tap(); app.buttons["Close"].tap()
         let row = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare DIGS lecture")).firstMatch
