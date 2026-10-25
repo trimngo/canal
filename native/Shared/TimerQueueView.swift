@@ -222,7 +222,8 @@ struct TimerQueueView: View {
             }
             .onChanged { value in
                 switch value {
-                case .first(true): beginTimerDrag(id)
+                // A short swipe must remain navigation. Start reordering only
+                // after the hold has succeeded and the row actually moves.
                 case .second(true, let drag?):
                     beginTimerDrag(id); dragY = drag.location.y
                     guard var ids = queueReorder, let from = ids.firstIndex(of: id) else { return }
@@ -237,6 +238,7 @@ struct TimerQueueView: View {
                 default: break
                 }
             }.onEnded { _ in
+                guard draggingTimer == id else { return }
                 if let ids = queueReorder { do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription } }
                 draggingTimer = nil; queueReorder = nil; suppressPageSwipeUntil = Date().addingTimeInterval(0.5)
             }
