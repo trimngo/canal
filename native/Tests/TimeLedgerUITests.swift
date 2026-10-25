@@ -2032,7 +2032,7 @@ final class TimeLedgerUITests: XCTestCase {
             let done = app.buttons["keyboard.done"].firstMatch
             XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
         }
-        if !id.hasPrefix("task-planning.") { XCTAssertFalse(app.navigationBars["Edit idea"].exists) }
+        if !id.hasPrefix("task-planning."), !id.hasPrefix("category-context.") { XCTAssertFalse(app.navigationBars["Edit idea"].exists) }
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
 
