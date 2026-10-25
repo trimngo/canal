@@ -9,8 +9,47 @@ struct WatchHomeView: View {
     @State private var saved = false
     @State private var tab = 2
     @State private var notificationSettings = false
+    @State private var showingTimerRows = false
     var body: some View {
         NavigationStack {
+        Group {
+            if store.showingTimerQueue {
+                if showingTimerRows {
+                    TimerQueueView(watchShowsQueue: true, showCurrentTimer: { showingTimerRows = false })
+                } else {
+                    TimerQueueView(showTimerQueue: { showingTimerRows = true })
+                }
+            } else { homePages }
+        }
+            .onChange(of: store.timerRequestID) { _, _ in showingTimerRows = false }
+            .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
+            .onChange(of: activity) { old, value in
+                if !value.isEmpty { saved = false }
+                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
+            }
+            .onChange(of: store.sampleRequestID) { _, _ in
+                store.showingTimerQueue = false
+                tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
+                categoryIDs = []; saved = false
+            }
+            .toolbar {
+                if store.showingTimerQueue {
+                    if showingTimerRows {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { store.showingTimerQueue = false } label: { Image(systemName: "chevron.left").foregroundStyle(.black) }
+                                .accessibilityLabel("Watch Home")
+                                .labelStyle(.iconOnly).accessibilityIdentifier("timers.watch-home")
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
+                            .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
+                    }
+                }
+            }
+        }
+    }
+    private var homePages: some View {
         TabView(selection: $tab) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -53,7 +92,7 @@ struct WatchHomeView: View {
                         Button("Log now") { store.beginSample() }
                         Button("Add timer", systemImage: "mic.fill") { store.openTimers(dictate: true) }
                             .accessibilityIdentifier("watch.timer-add")
-                        Button("Timer queue", systemImage: "timer") { tab = 4 }
+                        Button("Timer queue", systemImage: "timer") { store.openTimers() }
                             .accessibilityIdentifier("watch.timers")
                         Button("Watch alerts") { notificationSettings = true }
                             .accessibilityIdentifier("watch.notifications")
@@ -78,30 +117,7 @@ struct WatchHomeView: View {
                     }
                 }
             }.tag(2)
-            // Queue is the preceding page: swipe down from the single timer
-            // to its rows, then swipe up to return. Avoid nested vertical pagers.
-            TimerQueueView(watchShowsQueue: true, showCurrentTimer: { withAnimation { tab = 4 } }).id("timer-queue").tag(3)
-            TimerQueueView(showTimerQueue: { withAnimation { tab = 3 } }).id("timer-current").tag(4)
         }.tabViewStyle(.verticalPage)
-            .onAppear { if store.showingTimerQueue { tab = 4 } }
-            .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
-            .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
-            .onChange(of: activity) { old, value in
-                if !value.isEmpty { saved = false }
-                if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
-            }
-            .onChange(of: store.sampleRequestID) { _, _ in
-                tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
-                categoryIDs = []; saved = false
-            }
-            .toolbar {
-                if tab == 3 || tab == 4 {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
-                            .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
-                    }
-                }
-            }
-        }
     }
+
 }

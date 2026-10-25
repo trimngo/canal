@@ -32,7 +32,11 @@ struct DashTimerLiveWidget: Widget {
                 DynamicIslandExpandedRegion(.leading) { Image(systemName: "timer") }
                 DynamicIslandExpandedRegion(.center) { Text(context.state.title).lineLimit(2) }
                 DynamicIslandExpandedRegion(.bottom) { Countdown(state: context.state).font(.title2) }
-            } compactLeading: { Image(systemName: "timer") }
+            } compactLeading: {
+                Text(context.state.title).font(.caption2.weight(.semibold))
+                    .lineLimit(1).truncationMode(.tail).frame(maxWidth: 76, alignment: .leading)
+                    .accessibilityLabel("Task: \(context.state.title)")
+            }
               compactTrailing: { Countdown(state: context.state).frame(maxWidth: 64) }
               minimal: { Image(systemName: "timer") }
               .widgetURL(URL(string: "canal-dash://timers"))

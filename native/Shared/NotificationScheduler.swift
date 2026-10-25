@@ -274,7 +274,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         #endif
         let permission = await center.notificationSettings().authorizationStatus
         guard permission == .authorized || permission == .provisional else { timerStatus = "Allow notifications for timer alerts."; return }
-        guard !pending.contains(where: { $0.identifier == control.token }) else { timerStatus = "Timer alert scheduled"; return }
+        guard !pending.contains(where: { $0.identifier == control.token && $0.content.title == "\(current.title) finished" }) else { timerStatus = "Timer alert scheduled"; return }
         let key = "timers.last-notification"
         guard due > Date() || UserDefaults.standard.string(forKey: key) != control.token else { return }
         let content = UNMutableNotificationContent()

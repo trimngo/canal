@@ -16,8 +16,9 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
         UserDefaults.standard.string(forKey: scheduledKey) == token && UserDefaults.standard.string(forKey: silencedKey) != token
     }
     func update(ledger: Ledger, writer: String) {
-        guard ledger.currentTimer != nil, let control = ledger.timerControl, control.owner == writer, control.onWatch,
-              let due = control.dueAt else { stop(); status = ledger.currentTimer == nil ? "" : "Paused"; return }
+        guard ledger.currentTimer != nil, let control = ledger.timerControl else { stop(); status = ""; return }
+        guard control.owner == writer, control.onWatch else { stop(); status = "Timer alerts on iPhone"; return }
+        guard let due = control.dueAt else { stop(); status = "Paused"; return }
         #if targetEnvironment(simulator)
         status = "Repeating alarm requires a physical Watch"; return
         #else

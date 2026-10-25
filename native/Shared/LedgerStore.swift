@@ -595,9 +595,6 @@ final class LedgerStore: ObservableObject {
         start()
         // A repeated notification callback must not complete a newer task.
         guard expectedToken == nil || expectedToken == ledger.timerControl?.token else { return }
-        // The Watch arms alarms while active. Phone-side edits must not silently
-        // leave an obsolete standalone Watch alarm scheduled in the background.
-        guard Self.isWatch || ledger.timerControl?.onWatch != true else { return }
         var draft = ledger
         switch action {
         case "done": draft.finishTimer(writer: writer, onWatch: Self.isWatch)
@@ -611,8 +608,15 @@ final class LedgerStore: ObservableObject {
         if draft != ledger { try commit(draft) }
     }
     func deleteTimer(_ id: String) throws {
-        if !Self.isWatch, ledger.timerControl?.onWatch == true, ledger.currentTimer?.id == id { return }
         var draft = ledger; draft.deleteQueuedTimer(id, writer: writer, onWatch: Self.isWatch)
+        if draft != ledger { try commit(draft) }
+    }
+    func editTimer(_ id: String, title: String, duration: TimeInterval) throws {
+        var draft = ledger; try draft.editQueuedTimer(id, title: title, duration: duration, writer: writer, onWatch: Self.isWatch)
+        if draft != ledger { try commit(draft) }
+    }
+    func reorderTimers(_ ids: [String]) throws {
+        var draft = ledger; draft.reorderWaitingTimers(ids, writer: writer)
         if draft != ledger { try commit(draft) }
     }
     func refreshTimerSupport(force: Bool = false) {
