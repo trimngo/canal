@@ -86,9 +86,6 @@ struct InboxView: View {
                         }.font(.subheadline).accessibilityLabel("Clear category filter").accessibilityIdentifier("inbox.category-filter-clear")
                     }
                 }
-                if store.canUndoCaptureDeletion {
-                    Section { Button("Undo deletion") { store.undoCaptureDeletion() }.accessibilityIdentifier("inbox.undo-delete") }
-                }
                 if searching {
                     Section {
                         if searchResults.isEmpty { Text("No matching ideas.").foregroundStyle(.secondary) }
@@ -196,6 +193,7 @@ struct InboxView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }.scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
+                .safeAreaInset(edge: .bottom, spacing: 0) { CaptureDeletionUndoBar() }
                 .onDisappear { focused = false; searchFocused = false }.navigationTitle("Inbox").sheet(isPresented: $ranking) { RankingView() }
                 .onChange(of: ranking) { _, presented in
                     if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
@@ -370,6 +368,21 @@ struct InboxCaptureRow: View {
         }
         if let estimate = capture.workPlan?.estimatedMinutes { parts.append(store.duration(estimate) + " est.") }
         return parts.joined(separator: " · ")
+    }
+}
+
+struct CaptureDeletionUndoBar: View {
+    @EnvironmentObject private var store: LedgerStore
+    var body: some View {
+        if store.canUndoCaptureDeletion {
+            HStack {
+                Label("Idea deleted", systemImage: "trash")
+                Spacer()
+                Button("Undo") { store.undoCaptureDeletion() }.fontWeight(.semibold).buttonStyle(.borderless)
+                    .accessibilityIdentifier("inbox.undo-delete")
+            }.font(.subheadline).padding(12).background(.regularMaterial)
+                .accessibilityElement(children: .contain)
+        }
     }
 }
 

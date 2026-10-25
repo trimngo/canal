@@ -74,6 +74,6 @@ continue to decode without resetting existing data.
 
 ## Watch layout
 
-The current timer has its own page with large task text, countdown, progress, completion and restart controls, and an upper-right +. Tap the countdown to pause or resume. The preceding page contains native-style queue rows and timer settings. The pages are siblings in the Watch vertical pager, not nested pagers or modal sheets covering system input. Restart keeps the system double-tap shortcut while the app is open.
+The current timer has its own page with large task text, countdown, progress, completion and restart controls, and an upper-right +. Pause/Resume sits beside the countdown. The preceding page contains native-style queue rows and timer settings. Swipe up returns immediately; the Digital Crown scrolls long queues. The pages share one navigation stack in the Watch vertical pager, with no modal queue covering system input. Restart keeps the system double-tap shortcut while the app is open.
 
 Timer settings offers Standard pulse, Attention pulse, and Light tap, a preview, and repeat intervals of 2, 3, 5, or 10 seconds. These existing Watch haptic choices apply to the system's repeating alarm. Sound follows system settings; Dash cannot install arbitrary alarm sounds or remap Apple's background alarm gestures.
