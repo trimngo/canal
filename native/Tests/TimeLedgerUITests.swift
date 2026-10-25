@@ -1529,7 +1529,6 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["plan.selection-done"].exists)
         let child = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "plan.name.", "Hygiene")).firstMatch
         reveal(child, in: app); child.tap()
-        app.buttons["plan.open-category"].tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Preparing classes"].waitForExistence(timeout: 5))
         closeCategoryLogs(in: app)
@@ -1577,7 +1576,7 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func selectPlanCategory(_ id: String, in app: XCUIApplication) {
-        if app.buttons["plan.selection-done"].exists && app.buttons["plan.select"].exists { app.buttons["plan.select"].tap() }
+        if app.buttons["plan.select"].exists { app.buttons["plan.select"].tap() }
         let row = element(app, "plan.name.\(id)"); reveal(row, in: app); row.tap()
         XCTAssertEqual(row.value as? String, "Selected")
     }
