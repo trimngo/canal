@@ -1,6 +1,16 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testSpokenTimerDraftCanRunWithoutAPreexistingTask() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-timers", "--ui-quiet-timer-alerts"]; app.launch()
+        let current = element(app, "timers.current")
+        XCTAssertTrue(current.waitForExistence(timeout: 20)); XCTAssertEqual(current.label, "Eat food")
+        let food = app.staticTexts["Cook food"]; reveal(food, in: app); XCTAssertTrue(food.exists)
+        XCTAssertTrue(app.staticTexts["10:00"].exists)
+        recordScreen("SiriTimerTaskSlotExecuted", in: app)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(current.waitForExistence(timeout: 20)); XCTAssertEqual(current.label, "Eat food")
+    }
     func testTimersHaveOwnTabCanCreateEditReorderAndPersist() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.tabBars.buttons["Timers"].waitForExistence(timeout: 20))

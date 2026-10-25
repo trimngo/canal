@@ -62,6 +62,25 @@ final class TimerQueueTests: XCTestCase {
         XCTAssertNil(restored.timerQueueOrder)
         XCTAssertEqual(restored.waitingTimers.map(\.id), ["two"])
     }
+    func testReorderingAloneUsesQuickDeliveryAndConcurrentOrdersConverge() throws {
+        var a = try fixture()
+        for (index, id) in ["three", "four"].enumerated() {
+            try a.enqueueTimer(id: id, title: id, duration: 60, writer: "watch", onWatch: true, now: now.addingTimeInterval(Double(index + 2)))
+        }
+        var quick = CompanionQuickDelivery()
+        _ = try quick.prepare(a, id: "initial")
+        quick.finish(id: "initial", saved: true)
+        var b = a
+        a.reorderWaitingTimers(["four", "three", "two"], writer: "watch")
+        b.reorderWaitingTimers(["three", "two", "four"], writer: "phone")
+        let data = try XCTUnwrap(quick.prepare(a, id: "order-only"))
+        let packet = try JSONDecoder().decode(CompanionQuickPacket.self, from: data)
+        XCTAssertEqual(packet.ledger.timerQueueOrder, a.timerQueueOrder)
+        XCTAssertTrue(packet.ledger.queuedTimers?.isEmpty ?? true)
+        let before = a; a.merge(b); b.merge(before)
+        XCTAssertEqual(a.waitingTimers, b.waitingTimers)
+        XCTAssertEqual(Set(a.waitingTimers.map(\.id)), Set(["two", "three", "four"]))
+    }
     func testEditingRunningDurationPreservesElapsedTimeAndPauses() throws {
         var ledger = try fixture()
         try ledger.editQueuedTimer("one", title: "Guitar practice", duration: 1800, writer: "phone", onWatch: false, now: now.addingTimeInterval(300))
