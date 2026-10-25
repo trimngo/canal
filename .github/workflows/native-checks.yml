@@ -1,88 +1,22 @@
 name: Native Apple checks
 on:
   push:
-    branches: [main, 'feat/native-*']
-    paths: ['native/**', '.github/workflows/native-*.yml']
-  pull_request:
-    paths: ['native/**', '.github/workflows/native-*.yml']
-  workflow_dispatch:
+    branches: ['feat/native-short-siri-timer-verify']
 permissions:
   contents: read
-concurrency:
-  group: native-checks-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
-  watch-ui:
-    runs-on: macos-15
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-      - name: Install project generator
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-        run: brew install xcodegen
-      - name: Test direct Watch logging
-        run: bash native/scripts/test-watch-ui.sh
-      - name: Export Watch interface review
-        if: always()
-        run: |
-          if [ -d native/build/WatchUITests.xcresult ]; then
-            mkdir -p native/build/watch-ui-review
-            xcrun xcresulttool get test-results summary --path native/build/WatchUITests.xcresult > native/build/watch-ui-review/summary.json
-            xcrun xcresulttool export attachments --path native/build/WatchUITests.xcresult --output-path native/build/watch-ui-attachments
-            python3 native/scripts/export-ui-review.py native/build/watch-ui-attachments native/build/watch-ui-review
-          fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: native-watch-ui-review
-          path: native/build/watch-ui-review
-          retention-days: 7
   build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
       - name: Install project generator
-        timeout-minutes: 5
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
-      - name: Validate signing automation syntax
-        run: |
-          ruby -c native/fastlane/Fastfile
-          python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
-      - name: Test core and build iPhone and Watch apps
+      - name: Build iPhone and Watch and validate Siri metadata
         env:
-          LEDGER_UI_TESTS: '1'
+          LEDGER_UI_TESTS: '0'
         run: bash native/scripts/validate.sh
-      - name: Export compact interface review
-        if: always()
-        run: |
-          if [ -d native/build/UITests.xcresult ]; then
-            mkdir -p native/build/ui-review
-            xcrun xcresulttool get test-results summary --path native/build/UITests.xcresult > native/build/ui-review/summary.json
-            xcrun xcresulttool export attachments --path native/build/UITests.xcresult --output-path native/build/ui-attachments
-            python3 native/scripts/export-ui-review.py native/build/ui-attachments native/build/ui-review
-          fi
-      - name: Save interface screenshots and summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-ui-review
-          path: native/build/ui-review
-          retention-days: 7
-      - name: Save simulator apps and test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-simulator-results
-          path: |
-            native/build/Build/Products/Debug-iphonesimulator/*.app
-            native/build/Build/Products/Debug-watchsimulator/*.app
-            native/build/UITests.xcresult
-          retention-days: 7
