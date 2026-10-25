@@ -7,6 +7,7 @@ import WatchKit
 struct TimerQueueView: View {
     @EnvironmentObject private var store: LedgerStore
     var watchShowsQueue = false
+    var showCurrentTimer: (() -> Void)? = nil
     @State private var draft = ""
     @State private var inputError: String?
     @State private var inputOpen = false
@@ -128,6 +129,15 @@ struct TimerQueueView: View {
                 Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
             }.accessibilityIdentifier("timers.alarm-settings")
         }.listStyle(.carousel).accessibilityIdentifier("timers.queue-screen")
+            // Up is navigation on this page, even when more rows remain.
+            // The Digital Crown still scrolls the full queue; horizontal row
+            // swipes retain their native Delete action.
+            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
+                if value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    showCurrentTimer?()
+                }
+            })
+            .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
     }
     private func watchCountdown(_ task: QueuedTimer, control: TimerQueueControl, at now: Date, large: Bool) -> some View {
         Button {

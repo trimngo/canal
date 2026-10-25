@@ -80,7 +80,7 @@ struct WatchHomeView: View {
             }.tag(2)
             // Queue is the preceding page: swipe down from the single timer
             // to its rows, then swipe up to return. Avoid nested vertical pagers.
-            TimerQueueView(watchShowsQueue: true).id("timer-queue").tag(3)
+            TimerQueueView(watchShowsQueue: true, showCurrentTimer: { withAnimation { tab = 4 } }).id("timer-queue").tag(3)
             TimerQueueView().id("timer-current").tag(4)
         }.tabViewStyle(.verticalPage)
             .onAppear { if store.showingTimerQueue { tab = 4 } }
