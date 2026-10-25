@@ -62,8 +62,8 @@ struct TaskPlanningView: View {
             let text = hours.trimmingCharacters(in: .whitespacesAndNewlines)
             let minutes = text.isEmpty ? nil : Double(text.replacingOccurrences(of: ",", with: ".")).map { $0 * 60 }
             if !text.isEmpty, minutes == nil { throw TaskPlanError.invalidEstimate }
-            if minutes != nil, hasDueDate, dueDate <= (hasStart ? startDate : capture.createdAt) {
-                error = "Choose a due date after the task’s start (or creation) date."; return
+            if minutes != nil, hasDueDate, hasStart, dueDate <= startDate {
+                error = "Choose a due date after the task’s start date."; return
             }
             let timing: CaptureTiming? = hasDueDate ? .due(dueDate) : (capture.timing?.kind == .dueDate ? .noDate : capture.timing)
             try store.saveTaskPlanning(capture, timing: timing, estimatedMinutes: minutes, startDate: hasStart ? startDate : nil)
