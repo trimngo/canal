@@ -17,6 +17,9 @@ struct TimerQueueView: View {
     @State private var editingTimer: QueuedTimer?
     @FocusState private var focused: Bool
     @ObservedObject private var notifications = NotificationScheduler.shared
+    #if os(iOS)
+    @State private var timerEditMode: EditMode = .inactive
+    #endif
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
     @State private var queuePosition = 0.0
@@ -372,7 +375,12 @@ struct TimerQueueView: View {
                     Button("Enable timer notifications") { requestAlerts() }.font(.caption)
                 }
                 NavigationLink("Timer settings", destination: TimerSettingsView())
-            }.toolbar { EditButton().accessibilityIdentifier("timers.reorder") }
+            }.environment(\.editMode, $timerEditMode)
+                .toolbar {
+                    Button(timerEditMode.isEditing ? "Done" : "Edit") {
+                        withAnimation { timerEditMode = timerEditMode.isEditing ? .inactive : .active }
+                    }.accessibilityIdentifier("timers.reorder")
+                }
     }
     #endif
     private var doneTitle: String { store.ledger.settings.timerAutoStartNext ? "Done & Next" : "Done" }
