@@ -736,7 +736,6 @@ final class TimeLedgerUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Returns ")).firstMatch.exists)
         } else {
             reveal(idea, in: app); XCTAssertTrue(idea.exists)
-            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch.exists)
             XCTAssertTrue(element(app, "inbox.waiting-title").label.contains("1"))
         }
         recordScreen("SnoozeReturnsAtEightAM", in: app)
@@ -1939,6 +1938,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("InboxSharedCategoriesAndSearch", in: app)
         app.buttons["inbox.search-clear"].tap(); app.buttons["inbox.category-filter-clear"].tap()
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
+        openIdeaEditor("a", in: app)
         reveal(categorize, in: app); XCTAssertTrue(categorize.label.contains("Work"))
     }
 

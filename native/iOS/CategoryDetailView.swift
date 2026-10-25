@@ -16,7 +16,6 @@ struct CategoryDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let request: CategoryDetailRequest
     @State private var showingLogs = false
-    @State private var ranking = false
     @State private var snoozing: Capture?
     @State private var categorizing: CaptureCategoryReviewRequest?
     @State private var showOtherLists = false
@@ -97,7 +96,6 @@ struct CategoryDetailView: View {
                     GroupEntriesView(day: request.start ?? Date(), groupID: request.id, initialName: request.name,
                         rangeStart: request.start, rangeEnd: request.end, allTime: request.allTime, directOnly: request.directOnly)
                 }
-                .sheet(isPresented: $ranking) { RankingView() }
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
                 .sheet(item: $categorizing) { CaptureCategoryReviewView(captureIDs: $0.captureIDs) }
         }
