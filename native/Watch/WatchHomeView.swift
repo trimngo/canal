@@ -36,7 +36,8 @@ struct WatchHomeView: View {
                 if store.showingTimerQueue {
                     if showingTimerRows {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button("Watch Home", systemImage: "chevron.left") { store.showingTimerQueue = false }
+                            Button { store.showingTimerQueue = false } label: { Image(systemName: "chevron.left").foregroundStyle(.black) }
+                                .accessibilityLabel("Watch Home")
                                 .labelStyle(.iconOnly).accessibilityIdentifier("timers.watch-home")
                         }
                     }
