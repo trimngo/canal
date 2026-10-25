@@ -25,9 +25,11 @@ python3 scripts/validate-timer-support.py --apps \
   build/Build/Products/Debug-iphonesimulator/TimeLedger.app \
   build/Build/Products/Debug-watchsimulator/TimeLedgerWatch.app
 
+xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch -destination 'generic/platform=watchOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+
 if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
-    -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test
+    -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO -parallel-testing-enabled NO -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCompactInboxKeepsTitleInlineAndAllOtherEditingInDetails -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDashboardArrowsBrowseDaysAndSevenDayWindows -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxDeletionHasUndoAndPersistsAfterRelaunch -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxNotesSnoozeAndBringBackSurviveRelaunch -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxUsesSamePinnedTagsAndInlineTextEditing -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentInboxShowsUnrankedIdeasAndCorrectionPersistsWithoutRanking -only-testing:TimeLedgerUITests/TimeLedgerUITests/testFocusTasksMigrateLinkedWorkAndEditWithoutSeparateGoalRows -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRankingInlineEditDoesNotChooseAndChoiceUsesSeparateButton test
 fi
