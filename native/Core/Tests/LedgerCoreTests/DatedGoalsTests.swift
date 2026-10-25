@@ -56,8 +56,8 @@ final class DatedGoalsTests: XCTestCase {
         let now = date("2026-10-25T12:00:00Z")
         let before = ledger.datedGoalProgress(now: now, calendar: utc).first!
         XCTAssertEqual(before.actualMinutes, 60)
-        XCTAssertEqual(before.expectedMinutes, 120)
-        XCTAssertEqual(before.remainingWorkdays, 1)
+        XCTAssertEqual(before.expectedMinutes, 140, accuracy: 0.001)
+        XCTAssertEqual(before.remainingWorkdays, 2)
         ledger.settings.startMinute = 600; ledger.settings.endMinute = 660
         ledger.settings.reportingTimeZoneIdentifier = "Europe/Berlin"
         let after = ledger.datedGoalProgress(now: now, calendar: utc).first!
@@ -68,13 +68,13 @@ final class DatedGoalsTests: XCTestCase {
     func testDeadlineTimePartialDaysAndZeroWorkdaysAreFinite() throws {
         var ledger = Ledger(); let id = try goal(&ledger, start: "2026-10-23T07:00:00Z", end: "2026-10-26T07:00:00Z")
         let row = ledger.datedGoalProgress(now: date("2026-10-23T14:30:00Z"), calendar: utc).first!
-        XCTAssertEqual(row.expectedMinutes, 120)
-        XCTAssertEqual(row.remainingWorkdays, 1)
-        XCTAssertEqual(row.dailyMinutesNeeded, 240)
+        XCTAssertEqual(row.expectedMinutes, 40, accuracy: 0.001)
+        XCTAssertEqual(row.remainingWorkdays, 3)
+        XCTAssertEqual(row.dailyMinutesNeeded, 80)
         let weekend = try goal(&ledger, name: "Song", category: nil, start: "2026-10-24T07:00:00Z", end: "2026-10-25T22:00:00Z")
         let rows = ledger.datedGoalProgress(now: date("2026-10-25T12:00:00Z"), calendar: utc)
-        XCTAssertNil(rows.first { $0.id == id }?.dailyMinutesNeeded)
-        XCTAssertNil(rows.first { $0.id == weekend }?.dailyMinutesNeeded)
+        XCTAssertEqual(rows.first { $0.id == id }?.dailyMinutesNeeded, 240)
+        XCTAssertEqual(rows.first { $0.id == weekend }?.dailyMinutesNeeded, 240)
         XCTAssertTrue(rows.allSatisfy { $0.expectedMinutes.isFinite })
     }
     func testGoalAssignmentPreservedBySampleEditsBackupAndOfflineMerge() throws {
@@ -145,10 +145,10 @@ final class DatedGoalsTests: XCTestCase {
         let start = date("2026-10-23T05:00:00Z"), end = date("2026-10-26T21:00:00Z")
         try ledger.saveDatedGoal(name: "Autumn", categoryID: nil, targetMinutes: 240, startDate: start, deadline: end, writer: "p")
         let goal = ledger.activeDatedGoals[0]
-        XCTAssertEqual(Ledger.workdayUnits(from: start, to: end, goal: goal), 2, accuracy: 0.001)
+        XCTAssertEqual(Ledger.workdayUnits(from: start, to: end, goal: goal), 4, accuracy: 0.001)
         let row = ledger.datedGoalProgress(now: date("2026-10-25T12:00:00Z"), calendar: utc)[0]
-        XCTAssertEqual(row.expectedMinutes, 120, accuracy: 0.001)
-        XCTAssertEqual(row.remainingWorkdays, 1, accuracy: 0.001)
+        XCTAssertEqual(row.expectedMinutes, 144, accuracy: 0.001)
+        XCTAssertEqual(row.remainingWorkdays, 2, accuracy: 0.001)
     }
 
     func testDatedGoalNeverChangesPercentageTargetsAndDeletedGoalDoesNotBlockLogReview() throws {
@@ -171,11 +171,11 @@ final class DatedGoalsTests: XCTestCase {
         var ledger = Ledger()
         _ = try goal(&ledger, start: "2026-10-23T20:00:00Z", end: "2026-10-26T09:00:00Z")
         let row = ledger.datedGoalProgress(now: date("2026-10-23T20:00:00Z"), calendar: utc)[0]
-        XCTAssertEqual(row.remainingWorkdays, 2)
-        XCTAssertEqual(row.dailyMinutesNeeded, 120)
+        XCTAssertEqual(row.remainingWorkdays, 4)
+        XCTAssertEqual(row.dailyMinutesNeeded, 60)
         XCTAssertEqual(row.expectedMinutes, 0)
         let next = ledger.datedGoalProgress(now: date("2026-10-23T21:00:00Z"), calendar: utc)[0]
-        XCTAssertEqual(next.expectedMinutes, 60, accuracy: 0.001)
+        XCTAssertEqual(next.expectedMinutes, 30, accuracy: 0.001)
     }
 
 }

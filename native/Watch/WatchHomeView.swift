@@ -52,7 +52,7 @@ struct WatchHomeView: View {
                         Button("Log now") { store.beginSample() }
                         Button("Add timer", systemImage: "mic.fill") { store.openTimers(dictate: true) }
                             .accessibilityIdentifier("watch.timer-add")
-                        Button("Timer queue", systemImage: "timer") { tab = 3 }
+                        Button("Timer queue", systemImage: "timer") { tab = 4 }
                             .accessibilityIdentifier("watch.timers")
                         Button("Watch alerts") { notificationSettings = true }
                             .accessibilityIdentifier("watch.notifications")
@@ -77,10 +77,13 @@ struct WatchHomeView: View {
                     }
                 }
             }.tag(2)
-            NavigationStack { TimerQueueView() }.tag(3)
+            // Queue is the preceding page: swipe down from the single timer
+            // to its rows, then swipe up to return. Avoid nested vertical pagers.
+            NavigationStack { TimerQueueView(watchShowsQueue: true) }.tag(3)
+            NavigationStack { TimerQueueView() }.tag(4)
         }.tabViewStyle(.verticalPage)
-            .onAppear { if store.showingTimerQueue { tab = 3 } }
-            .onChange(of: store.timerRequestID) { _, _ in tab = 3 }
+            .onAppear { if store.showingTimerQueue { tab = 4 } }
+            .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }

@@ -13,16 +13,9 @@ then begins the oldest waiting task. Capturing another task during this wait
 does not start the queue. This setting uses shared settings revisions/sync and
 backups. Old files default to the previous automatic-next behavior.
 
-On Watch, add the **Queue timer** complication to open dictation directly and
-saying “Practice guitar” creates a five-minute timer; “Practice guitar for twenty
-minutes” uses that duration. Finishing dictation
-saves the task. **Current task** displays the task/countdown and opens its controls.
-The Watch saves and schedules locally, without needing the phone.
+On Watch, the **Timers** and **Current task** complications open the single-timer screen. The upper-right **+** opens dictation directly: “Practice guitar” creates a five-minute timer, while “Practice guitar for twenty minutes” uses that duration. Finishing dictation saves the task. Watch Home also has a direct Add timer action. The Watch saves and schedules locally, without needing the phone.
 
-The main Watch timer screen shows the running timer's countdown/progress and
-compact upcoming-task rows. Its pinned **Add timer** button opens system input
-directly. There is no queue sheet above the system keyboard. Add timer is also
-available directly from the Watch home summary.
+Swipe down from the current timer to the separate queue page; swipe up to return. Only the first timer runs. Upcoming rows are dimmed and show their full duration. Swipe a row left to delete any timer. Deleting the current timer cancels its alarm and leaves the next task waiting for Start, independently of the Done & Next setting. Deleting an upcoming task leaves the running countdown untouched.
 
 Repeating haptics use WatchKit's scheduled smart-alarm extended runtime session,
 not a workout, audio loop, or Apple Timers integration. The active app displays
@@ -60,9 +53,7 @@ items sort by deadline; ASAP items sort oldest first. Completed, deleted,
 reference and currently snoozed items are excluded. Ranking data stays intact.
 
 Offline action phrases can suggest ASAP for replies/follow-ups, scheduling, and
-payments. Suggestions show a reason and Not urgent clears the suggestion by
-saving an explicit No date choice. Editing the text does not undo that choice.
-Use automatic timing in the item's timing menu to enable suggestions again.
+payments. Suggestions show a reason in the item editor. Choosing No date in that editor clears the suggestion. Editing the text does not undo that choice. Choose Automatic timing in the editor to enable suggestions again.
 
 Settings → Automatic matching exposes editable urgency phrases, category phrase
 rules, a matching preview, and broader/cautious category matching. Built-in
@@ -83,8 +74,6 @@ continue to decode without resetting existing data.
 
 ## Watch layout
 
-The current timer stays in the top half of the available screen with large text, countdown, and progress. Upcoming tasks scroll in a separate lower list, shown in secondary color. A floating circular + in the lower-right corner opens native dictation directly. It can overlap upcoming rows; it never overlaps the current timer. The lower list has trailing space so its final row can scroll clear of the button.
-
-Swipe left on the current timer for completion, pause/resume, or skip. Swipe left on a queued timer to delete it. Restart remains a small visible button so watchOS double-tap can restart without exposing the swipe menu. An expired timer also has a visible completion checkmark. Existing automatic-next settings and independent Watch operation are unchanged.
+The current timer has its own page with large task text, countdown, progress, completion and restart controls, and an upper-right +. Tap the countdown to pause or resume. The preceding page contains native-style queue rows and timer settings. The pages are siblings in the Watch vertical pager, not nested pagers or modal sheets covering system input. Restart keeps the system double-tap shortcut while the app is open.
 
 Timer settings offers Standard pulse, Attention pulse, and Light tap, a preview, and repeat intervals of 2, 3, 5, or 10 seconds. These existing Watch haptic choices apply to the system's repeating alarm. Sound follows system settings; Dash cannot install arbitrary alarm sounds or remap Apple's background alarm gestures.

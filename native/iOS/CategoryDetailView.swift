@@ -103,6 +103,6 @@ struct CategoryDetailView: View {
         }
     }
     private func ideaRow(_ capture: Capture) -> some View {
-        InboxCaptureRow(capture: capture, onRank: { ranking = true }, onSnooze: { snoozing = $0 })
+        InboxCaptureRow(capture: capture, onSnooze: { snoozing = $0 })
     }
 }

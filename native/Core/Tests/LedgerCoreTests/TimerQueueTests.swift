@@ -89,10 +89,20 @@ final class TimerQueueTests: XCTestCase {
         XCTAssertTrue(ledger.waitingTimers.isEmpty)
         XCTAssertEqual(ledger.timerControl, control)
     }
-    func testDeletingActiveTaskStartsNextAndCompletingLastStops() throws {
+    func testDeletingActiveTaskCancelsAlarmAndWaitsForStartEvenWithAutoNext() throws {
         var ledger = try fixture()
+        let old = ledger
         ledger.deleteQueuedTimer("one", writer: "watch", onWatch: true, now: now)
+        XCTAssertNil(ledger.currentTimer); XCTAssertNil(ledger.timerControl?.dueAt)
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["two"])
+        ledger.merge(old)
+        XCTAssertNil(ledger.currentTimer); XCTAssertNil(ledger.timerControl?.dueAt)
+        try ledger.enqueueTimer(id: "three", title: "Walk", duration: 60, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
+        XCTAssertNil(ledger.currentTimer)
+        ledger.startNextTimer(writer: "watch", onWatch: true, now: now)
         XCTAssertEqual(ledger.currentTimer?.id, "two")
+        ledger.finishTimer(writer: "watch", onWatch: true, now: now)
+        XCTAssertEqual(ledger.currentTimer?.id, "three")
         ledger.finishTimer(writer: "watch", onWatch: true, now: now)
         XCTAssertNil(ledger.currentTimer); XCTAssertNil(ledger.timerControl?.taskID)
         XCTAssertTrue(ledger.waitingTimers.isEmpty)

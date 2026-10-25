@@ -25,9 +25,9 @@ private struct TimerComplication: View {
     let entry: TimerEntry
     let adding: Bool
     var body: some View {
-        content.widgetURL(adding ? TimerQueueShortcut.add : TimerQueueShortcut.current)
+        content.widgetURL(TimerQueueShortcut.current)
             .containerBackground(.fill.tertiary, for: .widget)
-            .accessibilityLabel(adding ? "Dictate a timer task, five minutes by default" : "Current timer: \(entry.current?.title ?? "No timer")")
+            .accessibilityLabel(adding ? "Open timers" : "Current timer: \(entry.current?.title ?? "No timer")")
     }
     @ViewBuilder private var countdown: some View {
         if let current = entry.current {
@@ -41,9 +41,9 @@ private struct TimerComplication: View {
         if adding {
             switch family {
             case .accessoryRectangular:
-                VStack(alignment: .leading) { Label("Queue timer", systemImage: "timer"); Text("Tap to dictate").font(.caption) }
-            case .accessoryInline: Label("Queue timer", systemImage: "timer")
-            case .accessoryCorner: Image(systemName: "timer").widgetLabel { Text("Add timer") }
+                VStack(alignment: .leading) { Label("Timers", systemImage: "timer"); Text("Tap to open").font(.caption) }
+            case .accessoryInline: Label("Timers", systemImage: "timer")
+            case .accessoryCorner: Image(systemName: "timer").widgetLabel { Text("Timers") }
             default: ZStack { AccessoryWidgetBackground(); Image(systemName: "timer").font(.title2).widgetAccentable() }
             }
         } else {
@@ -66,7 +66,7 @@ private struct TimerComplication: View {
 struct DashAddTimerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "DashAddTimer", provider: TimerProvider()) { TimerComplication(entry: $0, adding: true) }
-            .configurationDisplayName("Queue timer").description("Dictate a task. Defaults to five minutes, or say a duration. Additional tasks wait in your queue.")
+            .configurationDisplayName("Timers").description("Open your current timer. Tap + to dictate another task; swipe down to see the queue.")
             .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryRectangular, .accessoryInline])
     }
 }

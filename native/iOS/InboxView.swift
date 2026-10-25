@@ -105,7 +105,7 @@ struct InboxView: View {
                     if !urgent.isEmpty {
                         Section {
                             ForEach(urgent) { capture in
-                                InboxCaptureRow(capture: capture, onRank: { ranking = true }, onSnooze: {
+                                InboxCaptureRow(capture: capture, onSnooze: {
                                     endInput(); snoozing = $0
                                 }, isUrgentSection: true)
                             }
@@ -265,7 +265,7 @@ struct InboxView: View {
             "New ideas reviewed. Backlog review is optional; this list isn't a verified ranking of every idea."
     }
     private func captureRow(_ capture: Capture) -> some View {
-        InboxCaptureRow(capture: capture, onRank: { ranking = true }, onSnooze: {
+        InboxCaptureRow(capture: capture, onSnooze: {
             focused = false; searchFocused = false; snoozing = $0
         })
     }
@@ -282,148 +282,94 @@ struct InboxView: View {
 struct InboxCaptureRow: View {
     @EnvironmentObject private var store: LedgerStore
     let capture: Capture
-    let onRank: () -> Void
     let onSnooze: (Capture) -> Void
     var isUrgentSection = false
-    @State private var detailsExpanded = false
-    @State private var editingDueDate = false
-    @State private var planningWork = false
+    @State private var editing = false
     private var prefix: String { isUrgentSection ? "inbox.urgent" : "inbox" }
     private var urgency: InboxUrgency? { store.ledger.urgency(for: capture) }
+    private var categoryNames: [String] {
+        store.ledger.categoryIDs(for: capture).map { store.categoryName($0) }
+    }
+    private var hasNotes: Bool { !(capture.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: 8) {
             Button {
                 do { try store.setCaptureDone(capture, done: !capture.isDone) } catch { store.report(error) }
-            } label: { Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle").font(.title3).frame(width: 44, height: 44) }
-                .buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
-            VStack(alignment: .leading, spacing: 2) {
+            } label: {
+                Image(systemName: capture.isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.title3).frame(width: 32, height: 44)
+            }.buttonStyle(.borderless).accessibilityLabel(capture.isDone ? "Reopen capture" : "Complete capture")
+                .accessibilityIdentifier("\(prefix).complete.\(capture.id)")
+            VStack(alignment: .leading, spacing: 3) {
                 InlineEntryText(text: capture.text, identifier: "\(prefix).details.\(capture.id)") {
                     try store.updateCaptureText(capture, text: $0)
                 }
-                Text(metadata).font(.caption).foregroundStyle(.secondary)
-                if isUrgentSection, let urgency {
-                    HStack {
-                        Text(urgency.isSuggested ? "Suggested ASAP · \(urgency.reason.rawValue)" : timingLabel)
-                            .font(.caption).foregroundStyle(.orange)
-                        Spacer(minLength: 2)
-                        if urgency.isSuggested {
-                            Button("Not urgent") { setTiming(.noDate) }.font(.caption).buttonStyle(.borderless)
-                                .accessibilityIdentifier("inbox.urgent.dismiss.\(capture.id)")
-                        }
-                    }
-                }
-                HStack(spacing: 4) {
-                    CaptureCategoryButton(capture: capture, identifier: "\(prefix).category.\(capture.id)", compact: true)
-                    Spacer(minLength: 0)
-                    Menu {
-                        Button("Work estimate & start…") { planningWork = true }
-                        Button("ASAP") { setTiming(.asap) }
-                        Button("Due date…") { editingDueDate = true }
-                        Button("No date") { setTiming(.noDate) }
-                        Button("Use automatic timing") { setTiming(nil) }
-                    } label: {
-                        Label(timingLabel, systemImage: urgency == nil ? "calendar" : "calendar.badge.exclamationmark")
-                            .font(.caption).labelStyle(.iconOnly).frame(width: 44, height: 44)
-                    }.buttonStyle(.borderless).accessibilityLabel("Timing: \(timingLabel)")
-                        .accessibilityIdentifier("\(prefix).timing.\(capture.id)")
-                    Button { detailsExpanded.toggle() } label: {
-                        Image(systemName: detailsExpanded ? "text.bubble.fill" : "text.bubble").frame(width: 44, height: 44)
-                    }.buttonStyle(.borderless).accessibilityLabel(detailsExpanded ? "Hide details" : "Edit details").accessibilityIdentifier("\(prefix).details-toggle.\(capture.id)")
-                }
-                if detailsExpanded {
-                    InlineCaptureNotes(capture: capture, identifier: "\(prefix).notes.\(capture.id)", initiallyExpanded: true)
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            Menu {
-                if !capture.isDone {
-                    if capture.isReference == true {
-                        Button("Move to New Ideas") { moveReference(capture, reference: false) }
-                    } else {
-                        Button("Move to Reference") { moveReference(capture, reference: true) }
-                        if capture.isSnoozed(at: Date()) {
-                            Button("Bring back now") { bringBack(capture) }
-                        }
-                        Button(capture.isSnoozed(at: Date()) ? "Change return date…" : "Snooze…") { onSnooze(capture) }
-                        if !capture.isSnoozed(at: Date()) {
-                            Button("Re-rank this idea") {
-                                do { try store.rerankCapture(capture.id); onRank() } catch { store.report(error) }
+                Button { editing = true } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Text(summary).font(.caption).foregroundStyle(urgency == nil ? Color.secondary : .orange)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if hasNotes {
+                                Image(systemName: "note.text").font(.caption).foregroundStyle(.secondary)
+                                    .accessibilityLabel("Has notes").accessibilityIdentifier("\(prefix).has-notes.\(capture.id)")
                             }
                         }
-                    }
-                }
-                Button("Task details & work estimate") { planningWork = true }
-                Button("Delete idea", role: .destructive) { remove(capture) }
-            } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
-                .buttonStyle(.borderless).accessibilityLabel("Idea actions")
-                .accessibilityIdentifier("\(prefix).actions.\(capture.id)")
-        }.padding(.vertical, 0)
-            .sheet(isPresented: $editingDueDate) { CaptureDueDateView(capture: capture) }
-            .sheet(isPresented: $planningWork) { TaskPlanningView(capture: capture) }
-            .swipeActions { Button("Delete", role: .destructive) { remove(capture) } }
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if !capture.isDone, capture.isReference != true {
-                    if capture.isSnoozed(at: Date()) {
-                        Button("Bring back", systemImage: "arrow.uturn.backward") { bringBack(capture) }.tint(.teal)
-                    } else {
-                        Button("Snooze", systemImage: "moon.zzz") { onSnooze(capture) }.tint(.indigo)
+                        // The category line gets the entire content width. Prefer
+                        // full short names over breadcrumbs; overflow is counted,
+                        // rather than showing a cut-off category name.
+                        ViewThatFits(in: .horizontal) {
+                            Text(categoryLabel(categoryNames)).fixedSize(horizontal: true, vertical: false)
+                            if let first = categoryNames.first, categoryNames.count > 1 {
+                                Text(categoryLabel([first]) + " +\(categoryNames.count - 1)")
+                                    .lineLimit(1).minimumScaleFactor(0.8)
+                            } else {
+                                Text(categoryLabel(categoryNames)).lineLimit(1).minimumScaleFactor(0.75)
+                            }
+                        }.font(.caption).foregroundStyle(capture.categorySuggestion == nil ? Color.secondary : .orange)
+                            .accessibilityLabel(categoryLabel(categoryNames))
+                            .accessibilityIdentifier("\(prefix).categories.\(capture.id)")
+                    }.frame(maxWidth: .infinity, minHeight: 28, alignment: .leading).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityHint("Open all item details")
+                    .accessibilityIdentifier("\(prefix).edit.\(capture.id)")
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(.vertical, 2).contentShape(Rectangle())
+            .onTapGesture { editing = true }
+            .sheet(isPresented: $editing) { TaskPlanningView(capture: capture) }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    do { try store.deleteCapture(capture) } catch { store.report(error) }
+                }.accessibilityIdentifier("\(prefix).delete.\(capture.id)")
+                if !capture.isDone {
+                    Button(capture.isReference == true ? "To Inbox" : "Reference", systemImage: "archivebox") {
+                        do { try store.setCaptureReference(capture, reference: capture.isReference != true) } catch { store.report(error) }
+                    }.tint(.teal).accessibilityIdentifier("\(prefix).reference.\(capture.id)")
+                    if capture.isReference != true {
+                        Button("Snooze", systemImage: "moon.zzz") { onSnooze(capture) }
+                            .tint(.indigo).accessibilityIdentifier("\(prefix).snooze.\(capture.id)")
                     }
                 }
             }
     }
-    private var timingLabel: String {
-        if let date = urgency?.timing.dueAt { return "Due \(date.formatted(date: .abbreviated, time: .omitted))" }
-        return urgency == nil ? "No date" : "ASAP"
+    private func categoryLabel(_ names: [String]) -> String {
+        let label = names.isEmpty ? "Uncategorized" : names.joined(separator: " · ")
+        return (capture.categorySuggestion == nil ? "" : "Suggested: ") + label
     }
-    private func setTiming(_ timing: CaptureTiming?) {
-        do { try store.setCaptureTiming(capture, timing: timing) } catch { store.report(error) }
-    }
-    private func remove(_ capture: Capture) { do { try store.deleteCapture(capture) } catch { store.report(error) } }
-    private func bringBack(_ capture: Capture) { do { try store.bringBackCapture(capture) } catch { store.report(error) } }
-    private func moveReference(_ capture: Capture, reference: Bool) {
-        do { try store.setCaptureReference(capture, reference: reference) } catch { store.report(error) }
-    }
-    private var metadata: String {
-        let date = "\(capture.createdAt.formatted(date: .abbreviated, time: .omitted)) · \(store.time(capture.createdAt))"
-        let origin = (store.ledger.reminderImports ?? []).contains { $0.captureID == capture.id } ? "From Reminders · " : ""
-        if capture.isDone { return "Completed · \(origin)\(date)" }
-        if capture.isReference == true { return "Reference · \(origin)\(date)" }
-        if let due = capture.snoozeReturnDate(), !capture.isDone {
-            if due > Date() { return "Returns \(due.formatted(date: .abbreviated, time: .omitted)) at \(store.time(due))" }
-            if store.inbox.unseen.contains(where: { $0.id == capture.id }) { return "Back from snooze · \(origin)\(date)" }
+    private var summary: String {
+        var parts: [String] = []
+        if capture.isDone { parts.append("Completed") }
+        else if capture.isReference == true { parts.append("Reference") }
+        else if capture.isSnoozed(at: Date()), let due = capture.snoozeReturnDate() {
+            parts.append("Returns " + due.formatted(date: .abbreviated, time: .omitted))
+        } else if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { parts.append("#\(rank + 1)") }
+        else if store.inbox.backlog.contains(where: { $0.id == capture.id }) { parts.append("Backlog") }
+        else if store.inbox.inProgress.contains(where: { $0.id == capture.id }) { parts.append("In progress") }
+        else { parts.append("Unseen") }
+        if let urgency {
+            if let date = urgency.timing.dueAt { parts.append("Due " + date.formatted(date: .abbreviated, time: .omitted)) }
+            else { parts.append(urgency.isSuggested ? "Suggested ASAP" : "ASAP") }
         }
-        if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { return "#\(rank + 1) · \(origin)\(date)" }
-        let status = store.inbox.backlog.contains { $0.id == capture.id } ? "Backlog" : store.inbox.inProgress.contains { $0.id == capture.id } ? "In progress" : "Unseen"
-        return "\(origin)\(status) · \(date)"
-    }
-}
-
-private struct CaptureDueDateView: View {
-    @EnvironmentObject private var store: LedgerStore
-    @Environment(\.dismiss) private var dismiss
-    let capture: Capture
-    @State private var date: Date
-    init(capture: Capture) { self.capture = capture; _date = State(initialValue: capture.timing?.dueAt ?? Date()) }
-    var body: some View {
-        NavigationStack {
-            Form {
-                Text(capture.text).font(.headline)
-                DatePicker("Due date", selection: $date, displayedComponents: .date)
-                    .accessibilityIdentifier("inbox.due-date")
-            }.navigationTitle("Due date")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
-                            do {
-                                try store.setCaptureTiming(capture, timing: .due(store.ledger.reportingCalendar().startOfDay(for: date)))
-                                dismiss()
-                            } catch { store.report(error) }
-                        }.accessibilityIdentifier("inbox.save-due-date")
-                    }
-                }
-        }.presentationDetents([.medium])
-            .environment(\.calendar, store.ledger.reportingCalendar())
-            .environment(\.timeZone, store.ledger.reportingCalendar().timeZone)
+        if let estimate = capture.workPlan?.estimatedMinutes { parts.append(store.duration(estimate) + " est.") }
+        return parts.joined(separator: " · ")
     }
 }
 

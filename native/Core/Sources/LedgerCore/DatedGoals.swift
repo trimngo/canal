@@ -111,7 +111,7 @@ extension Ledger {
         return ids.isEmpty ? 0 : Double(ids.filter { family.contains($0) }.count) / Double(ids.count)
     }
 
-    /// Each included Monday–Friday counts as one planned workday. The baseline
+    /// Each calendar date with time in the daily window counts as a planned day.
     /// advances within that day's portion before the deadline. Daily catch-up
     /// uses the count of remaining dates, including today if time remains.
     /// Logged work outside these planning windows still counts in full.
@@ -123,9 +123,7 @@ extension Ledger {
         let lastMinute = goal.dayEndMinute > firstMinute && goal.dayEndMinute < 1440 ? goal.dayEndMinute : 1320
         var day = cal.startOfDay(for: start), result = 0.0
         while day < end {
-            let weekday = cal.component(.weekday, from: day)
-            if (2...6).contains(weekday),
-               let a = cal.date(bySettingHour: firstMinute / 60, minute: firstMinute % 60, second: 0, of: day),
+            if let a = cal.date(bySettingHour: firstMinute / 60, minute: firstMinute % 60, second: 0, of: day),
                let b = cal.date(bySettingHour: lastMinute / 60, minute: lastMinute % 60, second: 0, of: day), b > a {
                 let plannedStart = max(a, goal.startDate), plannedEnd = min(b, goal.deadline)
                 let overlap = min(end, plannedEnd).timeIntervalSince(max(start, plannedStart))
@@ -166,8 +164,7 @@ extension Ledger {
     func progress(for goal: DatedGoal, minutes: Double, now: Date) -> DatedGoalProgress {
         let total = Self.workdayUnits(from: goal.startDate, to: goal.deadline, goal: goal)
         let elapsed = Self.workdayUnits(from: goal.startDate, to: min(now, goal.deadline), goal: goal)
-        // A weekend-only goal uses elapsed clock time for its baseline; it is
-        // explicitly shown without remaining workdays rather than dividing by zero.
+        // Deadlines outside the daily window still reach 100% when due.
         let fraction = now >= goal.deadline ? 1 : now <= goal.startDate ? 0 : total > 0 ? elapsed / total : max(0, min(1, now.timeIntervalSince(goal.startDate) / goal.deadline.timeIntervalSince(goal.startDate)))
         return DatedGoalProgress(goal: goal, actualMinutes: minutes, expectedMinutes: goal.targetMinutes * fraction,
             remainingWorkdays: Self.workdayUnits(from: max(now, goal.startDate), to: goal.deadline, goal: goal, countDays: true))

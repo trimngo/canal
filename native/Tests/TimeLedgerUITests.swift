@@ -1,6 +1,61 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testCompactInboxKeepsTitleInlineAndAllOtherEditingInDetails() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
+        openInbox(app)
+        editInline("inbox.details.a", adding: " updated", in: app)
+        XCTAssertFalse(app.buttons["inbox.actions.a"].exists)
+        XCTAssertFalse(app.buttons["inbox.timing.a"].exists)
+        XCTAssertFalse(app.buttons["inbox.category.a"].exists)
+        XCTAssertTrue(app.buttons["inbox.complete.a"].exists)
+        openIdeaEditor("a", in: app)
+        let categories = app.buttons["task-planning.categories"]
+        reveal(categories, in: app); categories.tap()
+        tapCategory("work", in: app); tapCategory("social", in: app)
+        app.buttons["idea-categories.done"].tap()
+        editInline("task-planning.notes", adding: "Details belong in the editor", in: app)
+        setPlanNumber("task-planning.hours", to: "0.5", in: app)
+        app.buttons["task-planning.save"].tap()
+        let names = element(app, "inbox.categories.a"); reveal(names, in: app)
+        XCTAssertTrue(names.label.contains("Work")); XCTAssertTrue(names.label.contains("Socializing"))
+        XCTAssertTrue(element(app, "inbox.has-notes.a").exists)
+        XCTAssertLessThan(names.frame.height, 30)
+        recordScreen("CompactInboxSummary", in: app)
+        openIdeaEditor("a", in: app)
+        XCTAssertEqual(element(app, "task-planning.notes").label, "Details belong in the editor")
+        XCTAssertEqual(app.textFields["task-planning.hours"].value as? String, "0.5")
+        recordScreen("UnifiedInboxEditor", in: app)
+        app.buttons["task-planning.save"].tap()
+        swipeIdeaAction("a", action: "reference", in: app)
+        let reference = element(app, "inbox.reference-title"); reveal(reference, in: app)
+        XCTAssertTrue(reference.label.contains("1"))
+    }
+
+    func testDashboardArrowsBrowseDaysAndSevenDayWindows() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
+        let previous = app.buttons["report.previous"], next = app.buttons["report.next"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 20)); XCTAssertFalse(next.isEnabled)
+        previous.tap()
+        XCTAssertEqual(element(app, "report.range").value as? String, "Yesterday")
+        XCTAssertTrue(element(app, "report.tracked").label.contains("1 logs"))
+        XCTAssertTrue(next.isEnabled)
+        recordScreen("DashboardYesterdayArrows", in: app)
+        next.tap()
+        XCTAssertEqual(element(app, "report.range").value as? String, "Today")
+        XCTAssertFalse(next.isEnabled)
+        element(app, "report.range").tap(); app.buttons["Past 7 days"].tap()
+        previous.tap()
+        XCTAssertTrue(next.isEnabled)
+        XCTAssertTrue(element(app, "report.tracked").label.contains("0 logs"))
+        recordScreen("DashboardPreviousWeekArrows", in: app)
+        next.tap(); XCTAssertFalse(next.isEnabled)
+        element(app, "report.range").tap(); app.buttons["All time"].tap()
+        XCTAssertFalse(previous.exists); XCTAssertFalse(next.exists)
+        element(app, "report.range").tap(); app.buttons["Custom"].tap()
+        XCTAssertTrue(element(app, "report.from").exists); XCTAssertTrue(element(app, "report.through").exists)
+    }
+
     func testTimerAutoNextCanBeDisabledAndManualStartPersists() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture"]; app.launch()
         XCTAssertTrue(app.buttons["timers.done"].waitForExistence(timeout: 20))
@@ -33,8 +88,9 @@ final class TimeLedgerUITests: XCTestCase {
         openInbox(app)
         let urgent = app.staticTexts["inbox.urgent-title"]
         reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent (3)")
-        let dismiss = app.buttons["inbox.urgent.dismiss.alan"]
-        reveal(dismiss, in: app); dismiss.tap()
+        openIdeaEditor("alan", prefix: "inbox.urgent", in: app)
+        let timing = element(app, "task-planning.timing"); reveal(timing, in: app); timing.tap()
+        app.buttons["No date"].tap(); app.buttons["task-planning.save"].tap()
         XCTAssertEqual(urgent.label, "Urgent (2)")
         XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
         recordScreen("InboxUrgentWithoutRanking", in: app)
@@ -479,8 +535,9 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Completed source UI fixture"].exists)
         XCTAssertFalse(app.staticTexts["Other list must stay private UI fixture"].exists)
         recordScreen("RemindersInbox", in: app)
-        let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.actions.")).firstMatch
-        actions.tap(); app.buttons["Delete idea"].tap()
+        let idea = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.edit.")).firstMatch
+        idea.tap()
+        let remove = app.buttons["task-planning.delete"]; reveal(remove, in: app); remove.tap()
         app.tabBars.buttons["Settings"].tap()
         reveal(importNow, in: app); importNow.tap()
         app.terminate(); app.launchArguments = []; app.launch()
@@ -869,8 +926,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(element(app, "inbox.details.reference").exists)
         reveal(element(app, "inbox.details.completed"), in: app)
         XCTAssertTrue(element(app, "inbox.details.completed").exists)
-        let menu = app.buttons["inbox.actions.unseen"]; reveal(menu, in: app); menu.tap()
-        app.buttons["Delete idea"].tap()
+        swipeIdeaAction("unseen", action: "delete", in: app)
         reveal(element(app, "category-detail.count"), in: app)
         XCTAssertEqual(element(app, "category-detail.count").label, "3 inbox items")
         let undo = app.buttons["inbox.undo-delete"]; reveal(undo, in: app); undo.tap()
@@ -941,13 +997,11 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
         openInbox(app)
         recordScreen("Inbox", in: app)
-        let menu = app.buttons["inbox.actions.a"]; reveal(menu, in: app); menu.tap()
-        app.buttons["Delete idea"].tap()
+        swipeIdeaAction("a", action: "delete", in: app)
         XCTAssertFalse(app.staticTexts["First idea"].exists)
         app.buttons["inbox.undo-delete"].tap()
         XCTAssertTrue(app.staticTexts["First idea"].waitForExistence(timeout: 5))
-        let restored = app.buttons["inbox.actions.a"]; reveal(restored, in: app); restored.tap()
-        app.buttons["Delete idea"].tap()
+        swipeIdeaAction("a", action: "delete", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
         XCTAssertFalse(app.staticTexts["First idea"].exists)
         XCTAssertTrue(app.staticTexts["Third idea"].exists)
@@ -1671,7 +1725,6 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
         openInbox(app)
-        let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.actions.")).firstMatch
         let text = app.staticTexts["Reminders bicycle idea UI fixture"]
         reveal(text, in: app); text.tap()
         let editor = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "inbox.details.")).firstMatch
@@ -1688,10 +1741,9 @@ final class TimeLedgerUITests: XCTestCase {
     func testInboxNotesSnoozeAndBringBackSurviveRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
         openInbox(app)
-        let actions = app.buttons["inbox.actions.open"]
         editNotes("inbox.notes.open", adding: "Called the shop. Next: book a visit.", in: app)
         recordScreen("InboxTaskNotes", in: app)
-        reveal(actions, in: app); actions.tap(); app.buttons["Snooze…"].tap()
+        swipeIdeaAction("open", action: "snooze", in: app)
         app.buttons["snooze.week"].tap()
         if app.buttons["Keep chosen date"].waitForExistence(timeout: 2) { app.buttons["Keep chosen date"].tap() }
         let snoozed = element(app, "inbox.snoozed")
@@ -1700,10 +1752,10 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("InboxSnoozed", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openInbox(app)
         reveal(snoozed, in: app); snoozed.tap()
-        let expandNotes = element(app, "inbox.notes.open.expand"); reveal(expandNotes, in: app); expandNotes.tap()
-        XCTAssertEqual(element(app, "inbox.notes.open").label, "Called the shop. Next: book a visit.")
-        reveal(actions, in: app); actions.tap(); app.buttons["Bring back now"].tap()
-        let returned = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back from snooze")).firstMatch
+        openIdeaEditor("open", in: app)
+        XCTAssertEqual(element(app, "task-planning.notes").label, "Called the shop. Next: book a visit.")
+        let bringBack = app.buttons["task-planning.bring-back"]; reveal(bringBack, in: app); bringBack.tap()
+        let returned = element(app, "inbox.details.open")
         for _ in 0..<5 { if returned.exists, returned.isHittable { break }; app.swipeDown() }
         XCTAssertTrue(returned.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["ranking.first"].exists)
@@ -1740,8 +1792,7 @@ final class TimeLedgerUITests: XCTestCase {
     func testCustomDaySnoozeOffersMondayAndKeepsTaskInSnoozedSection() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-export-fixture"]; app.launch()
         openInbox(app)
-        let actions = app.buttons["inbox.actions.open"]; reveal(actions, in: app)
-        actions.tap(); app.buttons["Snooze…"].tap()
+        swipeIdeaAction("open", action: "snooze", in: app)
         let days = app.textFields["snooze.days"]
         XCTAssertTrue(days.waitForExistence(timeout: 5)); days.tap()
         // Always choose the upcoming Saturday, so the weekend prompt is deterministic.
@@ -1866,13 +1917,15 @@ final class TimeLedgerUITests: XCTestCase {
     func testInboxUsesJournalCategoriesAndCombinesCategoryAndTextSearch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
         openInbox(app)
-        let categorize = app.buttons["inbox.category.a"]; reveal(categorize, in: app); categorize.tap()
+        openIdeaEditor("a", in: app)
+        let categorize = app.buttons["task-planning.categories"]; reveal(categorize, in: app); categorize.tap()
         let context = element(app, "category-context.activity")
         XCTAssertTrue(context.waitForExistence(timeout: 5)); XCTAssertTrue(context.label.contains("First idea"))
         tapCategory("work", in: app); tapCategory("social", in: app)
         XCTAssertTrue(context.isHittable)
         app.buttons["idea-categories.done"].tap()
         XCTAssertTrue(categorize.label.contains("Work")); XCTAssertTrue(categorize.label.contains("Socializing"))
+        app.buttons["task-planning.save"].tap()
         let filter = app.buttons["inbox.category-filter"]
         // The search row is above the current idea and can be unloaded by List.
         for _ in 0..<8 { if filter.exists, filter.isHittable { break }; app.swipeDown() }
@@ -1948,9 +2001,26 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Today"].tap()
         reveal(element(app, "report.range"), in: app)
     }
+    private func openIdeaEditor(_ id: String, prefix: String = "inbox", in app: XCUIApplication) {
+        if app.buttons["keyboard.done"].firstMatch.isHittable { app.buttons["keyboard.done"].firstMatch.tap() }
+        let details = app.buttons["\(prefix).edit.\(id)"]; reveal(details, in: app); details.tap()
+        XCTAssertTrue(app.buttons["task-planning.save"].waitForExistence(timeout: 5))
+    }
+    private func swipeIdeaAction(_ id: String, action: String, in app: XCUIApplication) {
+        if app.buttons["keyboard.done"].firstMatch.isHittable { app.buttons["keyboard.done"].firstMatch.tap() }
+        let details = app.buttons["inbox.edit.\(id)"]; reveal(details, in: app); details.swipeLeft()
+        let button = app.buttons["inbox.\(action).\(id)"]
+        XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+    }
     private func editNotes(_ id: String, adding text: String, in app: XCUIApplication) {
-        let expand = element(app, "\(id).expand"); reveal(expand, in: app); expand.tap()
-        editInline(id, adding: text, in: app)
+        if id.hasPrefix("inbox.notes.") {
+            openIdeaEditor(String(id.dropFirst("inbox.notes.".count)), in: app)
+            editInline("task-planning.notes", adding: text, in: app)
+            app.buttons["task-planning.save"].tap()
+        } else {
+            let expand = element(app, "\(id).expand"); reveal(expand, in: app); expand.tap()
+            editInline(id, adding: text, in: app)
+        }
     }
 
     private func editInline(_ id: String, adding suffix: String, in app: XCUIApplication, finishEditing: Bool = true) {
@@ -1962,7 +2032,7 @@ final class TimeLedgerUITests: XCTestCase {
             let done = app.buttons["keyboard.done"].firstMatch
             XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
         }
-        XCTAssertFalse(app.navigationBars["Edit idea"].exists)
+        if !id.hasPrefix("task-planning.") { XCTAssertFalse(app.navigationBars["Edit idea"].exists) }
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
 
@@ -2479,7 +2549,8 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-inbox-fixture"]; app.launch()
         openInbox(app)
         editInline("inbox.details.a", adding: " updated", in: app)
-        let categorize = app.buttons["inbox.category.a"]; reveal(categorize, in: app); categorize.tap()
+        openIdeaEditor("a", in: app)
+        let categorize = app.buttons["task-planning.categories"]; reveal(categorize, in: app); categorize.tap()
         let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
         app.buttons["category-select.work"].tap()
         XCTAssertTrue(app.buttons["category-tag.work"].waitForExistence(timeout: 5))
@@ -2491,8 +2562,9 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["category-tag.work"].exists); XCTAssertTrue(app.buttons["category-tag.social"].exists)
         recordScreen("InboxSharedTagPicker", in: app)
         app.buttons["idea-categories.done"].tap()
-        XCTAssertTrue(element(app, "inbox.details.a").label.contains("categorized"))
         XCTAssertTrue(categorize.label.contains("Work")); XCTAssertTrue(categorize.label.contains("Socializing"))
+        app.buttons["task-planning.save"].tap()
+        XCTAssertTrue(element(app, "inbox.details.a").label.contains("categorized"))
     }
 
     func testRankingInlineEditDoesNotChooseAndChoiceUsesSeparateButton() {
