@@ -287,6 +287,7 @@ struct InboxCaptureRow: View {
     var isUrgentSection = false
     @State private var detailsExpanded = false
     @State private var editingDueDate = false
+    @State private var planningWork = false
     private var prefix: String { isUrgentSection ? "inbox.urgent" : "inbox" }
     private var urgency: InboxUrgency? { store.ledger.urgency(for: capture) }
     var body: some View {
@@ -315,6 +316,7 @@ struct InboxCaptureRow: View {
                     CaptureCategoryButton(capture: capture, identifier: "\(prefix).category.\(capture.id)", compact: true)
                     Spacer(minLength: 0)
                     Menu {
+                        Button("Work estimate & start…") { planningWork = true }
                         Button("ASAP") { setTiming(.asap) }
                         Button("Due date…") { editingDueDate = true }
                         Button("No date") { setTiming(.noDate) }
@@ -349,12 +351,14 @@ struct InboxCaptureRow: View {
                         }
                     }
                 }
+                Button("Task details & work estimate") { planningWork = true }
                 Button("Delete idea", role: .destructive) { remove(capture) }
             } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44).contentShape(Rectangle()) }
                 .buttonStyle(.borderless).accessibilityLabel("Idea actions")
                 .accessibilityIdentifier("\(prefix).actions.\(capture.id)")
         }.padding(.vertical, 0)
             .sheet(isPresented: $editingDueDate) { CaptureDueDateView(capture: capture) }
+            .sheet(isPresented: $planningWork) { TaskPlanningView(capture: capture) }
             .swipeActions { Button("Delete", role: .destructive) { remove(capture) } }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 if !capture.isDone, capture.isReference != true {

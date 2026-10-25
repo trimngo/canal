@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if DEBUG
+import UserNotifications
+#endif
 import LedgerCore
 #if os(watchOS)
 import WidgetKit
@@ -62,6 +65,11 @@ final class LedgerStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
+                // Notification tests must not cover the next test's input UI.
+                UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-urgent-inbox") {
                 var fixture = Ledger()
                 fixture.categories = [LedgerCategory(id: "music", name: "Music")]
@@ -443,6 +451,7 @@ final class LedgerStore: ObservableObject {
         guard !started else { return }; started = true
         do {
             var draft = ledger
+            draft.migrateGoalsToTasks(writer: writer)
             if draft.settings.reportingTimeZoneIdentifier == nil {
                 var settings = draft.settings; settings.reportingTimeZoneIdentifier = TimeZone.current.identifier
                 try draft.saveSettings(settings, writer: writer)
@@ -520,6 +529,7 @@ final class LedgerStore: ObservableObject {
     private func commit(_ value: Ledger) throws {
         guard storageAvailable else { throw StoreError.unavailable }
         var draft = value
+        draft.migrateGoalsToTasks(writer: writer)
         draft.normalizeInboxRanking(writer: writer)
         try JSONEncoder().encode(draft).write(to: file, options: [.atomic])
         ledger = draft
@@ -642,13 +652,11 @@ final class LedgerStore: ObservableObject {
         try draft.updateLogActivity(id: id, activity: activity, writer: writer)
         if draft != ledger { try commit(draft) }
     }
-    func saveDatedGoal(id: String? = nil, name: String, categoryID: String?, targetMinutes: Double, startDate: Date, deadline: Date) throws {
+    func saveTaskPlanning(_ capture: Capture, timing: CaptureTiming?, estimatedMinutes: Double?, startDate: Date?) throws {
         var draft = ledger
-        try draft.saveDatedGoal(id: id, name: name, categoryID: categoryID, targetMinutes: targetMinutes, startDate: startDate, deadline: deadline, writer: writer)
+        try draft.setCaptureTiming(capture.id, timing: timing, writer: writer)
+        try draft.setTaskPlan(capture.id, estimatedMinutes: estimatedMinutes, startDate: startDate, writer: writer)
         try commit(draft)
-    }
-    func deleteDatedGoal(_ id: String) throws {
-        var draft = ledger; draft.deleteDatedGoal(id, writer: writer); try commit(draft)
     }
     func collectCalendarEvents(_ events: [CalendarEventSnapshot]) throws {
         var draft = ledger; draft.collectCalendarEvents(events, writer: writer)
@@ -656,15 +664,19 @@ final class LedgerStore: ObservableObject {
     }
     func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String] = [], goalID: String? = nil) throws {
         var draft = ledger
-        try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, goalID: goalID, writer: writer)
+        try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, writer: writer)
+        if confirm, let record = draft.calendarEvents?.first(where: { $0.id == id }) {
+            try draft.assignTask(goalID, to: record.logID, writer: writer)
+        }
         try commit(draft)
     }
     func reviewCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String], mood: Int?, goalID: String?, activity: String) throws {
         var draft = ledger
-        try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, goalID: goalID, writer: writer)
+        try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, writer: writer)
         if confirm, let entry = draft.calendarEvents?.first(where: { $0.id == id }) {
             try draft.updateLogActivity(id: entry.logID, activity: activity, writer: writer)
             try draft.setMood(for: entry.logID, value: mood, writer: writer)
+            try draft.assignTask(goalID, to: entry.logID, writer: writer)
         }
         try commit(draft)
     }
@@ -673,7 +685,7 @@ final class LedgerStore: ObservableObject {
         if let activity { try draft.updateLogActivity(id: entry.id, activity: activity, writer: writer) }
         try draft.confirmCategories(for: entry.id, categoryIDs: categoryIDs, writer: writer)
         try draft.setMood(for: entry.id, value: mood, writer: writer)
-        try draft.assignGoal(goalID, to: entry.id, writer: writer)
+        try draft.assignTask(goalID, to: entry.id, writer: writer)
         try commitCategorization(draft)
     }
     func saveTargets(_ values: [String: Double]) throws {

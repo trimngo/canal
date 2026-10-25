@@ -62,7 +62,7 @@ struct LogReviewView: View {
                                 } else if let suggestion = entry.categorySuggestion {
                                     Label("Suggested · \(suggestion.reason)", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
                                 }
-                                LogGoalPicker(goalID: $goalID, categoryIDs: $categories)
+                                LogTaskPicker(goalID: $goalID, categoryIDs: $categories)
                             }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal).padding(.vertical, 6).background(.bar)
                         }
                         .safeAreaInset(edge: .bottom) {

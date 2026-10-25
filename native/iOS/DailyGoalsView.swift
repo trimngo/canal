@@ -36,7 +36,7 @@ struct DailyGoalCapacityView: View {
                         ScrollView { VStack(alignment: .leading, spacing: 12) {
                             Text("Time left today").font(.headline)
                             Text("The upper bar is the entire configured day. Dark gray is elapsed clock time. The Now marker separates elapsed from remaining time. Colored sections after Now are time still needed for goals; light gray is left for other activities. These amounts are not an activity schedule or calendar availability.")
-                            Text("Favorite goals appear here. Select rows in Edit goals to favorite or unfavorite them; selecting a parent applies to its current children. Remaining goal time covers these favorites. Dated goals below them use the same category time and are not added a second time. Other goals and logged time stay saved.")
+                            Text("Favorite goals appear here. Select rows in Edit goals to favorite or unfavorite them; selecting a parent applies to its current children. Remaining goal time covers these favorites. Focus tasks below them use the same category time and are not added a second time. Other goals and logged time stay saved.")
                             Text("Goal bar lengths share one scale: a two-hour goal is twice as long as a one-hour goal. Filled color is logged progress inside that goal. Tap a category for its inbox items and logs. If goals do not fit, their colored time stops at the day’s end and the shortfall shows the extra time needed.")
                             Text("Daily goal hours are your fixed percentages of this window. All of today’s logs count, including outside it. Unrecorded or uncategorized activity can make progress look lower.")
                             Text("Changing the shared window also changes check-in hours when All day notifications are off. It never blocks logging.")
@@ -162,10 +162,12 @@ struct DailyCategoryGoalRow: View {
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4).fill(color(goal, in: report).opacity(0.2))
                     RoundedRectangle(cornerRadius: 4).fill(color(goal, in: report)).frame(width: width * goal.fraction)
+                    Rectangle().fill(Color.primary).frame(width: 2, height: 16)
+                        .offset(x: max(0, min(width - 2, width * report.window.elapsedMinutes / report.window.minutes)))
                 }.frame(width: width, height: 10)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(goal.category.name) daily goal")
-                    .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes))")
+                    .accessibilityValue("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)). Pace line: \(Int(report.window.elapsedMinutes / report.window.minutes * 100)) percent expected by now")
                     .accessibilityIdentifier("goals.target-bar.\(goal.id)")
             }.frame(height: 10)
             Text("\(store.duration(goal.actualMinutes)) of \(store.duration(goal.targetMinutes)) today").font(.caption).foregroundStyle(.secondary)

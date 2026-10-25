@@ -3,13 +3,12 @@ import UIKit
 import LedgerCore
 
 private enum CategoryActionRequest: Identifiable {
-    case name(LedgerCategory?, parent: String?), detail(LedgerCategory), move([String]), goal(parent: String?)
+    case name(LedgerCategory?, parent: String?), detail(LedgerCategory), move([String])
     var id: String {
         switch self {
         case .name(let category, let parent): return "name:\(category?.id ?? "new"):\(parent ?? "root")"
         case .detail(let category): return "detail:\(category.id)"
         case .move(let ids): return "move:\(ids.joined(separator: ","))"
-        case .goal(let parent): return "goal:" + (parent ?? "root")
         }
     }
 }
@@ -47,7 +46,6 @@ struct GoalEditorView: View {
     @State private var showingHelp = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = Set<String>()
-    @State private var editingDatedGoal: DatedGoal?
     @State private var actionRequest: CategoryActionRequest?
     @State private var moveSelection: [String] = []
     @State private var deleting: LedgerCategory?
@@ -102,10 +100,6 @@ struct GoalEditorView: View {
                 categoryIndex = AllocationCategoryIndex(ledger: store.ledger)
                 latestReference.goalDayMinutes = store.ledger.goalDayWindow()?.minutes
                 refreshReference(); load(); loaded = true
-                for goal in store.ledger.activeDatedGoals {
-                    var node = goal.categoryID ?? ""
-                    while let parent = categoryIndex.parents[node] { expanded.insert(parent); node = parent }
-                }
             }
         }
         .task(id: reportRevision) { await prepareReports() }
@@ -116,7 +110,6 @@ struct GoalEditorView: View {
             weekTotals = categoryIndex.totals(reference.period.directMinutes)
             selected.formIntersection(categories.map(\.id)); load(); reportRevision = UUID()
         }
-        .onChange(of: store.ledger.datedGoals) { _, _ in reportRevision = UUID() }
         .onChange(of: store.ledger.entries) { _, _ in reportRevision = UUID() }
         .onChange(of: store.ledger.logDeletions) { _, _ in reportRevision = UUID() }
         .onChange(of: store.ledger.settings) { _, _ in reportRevision = UUID() }
@@ -130,10 +123,8 @@ struct GoalEditorView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { persistGoals() } }
         .onDisappear { persistGoals() }
-        .sheet(item: $editingDatedGoal) { DatedGoalEditorView(goal: $0) }
         .sheet(item: $actionRequest) { request in
             switch request {
-            case .goal(let parent): DatedGoalEditorView(categoryID: parent) { finishSelection() }
             case .move(let ids): CategoryMoveView(ids: ids) { finishSelection() }
             case .name(let category, let parent):
                 CategoryNameView(category: category, parentID: parent) {
@@ -166,10 +157,6 @@ struct GoalEditorView: View {
                         Button(singleSelection == nil ? "Add category" : "Add child category", systemImage: "folder.badge.plus") {
                             endGoalEditing(); actionRequest = .name(nil, parent: singleSelection?.id)
                         }.accessibilityIdentifier(singleSelection == nil ? "plan.create-category" : "plan.create-child")
-                        Spacer()
-                        Button("Add goal", systemImage: "target") {
-                            endGoalEditing(); actionRequest = .goal(parent: singleSelection?.id)
-                        }.accessibilityIdentifier("plan.create-goal")
                     }.font(.subheadline).frame(minHeight: 44)
                 }
             }.padding(.horizontal, 12).padding(.vertical, 6).background(.bar)
@@ -180,21 +167,11 @@ struct GoalEditorView: View {
             let pending = today.unreviewedDirectMinutes.values.reduce(0, +)
             if pending > 0 { Text("Today includes \(store.duration(pending)) awaiting category review").font(.caption).foregroundStyle(.secondary) }
             categoryOutline(today: today, week: week, goals: goals)
-            ForEach(store.ledger.activeDatedGoals.filter { goal in goal.categoryID == nil || !store.ledger.categories.contains { $0.id == goal.categoryID } }) { datedGoalRow($0, depth: 0) }
             if reportsLoading { ProgressView("Updating time totals…").accessibilityIdentifier("plan.loading") }
             CategoryMoveUndoSection()
             if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("plan.error") }
         }.listStyle(.plain).listSectionSpacing(0)
             .scrollDismissesKeyboard(.interactively).ledgerInputDismissal(showsKeyboardDone: false)
-    }
-
-    private func datedGoalRow(_ goal: DatedGoal, depth: Int) -> some View {
-        Button { editingDatedGoal = goal } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Label(goal.name, systemImage: "target").foregroundStyle(.primary)
-                Text("\(store.duration(goal.targetMinutes)) · \(goal.deadline.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
-            }.padding(.leading, CGFloat(depth) * 16 + 28).padding(.vertical, 4)
-        }.buttonStyle(.borderless).accessibilityIdentifier("plan.dated-goal.\(goal.id)")
     }
 
     private var displayControls: some View {
@@ -234,7 +211,7 @@ struct GoalEditorView: View {
                 Text("Hide blank removes only categories without a goal, regardless of time logged. A goal of 0% stays visible, as do parents with child goals. Direct rows have no separate goal and are hidden by this filter. Turn the filter off to see every category; nothing is deleted.")
                 Text("Leave goals blank for activities you only want to observe. Goals save individually when you finish editing.")
                 Text("Edit goals on categories without children. Each parent adds up its children’s goals. Direct time counts toward the parent’s actual time without a separate goal.")
-                Text("Tap a category for actions. Select enables multiple selection. Arrows expand children; moving a parent carries its children. Use 7 days copies measured shares into fixed goals.")
+                Text("Tap a category to open its tasks and logs. Select enables selection for actions. Arrows expand children; moving a parent carries its children. Use 7 days copies measured shares into fixed goals.")
                 Text("Favorite adds a goal to the main Commitments screen. Favoriting a parent adds its current child goals. Unfavorite hides the goal there without changing its percentage or logged time.")
                 Text("Red is below goal, green is at goal, amber is above goal. In Time mode, today’s accumulated time is compared with the daily goal equivalent; in % mode, proportions are compared.")
             }.font(.subheadline).padding()
@@ -277,9 +254,6 @@ struct GoalEditorView: View {
                 categoryRow(item, today: today, week: week, goals: goals)
                     .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowBackground(SelectionRowBackground(selected: !item.direct && selected.contains(item.category.id)))
-                if !item.direct {
-                    ForEach(store.ledger.activeDatedGoals.filter { $0.categoryID == item.category.id }) { datedGoalRow($0, depth: item.depth + 1) }
-                }
             }
         } header: {
             if typeSize.isAccessibilitySize {
@@ -349,7 +323,7 @@ struct GoalEditorView: View {
         var retainedGoals = goals
         for id in dirtyGoals { retainedGoals[id] = 0 }
         var visible = Set(retainedGoals.keys)
-        for id in dirtyGoals.union(store.ledger.activeDatedGoals.compactMap(\.categoryID)) {
+        for id in dirtyGoals {
             visible.insert(id)
             var node = id
             while let parent = categoryIndex.parents[node] { visible.insert(parent); node = parent }
@@ -426,11 +400,12 @@ struct GoalEditorView: View {
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                     .onTapGesture {
                         guard !item.direct else { return }
-                        selectCategory(category.id)
+                        if multiSelecting { selectCategory(category.id) }
+                        else { endGoalEditing(); actionRequest = .detail(category) }
                     }
                     .accessibilityLabel(item.direct ? "Directly assigned to \(category.name)" : category.name)
                     .accessibilityValue(selected.contains(category.id) && !item.direct ? "Selected" : "Not selected")
-                    .accessibilityAction(named: "Select category") { if !item.direct { selectCategory(category.id) } }
+                    .accessibilityAction(named: multiSelecting ? "Select category" : "Open category") { if !item.direct { if multiSelecting { selectCategory(category.id) } else { actionRequest = .detail(category) } } }
                     .accessibilityIdentifier(item.direct ? "plan.direct.\(category.id)" : "plan.name.\(category.id)")
         }.font(item.depth == 0 ? .subheadline.weight(.semibold) : .subheadline)
             .lineLimit(typeSize.isAccessibilitySize ? nil : 2).padding(.leading, CGFloat(item.depth) * 12)

@@ -70,6 +70,7 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
     public var categorySuggestion: CategorySuggestion?
     /// Present only for a user-confirmed calendar period. Samples remain instantaneous.
     public var intervalStart: Date?
+    /// Inbox task ID. The old wire key is retained for existing backups and devices.
     public var goalID: String?
     /// Credit is fixed when assigned, so moving a goal does not erase past work.
     public var goalShare: Double?
@@ -93,6 +94,7 @@ public struct CheckIn: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct Capture: Codable, Identifiable, Equatable, Sendable {
+    public var workPlan: CaptureWorkPlan?
     /// Nil uses the offline suggestion. Explicit No date suppresses that suggestion.
     public var timing: CaptureTiming?
     public var categorySuggestion: CategorySuggestion?

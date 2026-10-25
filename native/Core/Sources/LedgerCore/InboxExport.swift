@@ -42,7 +42,12 @@ extension Ledger {
                 "\n   Timing: " + (value.timing.dueAt.map { "Due " + formatter.string(from: $0) } ?? "ASAP") +
                     (value.isSuggested ? " (Suggested: \(value.reason.rawValue))" : "")
             } ?? "\n   Timing: No date"
-            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(categories)\(notes)\(snooze)\(timing)"
+            let work = idea.workPlan.map { plan in
+                (plan.estimatedMinutes.map { "\n   Work estimate: \($0) minutes" } ?? "") +
+                    "\n   Work starts: " + formatter.string(from: plan.startDate ?? idea.createdAt)
+            } ?? ""
+            let focus = isFocusTask(idea, now: now) ? "\n   Focus: Yes" : ""
+            return "\(index + 1). \(content)\n   Captured: \(formatter.string(from: idea.createdAt))\n   Status: \(status)\n   List: \(list)\n   Rank: \(rank)\(categories)\(notes)\(snooze)\(timing)\(work)\(focus)"
         }
         let noun = ideas.count == 1 ? "idea" : "ideas"
         return InboxExport(count: ideas.count, text: (["Dash inbox — \(ideas.count) \(noun)"] + items).joined(separator: "\n\n"))

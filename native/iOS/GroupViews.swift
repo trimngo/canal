@@ -206,7 +206,7 @@ struct GroupAssignmentView: View {
         NavigationStack {
             CategorySelectionList(selection: $selection, activity: currentEntry.activity, timestamp: entry.end, mood: $mood,
                                   saveActivity: { try store.updateLogActivity(id: entry.id, activity: $0) })
-                .safeAreaInset(edge: .top, spacing: 0) { LogGoalPicker(goalID: $goalID, categoryIDs: $selection).padding(.horizontal) }
+                .safeAreaInset(edge: .top, spacing: 0) { LogTaskPicker(goalID: $goalID, categoryIDs: $selection).padding(.horizontal) }
                 .navigationTitle("Choose groups").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
                     if let error { Text(error).font(.footnote).foregroundStyle(.red).padding().background(.regularMaterial) }
