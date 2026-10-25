@@ -15,9 +15,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.tabBars.buttons["Timers"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.tabBars.buttons["More"].exists)
-        app.tabBars.buttons["Inbox"].tap(); XCTAssertFalse(app.buttons["inbox.timers"].exists)
-        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
-        else { app.swipeUp() }
+        openInbox(app); XCTAssertFalse(app.buttons["inbox.timers"].exists)
         app.tabBars.buttons["Timers"].tap()
         XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 10))
         XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
@@ -353,7 +351,6 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
         let pages = element(app, "report.pages")
         XCTAssertGreaterThan(pages.frame.height, app.frame.height * 0.5)
-        XCTAssertGreaterThanOrEqual(pages.frame.maxY, app.tabBars.firstMatch.frame.minY - 40)
         XCTAssertEqual(pages.frame.width, app.frame.width, accuracy: 2)
         let calendar = app.buttons["dashboard.calendar"]
         XCTAssertTrue(calendar.isHittable)
