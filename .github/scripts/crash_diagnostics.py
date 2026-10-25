@@ -31,16 +31,28 @@ SIGNALS = {
     "swiftui": ("SwiftUI",),
     "invalid_argument": ("NSInvalidArgumentException",),
     "swift_runtime_trap": ("_assertionFailure", "swift_dynamicCastFailure", "swift_unexpectedError"),
+    "notification_completion_queue": ("UNUserNotificationServiceConnection", "_UNNotificationServiceConnection"),
+    "swift_concurrency_abort": ("swift::swift_Concurrency_fatalError", "swift_task_reportUnexpectedExecutor"),
+    "watchkit_alarm": ("scheduleBackgroundRefresh", "scheduleSnapshotRefresh", "scheduleUserNotification", "WKExtendedRuntimeSession"),
 }
 EXCEPTIONS = ("EXC_BAD_ACCESS", "EXC_CRASH", "EXC_BREAKPOINT", "EXC_RESOURCE", "EXC_GUARD", "EXC_SOFTWARE")
 
 
 def summarize(log):
     # Emit only constants from these allowlists, never strings from a report.
-    return {
+    result = {
         "exception": next((kind for kind in EXCEPTIONS if kind in log), "unknown"),
         "signals": [name for name, needles in SIGNALS.items() if any(needle in log for needle in needles)],
     }
+    # Crash headers contain useful version information alongside private device
+    # and tester fields. Extract numeric versions only, never the full header.
+    header = re.search(r"(?m)^Version:\s*([0-9]+(?:\.[0-9]+)*)\s*\(([0-9]+(?:\.[0-9]+)*)\)", log)
+    build = re.search(r'"(?:CFBundleVersion|build_version)"\s*:\s*"([0-9]+(?:\.[0-9]+)*)"', log)
+    if header:
+        result.update(version=header[1], build=header[2])
+    elif build:
+        result["build"] = build[1]
+    return result
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
