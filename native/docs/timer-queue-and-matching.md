@@ -15,6 +15,8 @@ backups. Old files default to the previous automatic-next behavior.
 
 On Watch, the **Timers** and **Current task** complications open the single-timer screen. The upper-right **+** opens dictation directly: “Practice guitar” creates a five-minute timer, while “Practice guitar for twenty minutes” uses that duration. Finishing dictation saves the task. Watch Home also has a direct Add timer action. The Watch saves and schedules locally, without needing the phone.
 
+Siri registers **Add a Dash timer**, **Add Dash timer**, **Add a timer to Dash**, and **Queue a timer in Dash**. They use the same timer queue and duration parsing. If Siri does not capture the task, it asks **What is the timer for?** Answer “Cook food” for five minutes, or “Cook food for ten minutes” for ten. App Shortcut registration does not guarantee that Siri will extract the task from an appended phrase in one sentence; verify recognition and follow-up prompts on a physical Watch.
+
 Swipe down from the current timer to the separate queue page; swipe up to return. Only the first timer runs. Upcoming rows are dimmed and show their full duration. Swipe a row left to delete any timer. Deleting the current timer cancels its alarm and leaves the next task waiting for Start, independently of the Done & Next setting. Deleting an upcoming task leaves the running countdown untouched.
 
 Repeating haptics use WatchKit's scheduled smart-alarm extended runtime session,
