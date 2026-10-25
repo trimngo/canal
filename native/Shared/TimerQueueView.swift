@@ -18,6 +18,8 @@ struct TimerQueueView: View {
     @ObservedObject private var notifications = NotificationScheduler.shared
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
+    @State private var queuePosition = 0.0
+    @FocusState private var queueFocused: Bool
     #endif
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { timeline in
@@ -95,6 +97,8 @@ struct TimerQueueView: View {
             })
     }
     private func watchQueue(at now: Date) -> some View {
+        let scrollIDs = watchQueueScrollIDs
+        return ScrollViewReader { proxy in
         List {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                 VStack(alignment: .leading, spacing: 4) {
@@ -102,7 +106,7 @@ struct TimerQueueView: View {
                         .accessibilityIdentifier("timers.queue-current")
                     watchCountdown(task, control: control, at: now, large: false)
                     watchProgress(task, control: control, at: now)
-                }.padding(.vertical, 2)
+                }.padding(.vertical, 2).id(task.id)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
@@ -115,26 +119,37 @@ struct TimerQueueView: View {
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
                     Text(clock(task.duration)).font(.system(size: 23, design: .rounded).monospacedDigit())
                         .accessibilityIdentifier("timers.duration.\(task.id)")
-                }.foregroundStyle(.secondary).padding(.vertical, 2)
+                }.foregroundStyle(.secondary).padding(.vertical, 2).id(task.id)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
                     }
             }
             if store.ledger.currentTimer == nil, store.ledger.waitingTimers.isEmpty {
-                Text("No queued timers").foregroundStyle(.secondary)
+                Text("No queued timers").foregroundStyle(.secondary).id("empty")
             }
-            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
+            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red).id("input-error") }
             if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
-                Text(alarm.status).font(.caption2).foregroundStyle(.orange).accessibilityIdentifier("timers.alarm-status")
+                Text(alarm.status).font(.caption2).foregroundStyle(.orange).id("alarm-status").accessibilityIdentifier("timers.alarm-status")
             }
             if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
-                Button("Use Watch for alerts") { act("here") }.accessibilityIdentifier("timers.use-watch")
+                Button("Use Watch for alerts") { act("here") }.id("use-watch").accessibilityIdentifier("timers.use-watch")
             }
             NavigationLink(destination: TimerSettingsView()) {
                 Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
-            }.accessibilityIdentifier("timers.alarm-settings")
-        }.listStyle(.carousel)
+            }.id("settings").accessibilityIdentifier("timers.alarm-settings")
+        }.listStyle(.carousel).scrollDisabled(true)
+            // Touch swipes navigate pages. Crown rotation scrolls rows without
+            // the List's native vertical pan swallowing the return gesture.
+            .focusable().focused($queueFocused).focusEffectDisabled()
+            .digitalCrownRotation($queuePosition, from: 0, through: Double(max(1, scrollIDs.count - 1)), by: 1,
+                                  sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
+            .onChange(of: queuePosition) { _, value in
+                let index = min(max(0, Int(value.rounded())), scrollIDs.count - 1)
+                proxy.scrollTo(scrollIDs[index], anchor: .top)
+            }
+            .onAppear { queuePosition = 0; queueFocused = true }
+            .onDisappear { queueFocused = false }
             // Up is navigation on this page, even when more rows remain.
             // The Digital Crown still scrolls the full queue; horizontal row
             // swipes retain their native Delete action.
@@ -144,6 +159,16 @@ struct TimerQueueView: View {
                 }
             })
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
+        }
+    }
+    private var watchQueueScrollIDs: [String] {
+        var ids = store.ledger.currentTimer.map { [$0.id] } ?? []
+        ids += store.ledger.waitingTimers.map(\.id)
+        if ids.isEmpty { ids.append("empty") }
+        if inputError != nil { ids.append("input-error") }
+        if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") { ids.append("alarm-status") }
+        if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer { ids.append("use-watch") }
+        return ids + ["settings"]
     }
     private func watchCountdown(_ task: QueuedTimer, control: TimerQueueControl, at now: Date, large: Bool) -> some View {
         HStack(spacing: 6) {
