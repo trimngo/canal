@@ -48,8 +48,7 @@ struct LedgerShortcuts: AppShortcutsProvider {
         ], shortTitle: "Log an activity", systemImageName: "clock")
         AppShortcut(intent: QueueTimerIntent(), phrases: [
             "Queue a timer in \(.applicationName)", "Add a timer to \(.applicationName)",
-            "Add a \(.applicationName) timer", "Add \(.applicationName) timer",
-            "Add a \(.applicationName) timer to \(\.$task)"
+            "Add a \(.applicationName) timer", "Add \(.applicationName) timer"
         ], shortTitle: "Queue a timer", systemImageName: "timer")
     }
 }
