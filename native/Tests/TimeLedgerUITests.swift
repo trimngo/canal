@@ -525,8 +525,18 @@ final class TimeLedgerUITests: XCTestCase {
         openLogs(app)
         let sample = app.staticTexts["Legacy sample UI fixture"]; reveal(sample, in: app); sample.tap()
         XCTAssertTrue(app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "logs.entry.")).firstMatch.waitForExistence(timeout: 5))
-        app.buttons["keyboard.done"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture"].exists)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let doneButtons = app.buttons.matching(identifier: "keyboard.done")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            doneButtons.allElementsBoundByIndex.contains { $0.isHittable }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        guard let done = doneButtons.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+            XCTFail("Keyboard Done must be visible before tapping"); return
+        }
+        done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture"].waitForExistence(timeout: 5))
     }
 
     func testNotificationOpenedLogCanBeSavedAndSurvivesRelaunch() {
