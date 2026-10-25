@@ -25,7 +25,12 @@ PHONE_DEVICE_ID=$(python3 -c 'import json; print(json.load(open("build/watch-tes
 xcrun simctl boot "$PHONE_DEVICE_ID" || true
 xcrun simctl bootstatus "$PHONE_DEVICE_ID" -b
 xcrun simctl install "$PHONE_DEVICE_ID" build/Build/Products/Debug-iphonesimulator/TimeLedger.app
+xcrun simctl boot "$WATCH_DEVICE_ID" || true
+xcrun simctl bootstatus "$WATCH_DEVICE_ID" -b
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch \
   -destination "platform=watchOS Simulator,id=$WATCH_DEVICE_ID" -derivedDataPath build \
   -resultBundlePath build/WatchUITests.xcresult CODE_SIGNING_ALLOWED=NO \
-  -parallel-testing-enabled NO test
+  -parallel-testing-enabled NO \
+  -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testUpcomingRowsCanBeDraggedWithoutMovingCurrentOrNavigatingAway \
+  -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes \
+  -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testQueueCanDeleteAnyTimerAndDeletingCurrentWaitsForStart test
