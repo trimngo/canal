@@ -20,12 +20,16 @@ struct CategoryDetailView: View {
     @State private var snoozing: Capture?
     @State private var categorizing: CaptureCategoryReviewRequest?
     @State private var showOtherLists = false
+    @State private var progress: [DatedGoalProgress] = []
+    @State private var calculationID = UUID()
     var body: some View {
         let ranked = store.inbox.ranked
         let items = store.ledger.searchInbox("", categoryID: request.id, ranked: ranked)
         let rankedIDs = Set(ranked.map(\.id))
-        let priorities = items.filter { rankedIDs.contains($0.id) }
-        let unranked = items.filter { !rankedIDs.contains($0.id) && !$0.isDone && $0.isReference != true && !$0.isSnoozed(at: Date()) }
+        let focus = items.filter { store.ledger.isFocusTask($0) }
+        let focusIDs = Set(focus.map(\.id))
+        let priorities = items.filter { rankedIDs.contains($0.id) && !focusIDs.contains($0.id) }
+        let unranked = items.filter { !focusIDs.contains($0.id) && !rankedIDs.contains($0.id) && !$0.isDone && $0.isReference != true && !$0.isSnoozed(at: Date()) }
         let other = items.filter { $0.isDone || $0.isReference == true || $0.isSnoozed(at: Date()) }
         NavigationStack {
             List {
@@ -36,6 +40,16 @@ struct CategoryDetailView: View {
                         Button("Categorize", systemImage: "tag") {
                             categorizing = CaptureCategoryReviewRequest(captureIDs: items.map(\.id))
                         }.disabled(items.isEmpty || !store.storageAvailable).accessibilityIdentifier("category-detail.categorize")
+                    }
+                }
+                if !focus.isEmpty {
+                    Section("Focus (\(focus.count))") {
+                        ForEach(focus.sorted { $0.timing!.dueAt! < $1.timing!.dueAt! }) { task in
+                            VStack(alignment: .leading, spacing: 6) {
+                                ideaRow(task)
+                                if let row = progress.first(where: { $0.id == task.id }) { FocusTaskProgressView(row: row) }
+                            }.accessibilityIdentifier("category-detail.focus.\(task.id)")
+                        }
                     }
                 }
                 Section("Ranked ideas (\(priorities.count))") {
@@ -73,6 +87,12 @@ struct CategoryDetailView: View {
                 .toolbar { ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }.accessibilityIdentifier("category-detail.close")
                 } }
+                .onChange(of: store.ledger) { _, _ in calculationID = UUID() }
+                .task(id: calculationID) {
+                    let ledger = store.ledger
+                    let result = await Task.detached(priority: .userInitiated) { ledger.focusTaskProgress() }.value
+                    if !Task.isCancelled { progress = result }
+                }
                 .sheet(isPresented: $showingLogs) {
                     GroupEntriesView(day: request.start ?? Date(), groupID: request.id, initialName: request.name,
                         rangeStart: request.start, rangeEnd: request.end, allTime: request.allTime, directOnly: request.directOnly)

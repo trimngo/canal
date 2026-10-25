@@ -1970,7 +1970,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(element(app, "goals.other-time").label, "1h 30m for other activities")
         XCTAssertTrue(element(app, "goals.capacity-bar").exists)
         let music = element(app, "goals.progress.music")
-        XCTAssertEqual(music.value as? String, "1h 0m of 3h 0m today. 2h 0m remaining")
+        XCTAssertEqual(music.value as? String, "1h 0m / 3h 0m today. 2h 0m remaining")
         XCTAssertTrue(element(app, "goals.progress.teaching").exists)
         XCTAssertFalse(element(app, "goals.progress.work").exists)
         XCTAssertFalse(element(app, "goals.progress.food").exists)
@@ -2040,7 +2040,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["goals.window-save"].tap()
         let music = element(app, "goals.progress.music")
         XCTAssertTrue(music.waitForExistence(timeout: 5))
-        XCTAssertEqual(music.value as? String, "1h 0m of 2h 48m today. 1h 48m remaining")
+        XCTAssertEqual(music.value as? String, "1h 0m / 2h 48m today. 1h 48m remaining")
         XCTAssertEqual(element(app, "goals.time-left").label, "4h 30m left today")
         app.tabBars.buttons["Settings"].tap()
         let allDay = app.switches["settings.notifications-all-day"]; reveal(allDay, in: app)
@@ -2058,7 +2058,7 @@ final class TimeLedgerUITests: XCTestCase {
         openCategoryTargets(in: app)
         let music = element(app, "goals.progress.music")
         XCTAssertTrue(music.waitForExistence(timeout: 5))
-        XCTAssertEqual(music.value as? String, "1h 0m of 4h 30m today. 3h 30m remaining")
+        XCTAssertEqual(music.value as? String, "1h 0m / 4h 30m today. 3h 30m remaining")
         XCTAssertEqual(element(app, "goals.needed").label, "4h 30m left across your goals")
         recordScreen("DailyGoalsAfterEditing", in: app)
     }
@@ -2395,8 +2395,11 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture"]; app.launch()
         openGoalEditor(in: app)
         element(app, "plan.name.work").tap()
-        XCTAssertTrue(app.buttons["plan.rename"].exists); XCTAssertTrue(app.buttons["plan.create-child"].exists)
+        XCTAssertTrue(app.buttons["category-detail.logs"].waitForExistence(timeout: 5))
+        app.buttons["category-detail.close"].tap()
         app.buttons["plan.select"].tap()
+        element(app, "plan.name.work").tap()
+        XCTAssertTrue(app.buttons["plan.rename"].exists); XCTAssertTrue(app.buttons["plan.create-child"].exists)
         let music = element(app, "plan.name.music"); reveal(music, in: app); music.tap()
         XCTAssertFalse(app.buttons["plan.rename"].exists); XCTAssertTrue(app.buttons["plan.group-selected"].exists)
         recordScreen("ExplicitMultipleCategorySelection", in: app)
@@ -2499,37 +2502,33 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertNotEqual(first.label, original + " corrected")
     }
 
-    func testDatedGoalsCreatedFromCategorySelectionAndPersist() {
+    func testFocusTasksMigrateLinkedWorkAndEditWithoutSeparateGoalRows() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
         openGoalEditor(in: app)
-        let work = element(app, "plan.name.work"); reveal(work, in: app); work.tap()
-        XCTAssertTrue(app.buttons["plan.create-child"].exists)
-        app.buttons["plan.create-goal"].tap()
-        let name = app.textFields["dated-goal.name"]
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        let category = element(app, "dated-goal.category")
-        XCTAssertTrue(category.label.contains("Work") || (category.value as? String ?? "").contains("Work"))
-        name.tap(); name.typeText("Rehearse public song")
-        let hours = app.textFields["dated-goal.hours"]; hours.tap(); hours.typeText("4")
-        recordScreen("CreateTimeGoalUnderCategory", in: app)
-        app.buttons["dated-goal.save"].tap()
-        XCTAssertTrue(app.navigationBars["Edit goals"].waitForExistence(timeout: 5))
-        app.buttons["Close"].tap()
-        let goals = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "dated-goals.progress."))
-        let threeGoals = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 3"), object: goals)
-        XCTAssertEqual(XCTWaiter.wait(for: [threeGoals], timeout: 5), .completed)
-        let song = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Rehearse public song")).firstMatch
-        XCTAssertTrue(app.buttons["commitments.category.work"].exists)
-        recordScreen("DatedCommitmentsProgress", in: app)
+        XCTAssertFalse(app.buttons["plan.create-goal"].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.dated-goal.")).count, 0)
+        element(app, "plan.name.work").tap()
+        XCTAssertTrue(app.buttons["category-detail.logs"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "category-detail.focus.")).count, 2)
+        recordScreen("SharedCategoryFocusTasks", in: app)
+        app.buttons["category-detail.close"].tap(); app.buttons["Close"].tap()
+        let row = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare DIGS lecture")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
+        XCTAssertTrue(app.textFields["task-planning.hours"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, "task-planning.logged").label.contains("1h"))
+        setPlanNumber("task-planning.hours", to: "2", in: app)
+        recordScreen("InboxTaskWorkEstimate", in: app)
+        app.buttons["task-planning.save"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5)); XCTAssertTrue(row.label.contains("2h"))
         app.terminate(); app.launchArguments = []; app.launch()
         app.tabBars.buttons["Commitments"].tap()
-        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Rehearse public song")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); XCTAssertTrue(row.label.contains("2h"))
     }
 
     func testReviewAssignsGoalAndSavesFromTopBarWithKeyboardOpen() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
         app.buttons["dashboard.review.uncategorized"].tap()
-        let picker = element(app, "log-review.goal"); XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.tap()
+        let picker = element(app, "log-review.task"); XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.tap()
         app.buttons["Prepare SDES lecture"].tap()
         XCTAssertTrue(app.buttons["category-tag.work"].exists)
         let field = app.textFields["category-search.field"]; field.tap(); field.typeText("work")
@@ -2555,21 +2554,21 @@ final class TimeLedgerUITests: XCTestCase {
         app.tabBars.buttons["Commitments"].tap()
         let sdes = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare SDES lecture")).firstMatch
         XCTAssertTrue(sdes.waitForExistence(timeout: 10))
-        XCTAssertFalse(sdes.label.contains("0m of"))
+        XCTAssertFalse(sdes.label.contains("0m /"))
     }
 
     func testCalendarConfirmationRecordsFullPeriodAndUpdatesGoal() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
         app.buttons["dashboard.review.uncategorized"].tap()
         tapCategory("work", in: app); app.buttons["log-review.save-next"].tap()
-        element(app, "log-review.goal").tap(); app.buttons["Prepare DIGS lecture"].tap()
+        element(app, "log-review.task").tap(); app.buttons["Prepare DIGS lecture"].tap()
         recordScreen("ConfirmCalendarPeriod", in: app)
         app.buttons["log-review.save-next"].tap()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Commitments"].tap()
         let digs = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare DIGS lecture")).firstMatch
         XCTAssertTrue(digs.waitForExistence(timeout: 10))
-        XCTAssertTrue(digs.label.contains("2h 0m of 4h 0m"), digs.label)
+        XCTAssertTrue(digs.label.contains("2h 0m / 4h 0m"), digs.label)
         app.terminate(); app.launchArguments = []; app.launch()
         XCTAssertFalse(app.buttons["dashboard.calendar-events"].exists)
     }
@@ -2578,7 +2577,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-feedback-fixture"]; app.launch()
         app.tabBars.buttons["Commitments"].tap()
         XCTAssertTrue(element(app, "goals.progress.work").waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "dated-goals.progress.")).count == 2)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "focus-task.progress.")).count == 2)
         XCTAssertFalse(app.buttons["dated-goals.category-targets"].exists)
         recordScreen("UnifiedCommitments", in: app)
         element(app, "goals.progress.work").tap()
@@ -2588,7 +2587,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Commitments"].exists)
         openGoalEditor(in: app)
         if app.buttons["plan.hide-blank-goals"].value as? String == "On" { app.buttons["plan.hide-blank-goals"].tap() }
-        let add = app.buttons["plan.create-goal"]
+        let add = app.buttons["plan.create-category"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         let y = add.frame.midY
         app.swipeUp(); XCTAssertEqual(add.frame.midY, y, accuracy: 4)
@@ -2658,7 +2657,7 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Show pie chart"].tap()
         XCTAssertTrue(element(app, "report.pie.chart").waitForExistence(timeout: 5))
         app.buttons["dashboard.review.uncategorized"].tap()
-        element(app, "log-review.goal").tap(); app.buttons["Prepare SDES lecture"].tap()
+        element(app, "log-review.task").tap(); app.buttons["Prepare SDES lecture"].tap()
         let search = app.textFields["category-search.field"]; search.tap(); search.typeText("work")
         app.buttons["log-review.save-next"].tap()
         XCTAssertTrue(app.buttons["log-review.skip-event"].waitForExistence(timeout: 5))

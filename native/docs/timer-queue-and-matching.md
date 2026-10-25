@@ -80,3 +80,11 @@ uncategorized/unassigned entries; existing suggestions can be corrected in revie
 Timing, matching settings and phrase rules use existing capture/settings revisions,
 cloud/companion synchronization and backups. Older files without these fields
 continue to decode without resetting existing data.
+
+## Watch layout
+
+The current timer stays in the top half of the available screen with large text, countdown, and progress. Upcoming tasks scroll in a separate lower list, shown in secondary color. A floating circular + in the lower-right corner opens native dictation directly. It can overlap upcoming rows; it never overlaps the current timer. The lower list has trailing space so its final row can scroll clear of the button.
+
+Swipe left on the current timer for completion, pause/resume, or skip. Swipe left on a queued timer to delete it. Restart remains a small visible button so watchOS double-tap can restart without exposing the swipe menu. An expired timer also has a visible completion checkmark. Existing automatic-next settings and independent Watch operation are unchanged.
+
+Timer settings offers Standard pulse, Attention pulse, and Light tap, a preview, and repeat intervals of 2, 3, 5, or 10 seconds. These existing Watch haptic choices apply to the system's repeating alarm. Sound follows system settings; Dash cannot install arbitrary alarm sounds or remap Apple's background alarm gestures.

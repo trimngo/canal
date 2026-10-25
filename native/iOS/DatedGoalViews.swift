@@ -1,99 +1,155 @@
 import SwiftUI
 import LedgerCore
 
-struct DatedGoalEditorView: View {
+struct TaskPlanningView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
-    let goal: DatedGoal?
-    @State private var name: String
+    let capture: Capture
     @State private var hours: String
-    @State private var categoryID: String?
+    @State private var hasDueDate: Bool
+    @State private var dueDate: Date
+    @State private var hasStart: Bool
     @State private var startDate: Date
-    @State private var deadline: Date
     @State private var error: String?
-    @State private var deleting = false
-    let didSave: () -> Void
-
-    init(goal: DatedGoal? = nil, categoryID: String? = nil, didSave: @escaping () -> Void = {}) {
-        self.goal = goal; self.didSave = didSave
-        _name = State(initialValue: goal?.name ?? "")
-        _hours = State(initialValue: goal.map { ($0.targetMinutes / 60).formatted(.number.grouping(.never).precision(.fractionLength(0...2))) } ?? "")
-        _categoryID = State(initialValue: goal?.categoryID ?? categoryID)
-        let start = goal?.startDate ?? Date()
-        _startDate = State(initialValue: start)
-        _deadline = State(initialValue: goal?.deadline ?? Calendar.current.date(byAdding: .day, value: 7, to: start)!)
+    @State private var loggedMinutes: Double?
+    init(capture: Capture) {
+        self.capture = capture
+        _hours = State(initialValue: capture.workPlan.map { ($0.estimatedMinutes / 60).formatted(.number.grouping(.never).precision(.fractionLength(0...2))) } ?? "")
+        _hasDueDate = State(initialValue: capture.timing?.kind == .dueDate)
+        _dueDate = State(initialValue: capture.timing?.dueAt ?? Calendar.current.date(byAdding: .day, value: 7, to: Date())!)
+        _hasStart = State(initialValue: capture.workPlan?.startDate != nil)
+        _startDate = State(initialValue: capture.workPlan?.startDate ?? capture.createdAt)
     }
-    private var minutes: Double? { Double(hours.replacingOccurrences(of: ",", with: ".")).map { $0 * 60 } }
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Goal name", text: $name).accessibilityIdentifier("dated-goal.name")
-                    HStack { Text("Hours"); TextField("4", text: $hours).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityIdentifier("dated-goal.hours") }
-                    Picker("Category", selection: $categoryID) {
-                        Text("Standalone goal").tag(nil as String?)
-                        ForEach(store.ledger.orderedCategories) { Text(store.ledger.categoryPath($0.id)).tag(Optional($0.id)) }
-                    }.accessibilityIdentifier("dated-goal.category")
-                    DatePicker("Start", selection: $startDate).accessibilityIdentifier("dated-goal.start")
-                    DatePicker("Deadline", selection: $deadline).accessibilityIdentifier("dated-goal.deadline")
-                } footer: { Text("Progress comes from logs assigned to this goal. Pace uses Monday–Friday and your day window; work logged on any day counts.") }
-                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("dated-goal.error") }
-                if goal != nil {
-                    Button("Delete goal", role: .destructive) { deleting = true }.accessibilityIdentifier("dated-goal.delete")
+                    InlineEntryText(text: store.ledger.captures.first { $0.id == capture.id }?.text ?? capture.text, identifier: "task-planning.title") {
+                        try store.updateCaptureText(capture, text: $0)
+                    }
+                    if let loggedMinutes { Text("Time logged: \(store.duration(loggedMinutes))").font(.subheadline).accessibilityIdentifier("task-planning.logged") }
                 }
-            }.ledgerInputDismissal()
-                .onAppear {
-                    if let categoryID, !store.ledger.categories.contains(where: { $0.id == categoryID }) { self.categoryID = nil }
+                Section {
+                    HStack { Text("Estimated work (hours)"); TextField("Optional", text: $hours).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityIdentifier("task-planning.hours") }
+                    Toggle("Due date", isOn: $hasDueDate).accessibilityIdentifier("task-planning.has-due-date")
+                    if hasDueDate { DatePicker("Due", selection: $dueDate).accessibilityIdentifier("task-planning.due") }
+                    Toggle("Set a start date", isOn: $hasStart).accessibilityIdentifier("task-planning.has-start")
+                    if hasStart { DatePicker("Start", selection: $startDate).accessibilityIdentifier("task-planning.start") }
+                } footer: {
+                    Text("A due date and work estimate put this task in Focus. A blank start uses its creation date. Pace follows workdays; all linked logs count, including work outside the day window.")
                 }
-                .navigationTitle(goal == nil ? "Add goal" : "Edit goal").navigationBarTitleDisplayMode(.inline)
+                InlineCaptureNotes(capture: capture, identifier: "task-planning.notes", initiallyExpanded: true)
+                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("task-planning.error") }
+            }.scrollDismissesKeyboard(.interactively).ledgerInputDismissal()
+                .navigationTitle("Task details").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
-                            UIApplication.shared.dismissLedgerKeyboard()
-                            do {
-                                guard let minutes else { throw DatedGoalError.invalidGoal }
-                                try store.saveDatedGoal(id: goal?.id, name: name, categoryID: categoryID, targetMinutes: minutes, startDate: startDate, deadline: deadline)
-                                didSave(); dismiss()
-                            } catch { self.error = error.localizedDescription }
-                        }.disabled(!store.storageAvailable).accessibilityIdentifier("dated-goal.save")
-                    }
+                    ToolbarItem(placement: .confirmationAction) { Button("Save", action: save).disabled(!store.storageAvailable).accessibilityIdentifier("task-planning.save") }
                 }
-                .confirmationDialog("Delete this goal?", isPresented: $deleting, titleVisibility: .visible) {
-                    Button("Delete goal", role: .destructive) {
-                        do { if let goal { try store.deleteDatedGoal(goal.id) }; didSave(); dismiss() }
-                        catch { self.error = error.localizedDescription }
+                .task {
+                    let ledger = store.ledger
+                    loggedMinutes = await Task.detached(priority: .userInitiated) { ledger.taskLoggedMinutes()[capture.id, default: 0] }.value
+                }
+        }
+    }
+    private func save() {
+        do {
+            let text = hours.trimmingCharacters(in: .whitespacesAndNewlines)
+            let minutes = text.isEmpty ? nil : Double(text.replacingOccurrences(of: ",", with: ".")).map { $0 * 60 }
+            if !text.isEmpty, minutes == nil { throw TaskPlanError.invalidEstimate }
+            if minutes != nil, hasDueDate, dueDate <= (hasStart ? startDate : capture.createdAt) {
+                error = "Choose a due date after the task’s start (or creation) date."; return
+            }
+            let timing: CaptureTiming? = hasDueDate ? .due(dueDate) : (capture.timing?.kind == .dueDate ? .noDate : capture.timing)
+            try store.saveTaskPlanning(capture, timing: timing, estimatedMinutes: minutes, startDate: hasStart ? startDate : nil)
+            dismiss()
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+struct LogTaskPicker: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Binding var goalID: String?
+    @Binding var categoryIDs: [String]
+    @State private var choosing = false
+    @State private var search = ""
+    var body: some View {
+        Button { choosing = true } label: {
+            HStack {
+                Label("Task", systemImage: "checklist")
+                Spacer()
+                Text(goalID.flatMap { id in store.ledger.captures.first { $0.id == id }?.text } ?? (goalID == nil ? "None" : "Saved task"))
+                    .lineLimit(1).foregroundStyle(.secondary)
+                Image(systemName: "chevron.up.chevron.down").font(.caption)
+            }
+        }.font(.subheadline).accessibilityIdentifier("log-review.task")
+        .sheet(isPresented: $choosing) {
+            NavigationStack {
+                List {
+                    Button("No task") { choose(nil) }
+                    ForEach(store.ledger.captures.filter { $0.deletedAt == nil && (search.isEmpty || $0.text.localizedCaseInsensitiveContains(search)) }.sorted { $0.createdAt > $1.createdAt }) { task in
+                        Button { choose(task.id) } label: {
+                            HStack { Text(task.text); Spacer(); if goalID == task.id { Image(systemName: "checkmark") } }
+                        }.accessibilityIdentifier("log-review.task-option.\(task.id)")
                     }
-                } message: { Text("Your logs and category totals are kept.") }
+                }.searchable(text: $search, prompt: "Find an Inbox task")
+                    .navigationTitle("Link to task").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { choosing = false } } }
+            }
+        }
+    }
+    private func choose(_ id: String?) {
+        goalID = id; choosing = false
+        guard let task = store.ledger.captures.first(where: { $0.id == id }) else { return }
+        for category in store.ledger.categoryIDs(for: task) {
+            let family = Set([category] + store.ledger.descendants(of: category).map(\.id))
+            if Set(categoryIDs).isDisjoint(with: family) {
+                let conflicts = Set(store.ledger.categoryConflicts(category, with: categoryIDs))
+                categoryIDs.removeAll { conflicts.contains($0) }; categoryIDs.append(category)
+            }
         }
     }
 }
 
-/// A goal assignment augments the category selection; it never changes capture.
-struct LogGoalPicker: View {
-    @EnvironmentObject private var store: LedgerStore
-    @Binding var goalID: String?
-    @Binding var categoryIDs: [String]
+struct PacedProgressBar: View {
+    let actual: Double
+    let expected: Double
+    var tint: Color = .teal
     var body: some View {
-        if !store.ledger.activeDatedGoals.isEmpty || goalID != nil {
-            Picker("Goal", selection: Binding(get: { goalID }, set: choose)) {
-                Text("No goal").tag(nil as String?)
-                if let goalID, !store.ledger.activeDatedGoals.contains(where: { $0.id == goalID }) {
-                    Text((store.ledger.datedGoals ?? []).first(where: { $0.id == goalID }).map { $0.name + " (deleted)" } ?? "Saved goal")
-                        .tag(Optional(goalID))
-                }
-                ForEach(store.ledger.activeDatedGoals) { Text($0.name).tag(Optional($0.id)) }
-            }.pickerStyle(.menu).font(.subheadline).accessibilityIdentifier("log-review.goal")
-        }
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.16))
+                Capsule().fill(tint).frame(width: proxy.size.width * min(1, max(0, actual)))
+                Rectangle().fill(Color.primary).frame(width: 2, height: 14)
+                    .offset(x: min(max(0, proxy.size.width - 2), proxy.size.width * min(1, max(0, expected))))
+            }.frame(height: 8)
+        }.frame(height: 14)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Progress and expected pace")
+            .accessibilityValue("\(Int(actual * 100)) percent complete; \(Int(expected * 100)) percent expected by now")
+            .accessibilityIdentifier("focus.pace-bar")
     }
-    private func choose(_ id: String?) {
-        goalID = id
-        guard let goal = store.ledger.activeDatedGoals.first(where: { $0.id == id }),
-              let category = goal.categoryID, store.ledger.categories.contains(where: { $0.id == category }) else { return }
-        let family = Set([category] + store.ledger.descendants(of: category).map(\.id))
-        guard Set(categoryIDs).isDisjoint(with: family) else { return }
-        let conflicts = Set(store.ledger.categoryConflicts(category, with: categoryIDs))
-        categoryIDs.removeAll { conflicts.contains($0) }; categoryIDs.append(category)
+}
+
+struct FocusTaskProgressView: View {
+    @EnvironmentObject private var store: LedgerStore
+    let row: DatedGoalProgress
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            PacedProgressBar(actual: row.fraction, expected: row.expectedMinutes / row.goal.targetMinutes, tint: row.isMet ? .green : .teal)
+            HStack {
+                Text("\(store.duration(row.actualMinutes)) / \(store.duration(row.goal.targetMinutes))")
+                Spacer()
+                Text(row.isMet ? "Work estimate reached" : "\(store.duration(row.remainingMinutes)) left")
+            }.font(.caption)
+            Text(pace).font(.caption2).foregroundStyle(.secondary)
+        }.accessibilityIdentifier("focus.progress.\(row.id)")
+    }
+    private var pace: String {
+        if row.isMet { return "Work estimate reached" }
+        if row.goal.deadline <= Date() { return "Overdue · \(store.duration(row.remainingMinutes)) remaining" }
+        let status = abs(row.differenceMinutes) < 1 ? "On pace" : "\(store.duration(abs(row.differenceMinutes))) \(row.differenceMinutes > 0 ? "ahead" : "behind")"
+        return row.dailyMinutesNeeded.map { "\(status) · \(store.duration($0))/workday needed" } ?? status
     }
 }
 
@@ -102,7 +158,7 @@ struct CommitmentsView: View {
     @State private var editing = false
     @State private var editingWindow = false
     @State private var selectedCategory: CategoryDetailRequest?
-    @State private var editingGoal: DatedGoal?
+    @State private var editingTask: Capture?
     @State private var progress: [DatedGoalProgress] = []
     @State private var daily: DailyGoalsReport?
     @State private var today = AllocationPeriod()
@@ -135,10 +191,10 @@ struct CommitmentsView: View {
                 }
                 let standalone = progress.filter { row in row.goal.categoryID == nil || !store.ledger.categories.contains(where: { $0.id == row.goal.categoryID }) }
                 if !standalone.isEmpty {
-                    Section("Goals") { ForEach(standalone) { datedProgress($0, now: clock.date) } }
+                    Section("Focus") { ForEach(standalone) { datedProgress($0, now: clock.date) } }
                 }
                 if categoryIDs.isEmpty && progress.isEmpty {
-                    Text("Favorite a category target or add a goal in Edit goals.").foregroundStyle(.secondary)
+                    Text("Favorite a category target, or give an Inbox task a due date and work estimate.").foregroundStyle(.secondary)
                     Button("Choose favorites") { editing = true }
                 }
             }.listStyle(.plain)
@@ -149,13 +205,13 @@ struct CommitmentsView: View {
         .sheet(isPresented: $editing) {
             NavigationStack { GoalEditorView().toolbar { ToolbarItem(placement: .topBarLeading) { Button("Close") { editing = false } } } }
         }
-        .sheet(item: $editingGoal) { DatedGoalEditorView(goal: $0) }
+        .sheet(item: $editingTask) { TaskPlanningView(capture: $0) }
         .sheet(item: $selectedCategory) { CategoryDetailView(request: $0) }
         .sheet(isPresented: $editingWindow) { NavigationStack { DayWindowSettingsView() } }
         .task(id: calculationID) {
             let ledger = store.ledger, now = reportDate(Date())
             let work = Task.detached(priority: .userInitiated) {
-                (ledger.datedGoalProgress(now: now), ledger.dailyGoals(now: now, favoritesOnly: true), ledger.allocation(on: now, now: now))
+                (ledger.focusTaskProgress(now: now), ledger.dailyGoals(now: now, favoritesOnly: true), ledger.allocation(on: now, now: now))
             }
             let result = await withTaskCancellationHandler(operation: { await work.value }, onCancel: { work.cancel() })
             if !Task.isCancelled { progress = result.0; daily = result.1; today = result.2 }
@@ -179,28 +235,17 @@ struct CommitmentsView: View {
         }
     }
     private func datedProgress(_ row: DatedGoalProgress, now: Date) -> some View {
-        Button { editingGoal = row.goal } label: {
+        Button {
+            editingTask = store.ledger.captures.first { $0.id == row.id }
+        } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
-                    Label(row.goal.name, systemImage: "target").font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                    Text(row.goal.name).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
                     Spacer(minLength: 8)
                     Text(row.goal.deadline, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day()).font(.caption).foregroundStyle(.secondary)
                 }
-                ProgressView(value: row.fraction).tint(row.isMet ? .green : .teal)
-                HStack {
-                    Text("\(store.duration(row.actualMinutes)) of \(store.duration(row.goal.targetMinutes))")
-                    Spacer()
-                    Text(row.isMet ? "Met" : "\(store.duration(row.remainingMinutes)) left")
-                }.font(.caption).foregroundStyle(.primary)
-                Text(paceLabel(row, now: now)).font(.caption2).foregroundStyle(row.differenceMinutes < -1 ? Color.orange : Color.secondary)
+                FocusTaskProgressView(row: row)
             }.padding(.vertical, 4).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityIdentifier("dated-goals.progress.\(row.id)")
-    }
-    private func paceLabel(_ row: DatedGoalProgress, now: Date) -> String {
-        if row.isMet { return "Goal met" }
-        if row.goal.deadline <= now { return "Overdue · \(store.duration(row.remainingMinutes)) remaining" }
-        let status = abs(row.differenceMinutes) < 1 ? "On pace" : "\(store.duration(abs(row.differenceMinutes))) \(row.differenceMinutes > 0 ? "ahead" : "behind")"
-        if let needed = row.dailyMinutesNeeded { return "\(status) · \(store.duration(needed))/workday needed" }
-        return "\(status) · No workdays remain before the deadline"
+        }.buttonStyle(.plain).accessibilityIdentifier("focus-task.progress.\(row.id)")
     }
 }

@@ -10,16 +10,20 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         record("WatchTimerExpired", app)
         app.buttons["timers.restart"].tap()
-        XCTAssertTrue(app.buttons["timers.pause-resume"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["timers.countdown"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["timers.waiting.timer-email"].isHittable)
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
-        app.buttons["timers.done"].tap()
+        app.staticTexts["timers.current"].swipeLeft()
+        XCTAssertTrue(app.buttons["timers.swipe-done"].waitForExistence(timeout: 5))
+        app.buttons["timers.swipe-done"].tap()
         let email = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Answer email"), object: app.staticTexts["timers.current"])
         XCTAssertEqual(XCTWaiter.wait(for: [email], timeout: 10), .completed)
         record("WatchTimerNextTask", app)
         app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 20))
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Answer email")
+        app.staticTexts["timers.current"].swipeLeft()
+        XCTAssertTrue(app.buttons["timers.pause-resume"].waitForExistence(timeout: 5))
         app.buttons["timers.pause-resume"].tap()
         XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 10))
     }
@@ -48,14 +52,18 @@ final class WatchQuickLogUITests: XCTestCase {
         suggestion.tap()
         allowTimerNotifications(app)
         let added = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "timers.waiting.", "Stretch")).firstMatch
-        for _ in 0..<5 { if added.exists { break }; app.scrollViews.firstMatch.swipeUp() }
+        for _ in 0..<5 { if added.exists { break }; app.descendants(matching: .any).matching(identifier: "timers.queue-pane").firstMatch.swipeUp() }
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         let id = added.identifier.replacingOccurrences(of: "timers.waiting.", with: "")
         XCTAssertEqual(app.staticTexts["timers.duration.\(id)"].label, "5:00")
-        for _ in 0..<5 { if app.staticTexts["timers.current"].isHittable { break }; app.scrollViews.firstMatch.swipeDown() }
+        XCTAssertTrue(app.staticTexts["timers.current"].isHittable)
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         XCTAssertTrue(app.buttons["timers.dictate"].isHittable)
-        record("WatchTimersInlineQueue", app)
+        let add = app.buttons["timers.dictate"]
+        XCTAssertGreaterThan(add.frame.midY, app.staticTexts["timers.current"].frame.maxY)
+        XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
+        XCTAssertFalse(app.buttons["timers.delete.timer-email"].isHittable)
+        record("WatchTimersTopHalfAndFloatingAdd", app)
     }
     func testWatchHomeCanAddATimerInOneTap() {
         let app = XCUIApplication()

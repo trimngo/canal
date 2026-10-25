@@ -12,6 +12,9 @@ public enum DatedGoalError: LocalizedError {
 
 /// Separate from percentage targets. A tombstone retains historical assignments.
 public struct DatedGoal: Codable, Identifiable, Equatable, Sendable {
+    /// A migrated tombstone must never manufacture a deleted task when cloud
+    /// records arrive before the corresponding Capture.
+    public var migratedToTask: Bool? = nil
     public var id: String
     public var name: String
     public var categoryID: String?
@@ -100,6 +103,7 @@ extension Ledger {
     }
 
     func datedGoalShare(for entry: CheckIn, goalID: String?) -> Double? {
+        if let share = taskShare(for: entry, taskID: goalID) { return share }
         guard let goalID, let goal = (datedGoals ?? []).first(where: { $0.id == goalID }) else { return nil }
         guard let category = goal.categoryID, categories.contains(where: { $0.id == category }) else { return 1 }
         let family = Set([category] + descendants(of: category).map(\.id))
@@ -159,12 +163,12 @@ extension Ledger {
         }
         return goals.map { progress(for: $0, minutes: totals[$0.id, default: 0], now: now) }
     }
-    private func progress(for goal: DatedGoal, minutes: Double, now: Date) -> DatedGoalProgress {
+    func progress(for goal: DatedGoal, minutes: Double, now: Date) -> DatedGoalProgress {
         let total = Self.workdayUnits(from: goal.startDate, to: goal.deadline, goal: goal)
         let elapsed = Self.workdayUnits(from: goal.startDate, to: min(now, goal.deadline), goal: goal)
         // A weekend-only goal uses elapsed clock time for its baseline; it is
         // explicitly shown without remaining workdays rather than dividing by zero.
-        let fraction = total > 0 ? elapsed / total : max(0, min(1, now.timeIntervalSince(goal.startDate) / goal.deadline.timeIntervalSince(goal.startDate)))
+        let fraction = now >= goal.deadline ? 1 : now <= goal.startDate ? 0 : total > 0 ? elapsed / total : max(0, min(1, now.timeIntervalSince(goal.startDate) / goal.deadline.timeIntervalSince(goal.startDate)))
         return DatedGoalProgress(goal: goal, actualMinutes: minutes, expectedMinutes: goal.targetMinutes * fraction,
             remainingWorkdays: Self.workdayUnits(from: max(now, goal.startDate), to: goal.deadline, goal: goal, countDays: true))
     }
