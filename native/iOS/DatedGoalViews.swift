@@ -26,6 +26,15 @@ struct TaskPlanningView: View {
         _startDate = State(initialValue: capture.workPlan?.startDate ?? capture.createdAt)
     }
     private var current: Capture { store.ledger.captures.first { $0.id == capture.id } ?? capture }
+    private var listName: String {
+        if current.isDone { return "Completed" }
+        if current.isReference == true { return "Reference" }
+        if current.isSnoozed(at: Date()) { return "Snoozed" }
+        if store.inbox.ranked.contains(where: { $0.id == capture.id }) { return "Top priorities" }
+        if store.inbox.backlog.contains(where: { $0.id == capture.id }) { return "Backlog" }
+        if store.inbox.inProgress.contains(where: { $0.id == capture.id }) { return "In progress" }
+        return "New ideas"
+    }
     var body: some View {
         NavigationStack {
             Form {
@@ -58,6 +67,7 @@ struct TaskPlanningView: View {
                     Text("A due date and work estimate put this task in Focus. Without a start override, pacing starts when the task was created inside your daily window, or at the next opening. Every day counts, including weekends. All linked logs count at any time.")
                 }
                 Section("Details") {
+                    LabeledContent("List", value: listName)
                     LabeledContent("Created", value: current.createdAt.formatted(date: .abbreviated, time: .shortened))
                     if (store.ledger.reminderImports ?? []).contains(where: { $0.captureID == capture.id }) { Text("Imported from Reminders") }
                     if let rank = store.inbox.ranked.firstIndex(where: { $0.id == capture.id }) { LabeledContent("Overall priority", value: "#\(rank + 1)") }
