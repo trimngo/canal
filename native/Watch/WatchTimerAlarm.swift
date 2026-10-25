@@ -8,59 +8,138 @@ import LedgerCore
 final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessionDelegate {
     static let shared = WatchTimerAlarm()
     @Published private(set) var status = ""
+    @Published private(set) var needsAlarmUpdate = false
     private var session: WKExtendedRuntimeSession?
     private var token: String?
     private let scheduledKey = "timers.watch-alarm.scheduled"
+    private let scheduledDueKey = "timers.watch-alarm.due"
     private let silencedKey = "timers.watch-alarm.silenced"
-    func isArmed(for token: String) -> Bool {
-        UserDefaults.standard.string(forKey: scheduledKey) == token && UserDefaults.standard.string(forKey: silencedKey) != token
-    }
-    func update(ledger: Ledger, writer: String) {
-        guard ledger.currentTimer != nil, let control = ledger.timerControl else { stop(); status = ""; return }
-        guard control.owner == writer, control.onWatch else { stop(); status = "Timer alerts on iPhone"; return }
-        guard let due = control.dueAt else { stop(); status = "Paused"; return }
+    private let failedKey = "timers.watch-alarm.failed"
+    private var preferences: UserDefaults { .standard }
+    private var scheduledToken: String? { preferences.string(forKey: scheduledKey) }
+    private var isActive: Bool { WKApplication.shared().applicationState == .active }
+    private var supportsRepeatingAlarm: Bool {
         #if targetEnvironment(simulator)
-        status = "Repeating alarm requires a physical Watch"; return
+        return false
         #else
-        if UserDefaults.standard.string(forKey: silencedKey) == control.token { status = "Alarm silenced · choose Done & Next or Restart"; return }
-        if Date().timeIntervalSince(due) >= 1800 { status = "Finished · alarm session ended"; return }
-        if isArmed(for: control.token) { status = due > Date() ? "Repeating alarm scheduled on Watch" : "Timer finished · waiting for you"; return }
-        guard WKApplication.shared().applicationState == .active else { status = "Open Dash on Watch to arm the repeating alarm"; return }
-        stop()
-        // Arm before returning from the user's action. A delayed task can lose
-        // active state as soon as the person lowers their wrist after Done.
-        let value = WKExtendedRuntimeSession()
-        session = value; token = control.token; value.delegate = self
-        UserDefaults.standard.set(control.token, forKey: scheduledKey)
-        status = "Repeating alarm scheduled on Watch"
-        value.start(at: max(due, Date().addingTimeInterval(1)))
+        return true
         #endif
     }
-    private func stop() {
-        guard session == nil || WKApplication.shared().applicationState == .active else {
-            status = "Open Dash on Watch to update the alarm"; return
+
+    func isArmed(for token: String) -> Bool {
+        scheduledToken == token && session?.state != .invalid && !isSilenced(for: token)
+            && preferences.string(forKey: failedKey) != token
+    }
+    func isSilenced(for token: String) -> Bool { preferences.string(forKey: silencedKey) == token }
+
+    private func requestedControl(_ ledger: Ledger, writer: String) -> TimerQueueControl? {
+        WatchTimerAlarmPolicy.controlToSchedule(in: ledger, writer: writer,
+            silencedToken: preferences.string(forKey: silencedKey), failedToken: preferences.string(forKey: failedKey))
+    }
+
+    func update(ledger: Ledger, writer: String) {
+        guard supportsRepeatingAlarm else { status = "Repeating alarm requires a physical Watch"; return }
+        let requested = requestedControl(ledger, writer: writer)
+        // Older builds saved only the token. Recover its exact deadline when
+        // the current control still describes that same scheduled alarm.
+        if scheduledToken == ledger.timerControl?.token, preferences.object(forKey: scheduledDueKey) == nil,
+           let due = ledger.timerControl?.dueAt { preferences.set(due, forKey: scheduledDueKey) }
+        // After process termination, only discard an unadopted alarm record
+        // once the system's entire runtime window has elapsed.
+        if session == nil, let due = preferences.object(forKey: scheduledDueKey) as? Date,
+           Date().timeIntervalSince(due) >= 1800 { clearScheduled() }
+
+        switch WatchTimerAlarmPolicy.update(scheduledToken: scheduledToken, requestedToken: requested?.token,
+                                            isActive: isActive, hasSession: session != nil) {
+        case .waitForForeground:
+            needsAlarmUpdate = scheduledToken != nil
+            status = needsAlarmUpdate ? "Open Dash on Watch to apply timer changes · previous alarm still scheduled"
+                                      : "Open Dash on Watch to arm the repeating alarm"
+            return
+        case .waitForSession:
+            needsAlarmUpdate = true
+            status = "Previous Watch alarm still scheduled · tap Stop if it rings"
+            return
+        case .cancel, .replace:
+            stop()
+        case .unchanged:
+            needsAlarmUpdate = false
+            if let due = requested?.dueAt {
+                status = due > Date() ? "Repeating alarm scheduled on Watch" : "Timer finished · waiting for you"
+                if let session, session.state == .running { ring(session) }
+                return
+            }
+        case .schedule: break
         }
-        let old = session; session = nil; token = nil
-        UserDefaults.standard.removeObject(forKey: scheduledKey)
-        old?.invalidate()
+
+        needsAlarmUpdate = false
+        guard let requested, let due = requested.dueAt else {
+            status = idleStatus(ledger, writer: writer); return
+        }
+        // No suspension point between checking active state and scheduling.
+        let value = WKExtendedRuntimeSession()
+        session = value; token = requested.token; value.delegate = self
+        preferences.set(requested.token, forKey: scheduledKey)
+        let start = max(due, Date().addingTimeInterval(1))
+        preferences.set(start, forKey: scheduledDueKey)
+        status = "Repeating alarm scheduled on Watch"
+        value.start(at: start)
+    }
+
+    private func idleStatus(_ ledger: Ledger, writer: String) -> String {
+        guard ledger.currentTimer != nil, let control = ledger.timerControl else { return "" }
+        if control.owner != writer || !control.onWatch { return "Timer alerts on iPhone" }
+        if control.dueAt == nil { return "Paused" }
+        if isSilenced(for: control.token) { return "Alarm silenced · choose Done & Next or Restart" }
+        if preferences.string(forKey: failedKey) == control.token {
+            return "Repeating alarm unavailable · open timer and tap Restart to retry"
+        }
+        return "Finished · alarm session ended"
+    }
+
+    private func clearScheduled() {
+        preferences.removeObject(forKey: scheduledKey)
+        preferences.removeObject(forKey: scheduledDueKey)
+    }
+    private func stop() {
+        guard isActive, let old = session else { return }
+        session = nil; token = nil; clearScheduled()
+        old.invalidate()
     }
     func adopt(_ value: WKExtendedRuntimeSession) {
-        // Must assign the delegate before the launch handler returns.
-        session = value; token = UserDefaults.standard.string(forKey: scheduledKey)
+        // Set the delegate synchronously, before the launch handler returns.
+        session = value; token = scheduledToken ?? UUID().uuidString()
+        preferences.set(token, forKey: scheduledKey)
+        if preferences.object(forKey: scheduledDueKey) == nil {
+            preferences.set(value.expirationDate?.addingTimeInterval(-1800) ?? Date(), forKey: scheduledDueKey)
+        }
         value.delegate = self
         if value.state == .running { ring(value) }
     }
     private func ring(_ value: WKExtendedRuntimeSession) {
-        guard value === session, let token, LedgerStore.shared.ledger.timerControl?.token == token,
-              LedgerStore.shared.ledger.currentTimer != nil else { return }
-        status = "Timer finished · repeating alarm"
-        LedgerStore.shared.openTimers()
-        let preferences = UserDefaults.standard
+        guard value === session, value.state == .running else { return }
+        let store = LedgerStore.shared
+        let requested = requestedControl(store.ledger, writer: store.writer)
+        switch WatchTimerAlarmPolicy.wake(scheduledToken: token, requestedToken: requested?.token, isActive: isActive) {
+        case .cancel:
+            stop()
+            store.refreshTimerSupport(force: true)
+            return
+        case .ringCurrent:
+            needsAlarmUpdate = false
+            status = "Timer finished · repeating alarm"
+        case .ringPrevious:
+            needsAlarmUpdate = true
+            status = "Previous Watch timer · open Dash to apply phone changes"
+        }
+        // Every managed running session alerts, even if a phone edit made it
+        // stale while background cancellation was forbidden by WatchKit.
         let pattern = preferences.string(forKey: "timers.haptic-pattern") ?? "standard"
         let type: WKHapticType = pattern == "attention" ? .retry : pattern == "light" ? .click : .notification
         let saved = preferences.double(forKey: "timers.haptic-repeat")
-        let interval = saved > 0 ? min(60, max(1, saved)) : 3
+        let interval = saved.isFinite && saved > 0 ? min(60, max(1, saved)) : 3
         value.notifyUser(hapticType: type) { _ in interval }
+        store.openTimers()
     }
     func refreshHaptics() { if let session, session.state == .running { ring(session) } }
     nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
@@ -73,14 +152,15 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
                                           didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason, error: Error?) {
         Task { @MainActor in
             guard self.session === extendedRuntimeSession else { return }
-            if let token = self.token { UserDefaults.standard.set(token, forKey: self.silencedKey) }
-            UserDefaults.standard.removeObject(forKey: self.scheduledKey)
-            self.session = nil
-            self.status = error == nil ? "Alarm silenced · choose Done & Next or Restart" : "Repeating alarm unavailable · open timer and tap Restart to retry"
-            if error != nil {
-                let store = LedgerStore.shared
-                await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
+            if let token = self.token {
+                self.preferences.set(token, forKey: error == nil ? self.silencedKey : self.failedKey)
             }
+            self.clearScheduled(); self.session = nil; self.token = nil; self.needsAlarmUpdate = false
+            let store = LedgerStore.shared
+            // An old callback cannot silence a newer timer. Only failures use
+            // notification fallback; the system Stop button stays silent.
+            self.status = self.idleStatus(store.ledger, writer: store.writer)
+            await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
         }
     }
 }

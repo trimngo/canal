@@ -3,12 +3,17 @@ import XCTest
 final class WatchQuickLogUITests: XCTestCase {
     func testUpcomingRowsCanBeDraggedWithoutMovingCurrentOrNavigatingAway() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts", "--ui-timer-scroll-upcoming"]; app.launch()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
         swipeTimerPage(app, toQueue: true)
         let walk = app.staticTexts["timers.waiting.timer-walk"], email = app.staticTexts["timers.waiting.timer-email"]
         XCTAssertTrue(walk.waitForExistence(timeout: 5)); XCTAssertTrue(email.exists)
-        walk.press(forDuration: 0.7, thenDragTo: email)
+        XCTAssertTrue(walk.isHittable); XCTAssertTrue(email.isHittable)
+        let origin = walk.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let destination = email.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+        origin.press(forDuration: 0.8, thenDragTo: destination)
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in walk.frame.minY < email.frame.minY }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)
         XCTAssertTrue(email.exists); XCTAssertTrue(walk.exists)
         XCTAssertFalse(app.staticTexts["timers.current"].exists)
         record("WatchReorderedUpcomingTimers", app)
@@ -78,7 +83,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.buttons["timers.done"].tap()
         let walk = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Take a walk"), object: app.staticTexts["timers.current"])
         XCTAssertEqual(XCTWaiter.wait(for: [walk], timeout: 10), .completed)
-        // A separate queue page precedes the current timer in the vertical pager.
+        // Swiping up reveals the queue below the current timer.
         swipeTimerPage(app, toQueue: true)
         let added = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "timers.waiting.", "Stretch")).firstMatch
         XCTAssertTrue(added.waitForExistence(timeout: 10))
@@ -95,6 +100,46 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertLessThan(add.frame.midY, app.staticTexts["timers.current"].frame.midY)
         XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
         record("WatchSingleTimerUpperRightAdd", app)
+    }
+    func testQueueShowsThreeTimersAndTouchScrollingReachesMoreWithoutChangingPages() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-timer-long-queue", "--ui-quiet-timer-alerts"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
+        swipeTimerPage(app, toQueue: true)
+        let current = app.staticTexts["timers.queue-current"]
+        let email = app.staticTexts["timers.waiting.timer-email"]
+        let walk = app.staticTexts["timers.waiting.timer-walk"]
+        XCTAssertTrue(current.isHittable); XCTAssertTrue(email.isHittable); XCTAssertTrue(walk.isHittable)
+        XCTAssertGreaterThan(email.frame.minY, current.frame.minY)
+        XCTAssertGreaterThan(walk.frame.minY, email.frame.minY)
+        let lastDuration = app.staticTexts["timers.duration.timer-walk"]
+        XCTAssertTrue(lastDuration.isHittable)
+        XCTAssertLessThan(lastDuration.frame.maxY, app.frame.maxY)
+        record("WatchThreeCompactTimerRows", app)
+        let extra = app.staticTexts["timers.waiting.timer-extra-5"]
+        for _ in 0..<6 {
+            if extra.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(extra.isHittable)
+        XCTAssertTrue(app.buttons["timers.current-page"].isHittable)
+        XCTAssertFalse(app.staticTexts["timers.current"].exists)
+        record("WatchQueueTouchScrolled", app)
+        swipeTimerPage(app, toQueue: false)
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+    }
+    func testRunningTimerRemainsTheOpeningScreenAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]
+        app.launch()
+        XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 30))
+        app.buttons["timers.restart"].tap()
+        XCTAssertTrue(app.staticTexts["timers.countdown"].waitForExistence(timeout: 5))
+        app.terminate(); app.launchArguments = ["--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        XCTAssertFalse(app.staticTexts["timers.queue-current"].isHittable)
     }
     func testQueueCanDeleteAnyTimerAndDeletingCurrentWaitsForStart() {
         let app = XCUIApplication()
@@ -142,11 +187,20 @@ final class WatchQuickLogUITests: XCTestCase {
     }
     override func setUpWithError() throws { continueAfterFailure = false }
     private func swipeTimerPage(_ app: XCUIApplication, toQueue: Bool) {
+        if !toQueue {
+            let back = app.buttons["timers.current-page"]
+            XCTAssertTrue(back.waitForExistence(timeout: 5)); back.tap()
+            XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 5) || app.buttons["timers.start"].exists)
+            return
+        }
         // A real page swipe crosses the content area. Swiping a one-line title
         // can generate only a few points of movement in watchOS XCTest.
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: toQueue ? 0.4 : 0.8))
-        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: toQueue ? 0.85 : 0.3))
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
         from.press(forDuration: 0.01, thenDragTo: to)
+        XCTAssertTrue(app.buttons["timers.current-page"].waitForExistence(timeout: 5))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: app.buttons["timers.current-page"])
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
     }
     private func allowTimerNotifications(_ app: XCUIApplication) {
         let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")

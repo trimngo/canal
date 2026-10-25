@@ -22,14 +22,6 @@ struct TimerQueueView: View {
     #endif
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
-    @State private var queuePosition = 0.0
-    @State private var queueReorder: [String]?
-    @State private var draggingTimer: String?
-    @State private var dragY: CGFloat = 0
-    @State private var rowFrames: [String: CGRect] = [:]
-    @State private var suppressPageSwipeUntil = Date.distantPast
-    @GestureState private var reorderGestureActive = false
-    @FocusState private var queueFocused: Bool
     #endif
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { timeline in
@@ -100,170 +92,83 @@ struct TimerQueueView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer()
             }
+            if alarm.needsAlarmUpdate {
+                Text(alarm.status).font(.caption2).foregroundStyle(.orange)
+                    .accessibilityIdentifier("timers.alarm-update")
+            }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4).background(.black)
             .contentShape(Rectangle())
             .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
-                if value.translation.height > 45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                if value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
                     showTimerQueue?()
                 }
             })
     }
     private func watchQueue(at now: Date) -> some View {
-        let scrollIDs = watchQueueScrollIDs
-        return ScrollViewReader { proxy in
-        List {
+        let waiting = store.ledger.waitingTimers
+        return List {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.title).font(.system(size: 20, weight: .semibold)).lineLimit(2)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(task.title).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                         .accessibilityIdentifier("timers.queue-current")
-                    watchCountdown(task, control: control, at: now, large: false)
-                    watchProgress(task, control: control, at: now)
-                }.padding(.vertical, 2).id(task.id)
-                    .simultaneousGesture(queueReturnGesture)
+                    Text(control.isFinished(at: now) ? "Now · Finished" : "Now · " + clock(control.remaining(at: now)))
+                        .font(.system(size: 13, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.mint)
+                }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
+                    .moveDisabled(true)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
                     }
             }
-            ForEach(watchWaitingTimers) { task in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(task.title).font(.system(size: 19, weight: .medium)).lineLimit(2)
+            ForEach(waiting) { task in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(task.title).font(.system(size: 16, weight: .medium)).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
-                    Text(clock(task.duration)).font(.system(size: 23, design: .rounded).monospacedDigit())
+                    Text(clock(task.duration)).font(.system(size: 13, design: .rounded).monospacedDigit())
                         .accessibilityIdentifier("timers.duration.\(task.id)")
-                }.foregroundStyle(draggingTimer == task.id ? .primary : .secondary).padding(.vertical, 2).contentShape(Rectangle()).id(task.id)
-                    .background(GeometryReader { geometry in
-                        Color.clear.preference(key: TimerRowFrames.self, value: [task.id: geometry.frame(in: .named("timer.queue"))])
-                    })
-                    .listRowBackground(draggingTimer == task.id ? Color.mint.opacity(0.3) : nil)
-                    .offset(y: draggingTimer == task.id ? dragY - (rowFrames[task.id]?.midY ?? dragY) : 0)
-                    .zIndex(draggingTimer == task.id ? 1 : 0)
-                    .simultaneousGesture(queueReturnGesture)
-                    .simultaneousGesture(timerReorderGesture(task.id))
+                }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .accessibilityAction(named: "Move earlier") { moveWaitingTimer(task.id, by: -1) }
                     .accessibilityAction(named: "Move later") { moveWaitingTimer(task.id, by: 1) }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
                     }
+            }.onMove { offsets, destination in
+                var ids = waiting.map(\.id)
+                ids.move(fromOffsets: offsets, toOffset: destination)
+                do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription }
             }
-            if store.ledger.currentTimer == nil, store.ledger.waitingTimers.isEmpty {
-                Text("No queued timers").foregroundStyle(.secondary).id("empty")
+            if store.ledger.currentTimer == nil, waiting.isEmpty {
+                Text("No queued timers").foregroundStyle(.secondary)
             }
-            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red).id("input-error") }
-            if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
-                Text(alarm.status).font(.caption2).foregroundStyle(.orange).id("alarm-status").accessibilityIdentifier("timers.alarm-status")
+            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
+            if alarm.needsAlarmUpdate || alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
+                Text(alarm.status).font(.caption2).foregroundStyle(.orange).accessibilityIdentifier("timers.alarm-status")
             }
             if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
-                Button("Use Watch for alerts") { act("here") }.id("use-watch").accessibilityIdentifier("timers.use-watch")
+                Button("Use Watch for alerts") { act("here") }.accessibilityIdentifier("timers.use-watch")
             }
             NavigationLink(destination: TimerSettingsView()) {
                 Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
-            }.id("settings").accessibilityIdentifier("timers.alarm-settings")
-        }.listStyle(.carousel).scrollDisabled(true).coordinateSpace(name: "timer.queue")
-            .onPreferenceChange(TimerRowFrames.self) { rowFrames = $0 }
-            .onChange(of: reorderGestureActive) { _, active in
-                if !active, draggingTimer != nil {
-                    draggingTimer = nil; queueReorder = nil; suppressPageSwipeUntil = Date().addingTimeInterval(0.5)
-                }
-            }
-            // Touch swipes navigate pages. Crown rotation scrolls rows without
-            // the List's native vertical pan swallowing the return gesture.
-            .focusable().focused($queueFocused).focusEffectDisabled()
-            .digitalCrownRotation($queuePosition, from: 0, through: Double(max(1, scrollIDs.count - 1)), by: 1,
-                                  sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
-            .onChange(of: queuePosition) { _, value in
-                let index = min(max(0, Int(value.rounded())), scrollIDs.count - 1)
-                proxy.scrollTo(scrollIDs[index], anchor: .top)
-            }
-            .onAppear {
-                queuePosition = 0; queueFocused = true
-                #if DEBUG
-                // XCTest has no Crown-rotation action. Start this fixture at
-                // the first upcoming row; the test still performs a real drag.
-                if ProcessInfo.processInfo.arguments.contains("--ui-timer-scroll-upcoming"), scrollIDs.count > 1 {
-                    Task { @MainActor in
-                        await Task.yield(); proxy.scrollTo(scrollIDs[1], anchor: .top); queuePosition = 1
-                    }
-                }
-                #endif
-            }
-            .onDisappear { queueFocused = false; draggingTimer = nil; queueReorder = nil }
-            // Up is navigation on this page, even when more rows remain.
-            // The Digital Crown still scrolls the full queue; horizontal row
-            // swipes retain their native Delete action.
-            .simultaneousGesture(queueReturnGesture)
+            }.accessibilityIdentifier("timers.alarm-settings")
+            Button("Watch Home") { store.showingTimerQueue = false }
+                .accessibilityIdentifier("timers.watch-home")
+        }.listStyle(.plain).listRowSpacing(0)
+            .environment(\.defaultMinListRowHeight, 44)
+            .contentMargins(.vertical, 0, for: .scrollContent)
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
-        }
-    }
-    private var queueReturnGesture: some Gesture {
-        DragGesture(minimumDistance: 35).onEnded { value in
-            if draggingTimer == nil, Date() > suppressPageSwipeUntil,
-               value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
-                showCurrentTimer?()
-            }
-        }
-    }
-    private var watchWaitingTimers: [QueuedTimer] {
-        let waiting = store.ledger.waitingTimers
-        guard let order = queueReorder else { return waiting }
-        let tasks = Dictionary(uniqueKeysWithValues: waiting.map { ($0.id, $0) })
-        return order.compactMap { tasks[$0] } + waiting.filter { !order.contains($0.id) }
-    }
-    private func timerReorderGesture(_ id: String) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.4).sequenced(before: DragGesture(minimumDistance: 1, coordinateSpace: .named("timer.queue")))
-            .updating($reorderGestureActive) { value, active, _ in
-                switch value {
-                case .first(true), .second(true, _): active = true
-                default: break
-                }
-            }
-            .onChanged { value in
-                switch value {
-                // A short swipe must remain navigation. Start reordering only
-                // after the hold has succeeded and the row actually moves.
-                case .second(true, let drag?):
-                    beginTimerDrag(id); dragY = drag.location.y
-                    guard var ids = queueReorder, let from = ids.firstIndex(of: id) else { return }
-                    for (target, other) in ids.enumerated() where other != id {
-                        guard let frame = rowFrames[other] else { continue }
-                        if (target < from && dragY < frame.midY) || (target > from && dragY > frame.midY) {
-                            ids.remove(at: from); ids.insert(id, at: target)
-                            withAnimation(.easeInOut(duration: 0.15)) { queueReorder = ids }
-                            break
-                        }
-                    }
-                default: break
-                }
-            }.onEnded { _ in
-                guard draggingTimer == id else { return }
-                if let ids = queueReorder { do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription } }
-                draggingTimer = nil; queueReorder = nil; suppressPageSwipeUntil = Date().addingTimeInterval(0.5)
-            }
-    }
-    private func beginTimerDrag(_ id: String) {
-        guard draggingTimer == nil else { return }
-        draggingTimer = id; queueReorder = store.ledger.waitingTimers.map(\.id)
-        dragY = rowFrames[id]?.midY ?? 0
-        suppressPageSwipeUntil = Date().addingTimeInterval(60)
-        WKInterfaceDevice.current().play(.click)
     }
     private func moveWaitingTimer(_ id: String, by delta: Int) {
         var ids = store.ledger.waitingTimers.map(\.id)
         guard let from = ids.firstIndex(of: id), ids.indices.contains(from + delta) else { return }
         ids.swapAt(from, from + delta)
         do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription }
-    }
-    private var watchQueueScrollIDs: [String] {
-        var ids = store.ledger.currentTimer.map { [$0.id] } ?? []
-        ids += store.ledger.waitingTimers.map(\.id)
-        if ids.isEmpty { ids.append("empty") }
-        if inputError != nil { ids.append("input-error") }
-        if alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") { ids.append("alarm-status") }
-        if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer { ids.append("use-watch") }
-        return ids + ["settings"]
     }
     private func watchCountdown(_ task: QueuedTimer, control: TimerQueueControl, at now: Date, large: Bool) -> some View {
         HStack(spacing: 6) {
@@ -454,10 +359,6 @@ struct TimerQueueView: View {
 }
 
 #if os(watchOS)
-private struct TimerRowFrames: PreferenceKey {
-    static var defaultValue: [String: CGRect] { [:] }
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue(), uniquingKeysWith: { _, new in new }) }
-}
 private struct CompactTimerButtonStyle: ButtonStyle {
     var prominent = false
     func makeBody(configuration: Configuration) -> some View {
@@ -538,7 +439,11 @@ struct TimerSettingsView: View {
                 Button("Preview alert pattern") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }.accessibilityIdentifier("timers.haptic-preview")
                 Text("Alarm sound follows your Watch’s system settings. Repeating haptics use the Watch’s system alarm, limited to about 30 minutes.")
                     .font(.caption2).foregroundStyle(.secondary)
-                Text("Stop silences the system alarm. Open shows the expired task with Done & Next and Restart. The Watch runs the timer without your phone.")
+                Text("Stop silences the system alarm. Open shows the timer controls and applies any synced changes. The Watch runs the timer without your phone.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Text("After changing a timer on iPhone, reopen Dash on Watch to update its repeating alarm. Until then, the previous Watch alarm can still ring at its original time.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Text("To keep Dash visible longer when you raise your wrist, set Watch Settings → General → Return to Clock → Dash to After 1 hour.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Text("Double-tap restarts the timer while this app’s timer screen is open. The background alarm screen uses Apple’s gesture behavior.").font(.caption2).foregroundStyle(.secondary)
                 #endif

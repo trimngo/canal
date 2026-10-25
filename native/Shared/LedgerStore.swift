@@ -399,6 +399,12 @@ final class LedgerStore: ObservableObject {
                 try fixture.enqueueTimer(id: "timer-guitar", title: "Practice guitar", duration: 1200, writer: writer, onWatch: Self.isWatch, now: earlier)
                 try fixture.enqueueTimer(id: "timer-email", title: "Answer email", duration: 600, writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(1))
                 try fixture.enqueueTimer(id: "timer-walk", title: "Take a walk", duration: 300, writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(2))
+                if ProcessInfo.processInfo.arguments.contains("--ui-timer-long-queue") {
+                    for index in 1...8 {
+                        try fixture.enqueueTimer(id: "timer-extra-\(index)", title: "Queued task \(index)", duration: 300,
+                            writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(Double(index + 2)))
+                    }
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-backup-fixture") {

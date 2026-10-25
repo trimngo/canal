@@ -1429,9 +1429,12 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["View logs"].exists)
         XCTAssertFalse(app.buttons["plan.remaining.work"].exists)
         XCTAssertTrue(element(app, "categories.calculated-goal.music").exists)
-        // Leaf names and totals have no navigation action.
+        // Names now open category details; close the sheet before exercising
+        // the outline beneath it. Disclosure controls only expand/collapse.
         guitar.tap()
-        XCTAssertTrue(app.navigationBars["Edit goals"].exists)
+        XCTAssertTrue(app.buttons["category-detail.close"].waitForExistence(timeout: 5))
+        app.buttons["category-detail.close"].tap()
+        XCTAssertTrue(app.navigationBars["Edit goals"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["group.done"].exists)
         recordScreen("CompactNestedOutline", in: app)
         reveal(music, in: app); music.tap()
@@ -1621,8 +1624,11 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["category-select.teaching"].exists)
         let guitar = app.buttons["category-select.guitar"]; reveal(guitar, in: app); guitar.tap()
         XCTAssertTrue(element(app, "category-context.activity").isHittable)
-        XCTAssertFalse(app.keyboards.firstMatch.exists)
-        app.buttons["category-search.clear"].tap()
+        // Selecting a result clears the query and keeps input ready for the
+        // next category, matching the shared selector's current behavior.
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        XCTAssertTrue(["", "Search categories"].contains(search.value as? String ?? "<missing>"))
+        XCTAssertFalse(app.buttons["category-search.clear"].exists)
         reveal(guitar, in: app)
         XCTAssertEqual(guitar.value as? String, "Selected")
         tapCategory("teaching", in: app)
