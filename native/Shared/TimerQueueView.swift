@@ -28,14 +28,6 @@ struct TimerQueueView: View {
         }
         #if os(watchOS)
         .navigationTitle("")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { dictate() } label: {
-                    Image(systemName: "plus").font(.title3.bold())
-                }.accessibilityLabel("Add timer").disabled(!store.storageAvailable)
-                    .accessibilityIdentifier("timers.dictate")
-            }
-        }
         #else
         .navigationTitle("Timer queue")
         .toolbar {
@@ -92,7 +84,7 @@ struct TimerQueueView: View {
                 Spacer()
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
-        }.padding(.horizontal, 8).padding(.bottom, 4)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4)
             .accessibilityIdentifier("timers.current-screen")
     }
     private func watchQueue(at now: Date) -> some View {

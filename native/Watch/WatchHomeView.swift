@@ -10,6 +10,7 @@ struct WatchHomeView: View {
     @State private var tab = 2
     @State private var notificationSettings = false
     var body: some View {
+        NavigationStack {
         TabView(selection: $tab) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -79,8 +80,8 @@ struct WatchHomeView: View {
             }.tag(2)
             // Queue is the preceding page: swipe down from the single timer
             // to its rows, then swipe up to return. Avoid nested vertical pagers.
-            NavigationStack { TimerQueueView(watchShowsQueue: true) }.tag(3)
-            NavigationStack { TimerQueueView() }.tag(4)
+            TimerQueueView(watchShowsQueue: true).id("timer-queue").tag(3)
+            TimerQueueView().id("timer-current").tag(4)
         }.tabViewStyle(.verticalPage)
             .onAppear { if store.showingTimerQueue { tab = 4 } }
             .onChange(of: store.timerRequestID) { _, _ in tab = 4 }
@@ -93,5 +94,14 @@ struct WatchHomeView: View {
                 tab = 0; activity = store.quickReplyDraft ?? ""; store.quickReplyDraft = nil
                 categoryIDs = []; saved = false
             }
+            .toolbar {
+                if tab == 3 || tab == 4 {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()) }
+                            .accessibilityLabel("Add timer").accessibilityIdentifier("timers.dictate").disabled(!store.storageAvailable)
+                    }
+                }
+            }
+        }
     }
 }
