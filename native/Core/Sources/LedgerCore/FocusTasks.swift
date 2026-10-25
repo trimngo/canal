@@ -13,7 +13,7 @@ public enum TaskPlanError: LocalizedError {
 /// Optional work estimate on an ordinary Inbox item. Due dates use CaptureTiming.
 /// The planning window is frozen at entry; it never filters activity observations.
 public struct CaptureWorkPlan: Codable, Equatable, Sendable {
-    public var estimatedMinutes: Double
+    public var estimatedMinutes: Double?
     public var startDate: Date?
     public var dayStartMinute: Int
     public var dayEndMinute: Int
@@ -23,7 +23,7 @@ public struct CaptureWorkPlan: Codable, Equatable, Sendable {
 extension Ledger {
     public func isFocusTask(_ task: Capture, now: Date = Date()) -> Bool {
         guard task.deletedAt == nil, !task.isDone, task.isReference != true, !task.isSnoozed(at: now),
-              let plan = task.workPlan, plan.estimatedMinutes.isFinite, plan.estimatedMinutes > 0,
+              let plan = task.workPlan, let estimate = plan.estimatedMinutes, estimate.isFinite, estimate > 0,
               task.timing?.kind == .dueDate, let due = task.timing?.dueAt else { return false }
         return due.timeIntervalSince1970.isFinite
     }
@@ -42,12 +42,11 @@ extension Ledger {
         }
         if let startDate, !startDate.timeIntervalSince1970.isFinite { throw TaskPlanError.invalidStart }
         let old = captures[index].workPlan
-        let value = estimatedMinutes.map {
-            CaptureWorkPlan(estimatedMinutes: $0, startDate: startDate,
+        let value: CaptureWorkPlan? = estimatedMinutes != nil || startDate != nil ?
+            CaptureWorkPlan(estimatedMinutes: estimatedMinutes, startDate: startDate,
                 dayStartMinute: old?.dayStartMinute ?? settings.startMinute,
                 dayEndMinute: old?.dayEndMinute ?? settings.endMinute,
-                timeZoneIdentifier: old?.timeZoneIdentifier ?? reportingCalendar().timeZone.identifier)
-        }
+                timeZoneIdentifier: old?.timeZoneIdentifier ?? reportingCalendar().timeZone.identifier) : nil
         guard old != value else { return }
         let revision = nextRevision(writer: writer)
         captures[index].workPlan = value; captures[index].revision = revision
@@ -132,7 +131,7 @@ extension Ledger {
         return focusTasks(now: now).map { task in
             let plan = task.workPlan!
             let goal = DatedGoal(id: task.id, name: task.text, categoryID: categoryIDs(for: task).first,
-                targetMinutes: plan.estimatedMinutes, startDate: plan.startDate ?? task.createdAt, deadline: task.timing!.dueAt!,
+                targetMinutes: plan.estimatedMinutes!, startDate: plan.startDate ?? task.createdAt, deadline: task.timing!.dueAt!,
                 dayStartMinute: plan.dayStartMinute, dayEndMinute: plan.dayEndMinute, timeZoneIdentifier: plan.timeZoneIdentifier,
                 deleted: false, revision: task.revision)
             return progress(for: goal, minutes: totals[task.id, default: 0], now: now)

@@ -140,6 +140,16 @@ final class FocusTasksTests: XCTestCase {
         let restored = try LedgerBackup.decode(LedgerBackup(ledger: old).encoded()).ledger
         XCTAssertNil(restored.captures[0].workPlan); XCTAssertEqual(old, restored)
     }
+    func testOptionalStartCanBeSavedBeforeAnEstimateWithoutEnteringFocus() throws {
+        var ledger = Ledger(); _ = try task(&ledger)
+        let workStart = start.addingTimeInterval(86400)
+        try ledger.setTaskPlan("prep", estimatedMinutes: nil, startDate: workStart, writer: "p")
+        XCTAssertEqual(ledger.captures[0].workPlan?.startDate, workStart)
+        XCTAssertNil(ledger.captures[0].workPlan?.estimatedMinutes)
+        XCTAssertTrue(ledger.focusTasks(now: now).isEmpty)
+        let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
+        XCTAssertEqual(restored.captures[0].workPlan?.startDate, workStart)
+    }
     func testAnOverdueDateBeforeCreationStillAppearsAndIsBehindPace() throws {
         var ledger = Ledger(); _ = try task(&ledger)
         try ledger.setCaptureTiming("prep", timing: .due(start.addingTimeInterval(-3600)), writer: "p")

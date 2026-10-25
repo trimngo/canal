@@ -14,7 +14,7 @@ struct TaskPlanningView: View {
     @State private var loggedMinutes: Double?
     init(capture: Capture) {
         self.capture = capture
-        _hours = State(initialValue: capture.workPlan.map { ($0.estimatedMinutes / 60).formatted(.number.grouping(.never).precision(.fractionLength(0...2))) } ?? "")
+        _hours = State(initialValue: capture.workPlan?.estimatedMinutes.map { ($0 / 60).formatted(.number.grouping(.never).precision(.fractionLength(0...2))) } ?? "")
         _hasDueDate = State(initialValue: capture.timing?.kind == .dueDate)
         _dueDate = State(initialValue: capture.timing?.dueAt ?? Calendar.current.date(byAdding: .day, value: 7, to: Date())!)
         _hasStart = State(initialValue: capture.workPlan?.startDate != nil)
@@ -240,7 +240,7 @@ struct CommitmentsView: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(row.goal.name).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                    Text(row.goal.name).font(.subheadline.weight(.medium)).lineLimit(2).foregroundStyle(.primary)
                     Spacer(minLength: 8)
                     Text(row.goal.deadline, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day()).font(.caption).foregroundStyle(.secondary)
                 }
