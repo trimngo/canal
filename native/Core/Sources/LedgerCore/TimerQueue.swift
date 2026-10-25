@@ -24,6 +24,14 @@ public struct QueuedTimer: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// Ordering has its own revision so dragging never overwrites a concurrent
+/// title edit, completion, deletion, or capture on the other device.
+public struct TimerQueueOrder: Codable, Equatable, Sendable {
+    public var ids: [String]
+    public var revision: Revision
+    public init(ids: [String], revision: Revision) { self.ids = ids; self.revision = revision }
+}
+
 /// A single control record prevents two queued tasks from running together.
 /// Absolute deadlines survive suspension; expiry never advances the queue.
 public struct TimerQueueControl: Codable, Equatable, Sendable {
@@ -146,8 +154,38 @@ extension Ledger {
     }
     public var waitingTimers: [QueuedTimer] {
         let activeID = currentTimer?.id
+        let positions = Dictionary((timerQueueOrder?.ids ?? []).enumerated().map { ($1, $0) }, uniquingKeysWith: min)
         return (queuedTimers ?? []).filter { $0.completedAt == nil && $0.deletedAt == nil && $0.id != activeID }
-            .sorted { $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt < $1.createdAt }
+            .sorted {
+                let a = positions[$0.id] ?? Int.max, b = positions[$1.id] ?? Int.max
+                if a != b { return a < b }
+                return $0.createdAt == $1.createdAt ? $0.id < $1.id : $0.createdAt < $1.createdAt
+            }
+    }
+    public mutating func reorderWaitingTimers(_ ids: [String], writer: String) {
+        let waiting = waitingTimers.map(\.id), eligible = Set(waiting)
+        var seen = Set<String>()
+        let requested = ids.filter { eligible.contains($0) && seen.insert($0).inserted }
+        // A capture arriving during a drag stays queued after the moved rows.
+        let result = requested + waiting.filter { !seen.contains($0) }
+        guard result != waiting else { return }
+        timerQueueOrder = TimerQueueOrder(ids: result, revision: nextRevision(writer: writer))
+    }
+    public mutating func editQueuedTimer(_ id: String, title: String, duration: TimeInterval, writer: String, onWatch: Bool, now: Date = Date()) throws {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.count <= 500 else { throw TimerQueueError.invalidTask }
+        guard duration.isFinite, (1...86400).contains(duration) else { throw TimerQueueError.invalidDuration }
+        guard let index = queuedTimers?.firstIndex(where: { $0.id == id && $0.completedAt == nil && $0.deletedAt == nil }),
+              let old = queuedTimers?[index], old.title != title || old.duration != duration else { return }
+        let control = currentTimer?.id == id ? timerControl : nil
+        let revision = nextRevision(writer: writer)
+        queuedTimers?[index].title = title; queuedTimers?[index].duration = duration; queuedTimers?[index].revision = revision
+        if let control, old.duration != duration {
+            let elapsed = max(0, old.duration - control.remaining(at: now))
+            let remaining = max(0, duration - elapsed)
+            timerControl = TimerQueueControl(taskID: id, dueAt: control.pausedRemaining == nil ? now.addingTimeInterval(remaining) : nil,
+                pausedRemaining: control.pausedRemaining == nil ? nil : remaining, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        }
     }
     public mutating func enqueueTimer(id: String = UUID().uuidString, title: String, duration: TimeInterval, writer: String, onWatch: Bool, now: Date = Date()) throws {
         guard queuedTimers?.contains(where: { $0.id == id }) != true else { return }

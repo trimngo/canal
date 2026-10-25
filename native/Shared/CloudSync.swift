@@ -3,7 +3,7 @@ import CloudKit
 import LedgerCore
 
 private enum CloudItem: Codable {
-    case queuedTimer(QueuedTimer), timerControl(TimerQueueControl)
+    case queuedTimer(QueuedTimer), timerControl(TimerQueueControl), timerQueueOrder(TimerQueueOrder)
     case datedGoal(DatedGoal), calendarEvent(CalendarEventRecord)
     case inboxRanking(InboxRanking)
     case weeklyCommitment(WeeklyCommitment)
@@ -14,6 +14,7 @@ private enum CloudItem: Codable {
         switch self {
         case .queuedTimer(let item): return "queued-timer-\(item.id)"
         case .timerControl: return "timer-control"
+        case .timerQueueOrder: return "timer-order"
         case .datedGoal(let item): return "dated-goal-\(item.id)"
         case .calendarEvent(let item): return "calendar-event-\(item.id)"
         case .inboxRanking: return "inbox-ranking"
@@ -32,6 +33,7 @@ private enum CloudItem: Codable {
         switch self {
         case .queuedTimer(let item): return item.revision
         case .timerControl(let item): return item.revision
+        case .timerQueueOrder(let item): return item.revision
         case .datedGoal(let item): return item.revision
         case .calendarEvent(let item): return item.revision
         case .inboxRanking(let item): return item.revision
@@ -51,6 +53,7 @@ private enum CloudItem: Codable {
         switch self {
         case .queuedTimer(let item): remote.queuedTimers = [item]
         case .timerControl(let item): remote.timerControl = item
+        case .timerQueueOrder(let item): remote.timerQueueOrder = item
         case .datedGoal(let item): remote.datedGoals = [item]
         case .calendarEvent(let item): remote.calendarEvents = [item]
         case .inboxRanking(let item): remote.inboxRanking = item
@@ -70,6 +73,7 @@ private enum CloudItem: Codable {
         var items = ledger.categories.map(CloudItem.category)
         items.append(contentsOf: (ledger.queuedTimers ?? []).map(CloudItem.queuedTimer))
         if let control = ledger.timerControl { items.append(.timerControl(control)) }
+        if let order = ledger.timerQueueOrder { items.append(.timerQueueOrder(order)) }
         items.append(contentsOf: (ledger.datedGoals ?? []).map(CloudItem.datedGoal))
         items.append(contentsOf: (ledger.calendarEvents ?? []).map(CloudItem.calendarEvent))
         if let ranking = ledger.inboxRanking { items.append(.inboxRanking(ranking)) }

@@ -22,6 +22,7 @@ public struct CompanionQuickDelivery {
         var result = Ledger(); result.categories = []
         result.settings = source.settings
         result.timerControl = source.timerControl
+        result.timerQueueOrder = source.timerQueueOrder
         var timers = Array((source.queuedTimers ?? []).sorted { $0.revision > $1.revision }.prefix(20))
         if let current = source.currentTimer, !timers.contains(where: { $0.id == current.id }) { timers.append(current) }
         result.queuedTimers = timers.isEmpty ? nil : timers
@@ -36,6 +37,7 @@ public struct CompanionQuickDelivery {
         var result: [String: Revision] = [:]
         if includingSettings, ledger.settings.revision > Revision() { result["settings"] = ledger.settings.revision }
         if let control = ledger.timerControl { result["timer-control"] = control.revision }
+        if let order = ledger.timerQueueOrder { result["timer-order"] = order.revision }
         for timer in ledger.queuedTimers ?? [] { result["timer:" + timer.id] = timer.revision }
         for goal in ledger.datedGoals ?? [] { result["goal:" + goal.id] = goal.revision }
         for event in ledger.calendarEvents ?? [] { result["event:" + event.id] = event.revision }
@@ -70,6 +72,10 @@ public struct CompanionQuickDelivery {
             partial.timerControl = control
             partial.queuedTimers = latest.currentTimer.map { [$0] }
             if try !fits(partial) { partial = before }
+        }
+        if let order = latest.timerQueueOrder, acknowledged["timer-order"] != order.revision {
+            partial.timerQueueOrder = order
+            if try !fits(partial) { partial.timerQueueOrder = nil }
         }
         for item in latest.queuedTimers ?? [] where acknowledged["timer:" + item.id] != item.revision && partial.queuedTimers?.contains(where: { $0.id == item.id }) != true {
             partial.queuedTimers = (partial.queuedTimers ?? []) + [item]

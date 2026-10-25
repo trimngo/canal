@@ -64,7 +64,7 @@ struct TimeLedgerApp: App {
 }
 
 enum LedgerScreen: Hashable { case calendar, targets, inbox, settings }
-private enum AppTab: Hashable { case today, commitments, log, inbox, settings }
+private enum AppTab: Hashable { case today, commitments, timers, inbox, settings }
 
 struct RootView: View {
     @EnvironmentObject var store: LedgerStore
@@ -75,11 +75,16 @@ struct RootView: View {
         TabView(selection: $tab) {
             NavigationStack(path: $path) {
                 DayView().navigationDestination(for: LedgerScreen.self) { destination($0) }
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            NavigationLink(destination: CheckInView()) { Label("Log", systemImage: "plus.circle") }.accessibilityIdentifier("today.log")
+                        }
+                    }
             }.tabItem { Label("Today", systemImage: "chart.pie") }.tag(AppTab.today)
             NavigationStack {
                 CommitmentsView().navigationDestination(for: LedgerScreen.self) { destination($0) }
             }.tabItem { Label("Commitments", systemImage: "checkmark.circle") }.tag(AppTab.commitments)
-            NavigationStack { CheckInView() }.tabItem { Label("Log", systemImage: "plus.circle") }.tag(AppTab.log)
+            NavigationStack { TimerQueueView() }.tabItem { Label("Timers", systemImage: "timer") }.tag(AppTab.timers)
             NavigationStack { InboxView() }.tabItem { Label("Inbox", systemImage: "tray") }.tag(AppTab.inbox)
             NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(AppTab.settings)
         }
@@ -87,17 +92,14 @@ struct RootView: View {
         .onChange(of: tab) { _, _ in UIApplication.shared.dismissLedgerKeyboard() }
         .onAppear {
             showRequestedCapture()
+            if store.showingTimerQueue { tab = .timers }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-timer-fixture") || ProcessInfo.processInfo.arguments.contains("--ui-timer-open") { store.openTimers() }
             #endif
         }
         .onChange(of: store.sampleRequestID) { _, _ in showRequestedCapture() }
+        .onChange(of: store.timerRequestID) { _, _ in tab = .timers }
         .fullScreenCover(isPresented: $capturing) { QuickLogCaptureView().id(store.sampleRequestID) }
-        .sheet(isPresented: $store.showingTimerQueue) {
-            NavigationStack {
-                TimerQueueView().toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { store.showingTimerQueue = false } } }
-            }
-        }
         .onOpenURL { url in if TimerQueueShortcut.matches(url) { store.openTimers() } }
     }
     @ViewBuilder private func destination(_ screen: LedgerScreen) -> some View {

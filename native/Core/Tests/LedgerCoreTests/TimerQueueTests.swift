@@ -16,6 +16,72 @@ final class TimerQueueTests: XCTestCase {
         XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(1200))
         XCTAssertTrue(ledger.entries.isEmpty); XCTAssertTrue(ledger.captures.isEmpty)
     }
+    func testReorderingOnlyMovesUpcomingTimersAndDoneUsesNewOrder() throws {
+        var ledger = try fixture()
+        try ledger.enqueueTimer(id: "three", title: "Walk", duration: 300, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
+        let control = ledger.timerControl
+        ledger.reorderWaitingTimers(["one", "three", "two", "three"], writer: "phone")
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["three", "two"])
+        XCTAssertEqual(ledger.timerControl, control)
+        ledger.finishTimer(writer: "watch", onWatch: true, now: now)
+        XCTAssertEqual(ledger.currentTimer?.id, "three")
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["two"])
+    }
+    func testStaleDragKeepsNewCapturesAndIgnoresDeletedRows() throws {
+        var ledger = try fixture()
+        try ledger.enqueueTimer(id: "three", title: "Walk", duration: 300, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
+        try ledger.enqueueTimer(id: "four", title: "Read", duration: 60, writer: "watch", onWatch: true, now: now.addingTimeInterval(3))
+        ledger.deleteQueuedTimer("two", writer: "phone", onWatch: false, now: now)
+        ledger.reorderWaitingTimers(["three", "two"], writer: "phone")
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["three", "four"])
+        XCTAssertEqual(ledger.currentTimer?.id, "one")
+    }
+    func testQueueOrderBackupQuickSyncAndConcurrentEditsPreserveData() throws {
+        var watch = try fixture()
+        try watch.enqueueTimer(id: "three", title: "Walk", duration: 300, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
+        var phone = watch
+        watch.reorderWaitingTimers(["three", "two"], writer: "watch")
+        try phone.editQueuedTimer("two", title: "Reply to Jo", duration: 120, writer: "phone", onWatch: false, now: now)
+        let a = watch; watch.merge(phone); phone.merge(a)
+        XCTAssertEqual(watch.waitingTimers, phone.waitingTimers)
+        XCTAssertEqual(watch.waitingTimers.map(\.id), ["three", "two"])
+        XCTAssertEqual(watch.waitingTimers.last?.title, "Reply to Jo")
+        let restored = try LedgerBackup.decode(LedgerBackup(ledger: watch).encoded()).ledger
+        XCTAssertEqual(restored.timerQueueOrder, watch.timerQueueOrder)
+        XCTAssertEqual(restored.waitingTimers, watch.waitingTimers)
+        var quick = CompanionQuickDelivery()
+        let data = try XCTUnwrap(quick.prepare(watch, id: "reorder"))
+        let packet = try JSONDecoder().decode(CompanionQuickPacket.self, from: data)
+        XCTAssertEqual(packet.ledger.timerQueueOrder, watch.timerQueueOrder)
+        var receiver = Ledger(); receiver.merge(packet.ledger)
+        XCTAssertEqual(receiver.waitingTimers.map(\.id), ["three", "two"])
+    }
+    func testLegacyQueueWithoutOrderKeepsCreationOrder() throws {
+        let ledger = try fixture()
+        let restored = try JSONDecoder().decode(Ledger.self, from: JSONEncoder().encode(ledger))
+        XCTAssertNil(restored.timerQueueOrder)
+        XCTAssertEqual(restored.waitingTimers.map(\.id), ["two"])
+    }
+    func testEditingRunningDurationPreservesElapsedTimeAndPauses() throws {
+        var ledger = try fixture()
+        try ledger.editQueuedTimer("one", title: "Guitar practice", duration: 1800, writer: "phone", onWatch: false, now: now.addingTimeInterval(300))
+        XCTAssertEqual(ledger.currentTimer?.title, "Guitar practice")
+        XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(1800))
+        XCTAssertEqual(ledger.timerControl?.owner, "phone")
+        ledger.pauseTimer(writer: "phone", onWatch: false, now: now.addingTimeInterval(600))
+        try ledger.editQueuedTimer("one", title: "Guitar practice", duration: 900, writer: "watch", onWatch: true, now: now.addingTimeInterval(9000))
+        XCTAssertNil(ledger.timerControl?.dueAt)
+        XCTAssertEqual(ledger.timerControl?.pausedRemaining, 300)
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["two"])
+    }
+    func testTitleOnlyEditKeepsAlarmAndInvalidEditIsAtomic() throws {
+        var ledger = try fixture(); let control = ledger.timerControl
+        try ledger.editQueuedTimer("one", title: "  Practice guitar  ", duration: 1200, writer: "phone", onWatch: false, now: now)
+        XCTAssertEqual(ledger.timerControl, control)
+        let saved = ledger
+        XCTAssertThrowsError(try ledger.editQueuedTimer("one", title: "Changed", duration: -1, writer: "phone", onWatch: false))
+        XCTAssertEqual(ledger, saved)
+    }
     func testExpiredTimerWaitsWithoutAdvancingEvenAfterDaysOffline() throws {
         let ledger = try fixture()
         XCTAssertTrue(ledger.timerControl!.isFinished(at: now.addingTimeInterval(86400)))

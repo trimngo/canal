@@ -15,7 +15,11 @@ backups. Old files default to the previous automatic-next behavior.
 
 On Watch, the **Timers** and **Current task** complications open the single-timer screen. The upper-right **+** opens dictation directly: “Practice guitar” creates a five-minute timer, while “Practice guitar for twenty minutes” uses that duration. Finishing dictation saves the task. Watch Home also has a direct Add timer action. The Watch saves and schedules locally, without needing the phone.
 
-Siri registers **Add a Dash timer**, **Add Dash timer**, **Add a timer to Dash**, and **Queue a timer in Dash**. They use the same timer queue and duration parsing. If Siri does not capture the task, it asks **What is the timer for?** Answer “Cook food” for five minutes, or “Cook food for ten minutes” for ten. App Shortcut registration does not guarantee that Siri will extract the task from an appended phrase in one sentence; verify recognition and follow-up prompts on a physical Watch.
+Siri registers the full-sentence phrases **Add a Dash timer to [task]** and **Add a Dash timer for [task]**. Try “Hey Siri, add a Dash timer to eat food” (five minutes), or “Hey Siri, add a Dash timer to cook food for ten minutes.” A string-query entity resolves the spoken task into a draft without saving during lookup; the intent saves only when it runs. This avoids the unsupported free-form String parameter in an App Shortcut phrase. Apple SDK metadata validation passes, but actual one-sentence Siri recognition still needs a physical Watch check. The older **Add a Dash timer**, **Add Dash timer**, **Add a timer to Dash**, and **Queue a timer in Dash** triggers remain available; when no task is supplied, Siri asks what the timer is for.
+
+The iPhone has a dedicated **Timers** tab, with quick text entry, current countdown and progress, Pause/Resume, Restart, Done & Next, editing, and an upcoming queue. Log is accessible at the top of Today. Tap a timer title to edit its task and minutes; changing the current duration preserves elapsed time. Starting, restarting, resuming, or changing the running duration uses that device for alerts. Opening the screen alone leaves alert ownership unchanged. Device-to-device controls require delivery; a disconnected Watch keeps its locally scheduled timer until it receives the change. Watch smart alarms can only be armed while Dash is active on that Watch, so use the Watch's existing alert takeover control to move a phone timer back there.
+
+Only upcoming timers can be reordered. Drag their rows on iPhone (Edit also exposes reorder handles); on Watch hold an upcoming row and drag it above or below another. The current timer stays fixed and its deadline does not change. Queue order has its own revision, travels through companion quick delivery, full sync, iCloud, and backups, and never overwrites concurrent timer text edits. New captures not yet present in a reordered snapshot remain queued. Old files without an order keep creation order.
 
 Swipe down from the current timer to the separate queue page; swipe up to return. Only the first timer runs. Upcoming rows are dimmed and show their full duration. Swipe a row left to delete any timer. Deleting the current timer cancels its alarm and leaves the next task waiting for Start, independently of the Done & Next setting. Deleting an upcoming task leaves the running countdown untouched.
 
@@ -33,6 +37,7 @@ The iPhone mirrors received state through a Lock Screen Live Activity. Initial
 creation requires opening the phone app; an existing activity updates across
 task transitions. Sync and display updates depend on system delivery. Neither
 phone availability nor the Live Activity is required for the Watch alarm.
+The compact Live Activity includes a single-line task name beside the countdown; system-controlled compact widths can truncate long task names. The expanded view retains the complete task context.
 
 Physical-device checks still needed:
 

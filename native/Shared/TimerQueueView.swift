@@ -14,11 +14,18 @@ struct TimerQueueView: View {
     @State private var inputOpen = false
     @State private var inputRequest = UUID()
     @State private var showingHelp = false
+    @State private var editingTimer: QueuedTimer?
     @FocusState private var focused: Bool
     @ObservedObject private var notifications = NotificationScheduler.shared
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
     @State private var queuePosition = 0.0
+    @State private var queueReorder: [String]?
+    @State private var draggingTimer: String?
+    @State private var dragY: CGFloat = 0
+    @State private var rowFrames: [String: CGRect] = [:]
+    @State private var suppressPageSwipeUntil = Date.distantPast
+    @GestureState private var reorderGestureActive = false
     @FocusState private var queueFocused: Bool
     #endif
     var body: some View {
@@ -33,13 +40,16 @@ struct TimerQueueView: View {
         #if os(watchOS)
         .navigationTitle("")
         #else
-        .navigationTitle("Timer queue")
+        .navigationTitle("Timers")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("About timers", systemImage: "info.circle") { showingHelp = true }
             }
         }
         #endif
+        .sheet(item: $editingTimer) { task in
+            NavigationStack { TimerEditorView(task: task) }
+        }
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
             Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nThe phone mirrors the last synced timer. Open Dash on iPhone once to start its Lock Screen Live Activity; updates need a connection. The Watch runs independently.")
         }
@@ -112,14 +122,23 @@ struct TimerQueueView: View {
                             .accessibilityIdentifier("timers.delete.\(task.id)")
                     }
             }
-            ForEach(store.ledger.waitingTimers) { task in
+            ForEach(watchWaitingTimers) { task in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title).font(.system(size: 19, weight: .medium)).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
                     Text(clock(task.duration)).font(.system(size: 23, design: .rounded).monospacedDigit())
                         .accessibilityIdentifier("timers.duration.\(task.id)")
-                }.foregroundStyle(.secondary).padding(.vertical, 2).id(task.id)
+                }.foregroundStyle(draggingTimer == task.id ? .primary : .secondary).padding(.vertical, 2).id(task.id)
+                    .background(GeometryReader { geometry in
+                        Color.clear.preference(key: TimerRowFrames.self, value: [task.id: geometry.frame(in: .named("timer.queue"))])
+                    })
+                    .listRowBackground(draggingTimer == task.id ? Color.mint.opacity(0.3) : Color.clear)
+                    .offset(y: draggingTimer == task.id ? dragY - (rowFrames[task.id]?.midY ?? dragY) : 0)
+                    .zIndex(draggingTimer == task.id ? 1 : 0)
+                    .simultaneousGesture(timerReorderGesture(task.id))
+                    .accessibilityAction(named: "Move earlier") { moveWaitingTimer(task.id, by: -1) }
+                    .accessibilityAction(named: "Move later") { moveWaitingTimer(task.id, by: 1) }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
@@ -138,7 +157,13 @@ struct TimerQueueView: View {
             NavigationLink(destination: TimerSettingsView()) {
                 Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
             }.id("settings").accessibilityIdentifier("timers.alarm-settings")
-        }.listStyle(.carousel).scrollDisabled(true)
+        }.listStyle(.carousel).scrollDisabled(true).coordinateSpace(name: "timer.queue")
+            .onPreferenceChange(TimerRowFrames.self) { rowFrames = $0 }
+            .onChange(of: reorderGestureActive) { _, active in
+                if !active, draggingTimer != nil {
+                    draggingTimer = nil; queueReorder = nil; suppressPageSwipeUntil = Date().addingTimeInterval(0.5)
+                }
+            }
             // Touch swipes navigate pages. Crown rotation scrolls rows without
             // the List's native vertical pan swallowing the return gesture.
             .focusable().focused($queueFocused).focusEffectDisabled()
@@ -149,17 +174,66 @@ struct TimerQueueView: View {
                 proxy.scrollTo(scrollIDs[index], anchor: .top)
             }
             .onAppear { queuePosition = 0; queueFocused = true }
-            .onDisappear { queueFocused = false }
+            .onDisappear { queueFocused = false; draggingTimer = nil; queueReorder = nil }
             // Up is navigation on this page, even when more rows remain.
             // The Digital Crown still scrolls the full queue; horizontal row
             // swipes retain their native Delete action.
             .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
-                if value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                if draggingTimer == nil, Date() > suppressPageSwipeUntil,
+                   value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
                     showCurrentTimer?()
                 }
             })
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
         }
+    }
+    private var watchWaitingTimers: [QueuedTimer] {
+        let waiting = store.ledger.waitingTimers
+        guard let order = queueReorder else { return waiting }
+        let tasks = Dictionary(uniqueKeysWithValues: waiting.map { ($0.id, $0) })
+        return order.compactMap { tasks[$0] } + waiting.filter { !order.contains($0.id) }
+    }
+    private func timerReorderGesture(_ id: String) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.4).sequenced(before: DragGesture(minimumDistance: 1, coordinateSpace: .named("timer.queue")))
+            .updating($reorderGestureActive) { value, active, _ in
+                switch value {
+                case .first(true), .second(true, _): active = true
+                default: break
+                }
+            }
+            .onChanged { value in
+                switch value {
+                case .first(true): beginTimerDrag(id)
+                case .second(true, let drag?):
+                    beginTimerDrag(id); dragY = drag.location.y
+                    guard var ids = queueReorder, let from = ids.firstIndex(of: id) else { return }
+                    for (target, other) in ids.enumerated() where other != id {
+                        guard let frame = rowFrames[other] else { continue }
+                        if (target < from && dragY < frame.midY) || (target > from && dragY > frame.midY) {
+                            ids.remove(at: from); ids.insert(id, at: target)
+                            withAnimation(.easeInOut(duration: 0.15)) { queueReorder = ids }
+                            break
+                        }
+                    }
+                default: break
+                }
+            }.onEnded { _ in
+                if let ids = queueReorder { do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription } }
+                draggingTimer = nil; queueReorder = nil; suppressPageSwipeUntil = Date().addingTimeInterval(0.5)
+            }
+    }
+    private func beginTimerDrag(_ id: String) {
+        guard draggingTimer == nil else { return }
+        draggingTimer = id; queueReorder = store.ledger.waitingTimers.map(\.id)
+        dragY = rowFrames[id]?.midY ?? 0
+        suppressPageSwipeUntil = Date().addingTimeInterval(60)
+        WKInterfaceDevice.current().play(.click)
+    }
+    private func moveWaitingTimer(_ id: String, by delta: Int) {
+        var ids = store.ledger.waitingTimers.map(\.id)
+        guard let from = ids.firstIndex(of: id), ids.indices.contains(from + delta) else { return }
+        ids.swapAt(from, from + delta)
+        do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription }
     }
     private var watchQueueScrollIDs: [String] {
         var ids = store.ledger.currentTimer.map { [$0.id] } ?? []
@@ -207,10 +281,23 @@ struct TimerQueueView: View {
     #endif
     #if !os(watchOS)
     private func queue(at now: Date) -> some View {
-            List {
+            let waiting = store.ledger.waitingTimers
+            return List {
+                Section {
+                    TextField("Task · 5 minutes unless specified", text: $draft, axis: .vertical)
+                        .focused($focused).submitLabel(.done).onSubmit(save)
+                        .accessibilityIdentifier("timers.draft")
+                    if !draft.isEmpty {
+                        Button("Add timer", action: save).disabled(!store.storageAvailable)
+                            .accessibilityIdentifier("timers.add")
+                    }
+                    if let inputError { Text(inputError).font(.caption).foregroundStyle(.red) }
+                }
                 if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                     Section("Now") {
-                        Text(task.title).font(.title3.weight(.semibold)).accessibilityIdentifier("timers.current")
+                        Button { editingTimer = task } label: {
+                            HStack { Text(task.title).font(.title3.weight(.semibold)).foregroundStyle(.primary); Spacer(); Image(systemName: "pencil").font(.caption) }
+                        }.accessibilityLabel(task.title).accessibilityIdentifier("timers.current")
                         if control.isFinished(at: now) {
                             Text("Finished").font(.title2.bold()).foregroundStyle(.orange)
                                 .accessibilityIdentifier("timers.finished")
@@ -221,67 +308,58 @@ struct TimerQueueView: View {
                             Text("Paused · \(clock(control.remaining(at: now)))")
                                 .font(.title2.monospacedDigit()).accessibilityIdentifier("timers.paused")
                         }
-                        if canControl {
+                        ProgressView(value: min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration))))
+                            .tint(control.isFinished(at: now) ? .orange : .mint).accessibilityIdentifier("timers.progress")
+                        HStack {
                             Button(doneTitle, systemImage: "checkmark") { act("done") }
                                 .buttonStyle(.borderedProminent).accessibilityIdentifier("timers.done")
-                            if control.isFinished(at: now) {
-                                Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
-                                    .accessibilityIdentifier("timers.restart")
-                            } else {
+                            Spacer()
+                            if !control.isFinished(at: now) {
                                 Button(control.pausedRemaining == nil ? "Pause" : "Resume", systemImage: control.pausedRemaining == nil ? "pause" : "play") {
                                     act(control.pausedRemaining == nil ? "pause" : "resume")
-                                }.accessibilityIdentifier("timers.pause-resume")
-                                Menu("More", systemImage: "ellipsis") {
-                                    Button("Restart") { act("restart") }
-                                    Button("Skip task") { remove(task.id) }
-                                }
+                                }.labelStyle(.iconOnly).accessibilityIdentifier("timers.pause-resume")
                             }
-                        } else {
-                            Text("Use your Watch for Done & Next, Restart, or Pause.").font(.caption).foregroundStyle(.secondary)
+                            Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
+                                .labelStyle(.iconOnly).accessibilityIdentifier("timers.restart")
                         }
-                        Text(control.onWatch ? "Running on Apple Watch · last synced state" : "Running on iPhone")
+                        Text(control.onWatch ? "Alerts on Apple Watch" : "Alerts on iPhone")
                             .font(.caption).foregroundStyle(.secondary)
+                    }.swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
+                            .accessibilityIdentifier("timers.delete.\(task.id)")
                     }.buttonStyle(.borderless)
                 } else if !store.ledger.waitingTimers.isEmpty {
-                    if canControl {
-                        Button("Start next task") { act("start") }.accessibilityIdentifier("timers.start")
-                    } else {
-                        Text("Start the next task on your Apple Watch.").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Section("Add a timer") {
-                    TextField("Task · 5 minutes unless specified", text: $draft, axis: .vertical)
-                        .focused($focused).submitLabel(.done).onSubmit(save)
-                        .accessibilityIdentifier("timers.draft")
-                    if !draft.isEmpty {
-                        Button("Queue timer", action: save).disabled(!store.storageAvailable)
-                            .accessibilityIdentifier("timers.add")
-                    }
-                    if let inputError { Text(inputError).font(.caption).foregroundStyle(.red) }
+                    Button("Start next task", systemImage: "play.fill") { act("start") }.accessibilityIdentifier("timers.start")
                 }
                 Section("Up next · \(store.ledger.waitingTimers.count)") {
                     if store.ledger.waitingTimers.isEmpty { Text("No queued tasks").foregroundStyle(.secondary) }
-                    ForEach(store.ledger.waitingTimers) { task in
-                        HStack(alignment: .top) {
+                    ForEach(waiting) { task in
+                        Button { editingTimer = task } label: {
+                        HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(task.title).accessibilityIdentifier("timers.waiting.\(task.id)")
                                 Text(clock(task.duration)).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Button("Delete", systemImage: "trash") { remove(task.id) }
-                                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                            Image(systemName: "pencil").font(.caption).foregroundStyle(.secondary)
+                        }.foregroundStyle(.primary)
+                        }.buttonStyle(.plain).swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                                 .accessibilityIdentifier("timers.delete.\(task.id)")
                         }
+                    }.onMove { offsets, destination in
+                        var ids = waiting.map(\.id); ids.move(fromOffsets: offsets, toOffset: destination)
+                        do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription }
                     }
                 }
                 if store.ledger.currentTimer != nil, !notifications.permissionGranted {
                     Button("Enable timer notifications") { requestAlerts() }.font(.caption)
                 }
-            }
+                NavigationLink("Timer settings", destination: TimerSettingsView())
+            }.toolbar { EditButton().accessibilityIdentifier("timers.reorder") }
     }
     #endif
     private var doneTitle: String { store.ledger.settings.timerAutoStartNext ? "Done & Next" : "Done" }
-    private var canControl: Bool { LedgerStore.isWatch || store.ledger.timerControl?.onWatch != true }
     private func clock(_ seconds: Double) -> String {
         let value = max(0, Int(seconds.rounded(.up)))
         return value >= 3600 ? String(format: "%d:%02d:%02d", value / 3600, (value % 3600) / 60, value % 60) : String(format: "%d:%02d", value / 60, value % 60)
@@ -350,6 +428,10 @@ struct TimerQueueView: View {
 }
 
 #if os(watchOS)
+private struct TimerRowFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] { [:] }
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue(), uniquingKeysWith: { _, new in new }) }
+}
 private struct CompactTimerButtonStyle: ButtonStyle {
     var prominent = false
     func makeBody(configuration: Configuration) -> some View {
@@ -360,6 +442,45 @@ private struct CompactTimerButtonStyle: ButtonStyle {
     }
 }
 #endif
+
+private struct TimerEditorView: View {
+    @EnvironmentObject private var store: LedgerStore
+    @Environment(\.dismiss) private var dismiss
+    let task: QueuedTimer
+    @State private var title: String
+    @State private var minutes: String
+    @State private var error: String?
+    init(task: QueuedTimer) {
+        self.task = task
+        _title = State(initialValue: task.title)
+        _minutes = State(initialValue: String(format: "%g", task.duration / 60))
+    }
+    var body: some View {
+        Form {
+            TextField("Task", text: $title, axis: .vertical).accessibilityIdentifier("timers.edit-title")
+            TextField("Minutes", text: $minutes)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+                .accessibilityIdentifier("timers.edit-minutes")
+            if store.ledger.currentTimer?.id == task.id {
+                Text("Changing the duration keeps time already elapsed.").font(.caption).foregroundStyle(.secondary)
+            }
+            if let error { Text(error).foregroundStyle(.red) }
+        }.navigationTitle("Edit timer")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        do {
+                            guard let value = Double(minutes.replacingOccurrences(of: ",", with: ".")) else { throw TimerQueueError.invalidDuration }
+                            try store.editTimer(task.id, title: title, duration: value * 60); dismiss()
+                        } catch { self.error = error.localizedDescription }
+                    }.accessibilityIdentifier("timers.edit-save")
+                }
+            }
+    }
+}
 
 struct TimerSettingsView: View {
     @EnvironmentObject private var store: LedgerStore
