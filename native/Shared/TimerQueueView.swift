@@ -51,7 +51,7 @@ struct TimerQueueView: View {
             NavigationStack { TimerEditorView(task: task) }
         }
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
-            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nThe phone mirrors the last synced timer. Open Dash on iPhone once to start its Lock Screen Live Activity; updates need a connection. The Watch runs independently.")
+            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Using timer controls or changing the running duration makes this device responsible for alerts. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
         }
         .task {
             store.refreshTimerSupport(force: true); await notifications.refreshStatus()
