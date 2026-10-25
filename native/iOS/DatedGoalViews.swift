@@ -30,19 +30,19 @@ struct TaskPlanningView: View {
         NavigationStack {
             Form {
                 Section {
-                    InlineEntryText(text: current.text, identifier: "task-planning.title") {
+                    InlineEntryText(text: current.text, identifier: "task-planning.title", displayLineLimit: nil) {
                         try store.updateCaptureText(capture, text: $0)
                     }
                     if let loggedMinutes { Text("Time logged: \(store.duration(loggedMinutes))").font(.subheadline).accessibilityIdentifier("task-planning.logged") }
                 }
                 Section("Categories") {
-                    CaptureCategoryButton(capture: current, identifier: "task-planning.categories")
+                    CaptureCategoryButton(capture: current, identifier: "task-planning.categories", showsAllCategories: true)
                     if let suggestion = current.categorySuggestion {
                         Text("Suggested · " + suggestion.reason).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Section("Notes") {
-                    InlineEntryText(text: current.notes ?? "", identifier: "task-planning.notes", allowEmpty: true) {
+                    InlineEntryText(text: current.notes ?? "", identifier: "task-planning.notes", allowEmpty: true, displayLineLimit: nil) {
                         try store.updateCapture(current, text: current.text, notes: $0)
                     }
                 }
