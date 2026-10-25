@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-checks-${{ github.ref }}
+  group: native-checks-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   watch-ui:
