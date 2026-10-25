@@ -2,14 +2,15 @@
 
 ## Timer queue
 
-The first queued task starts immediately. Further tasks wait in creation order.
+The first queued task starts immediately. Further tasks wait in queue order
+(creation order until you rearrange upcoming timers).
 Expiry never advances the queue: Done & Next completes the current task and
 starts the next; Restart repeats the original duration. Pause preserves the
 remaining time. Timers do not create activity logs or alter Inbox rankings.
 
 Timer settings includes **Start next after Done**, enabled by default. Turning
 it off completes the current task without starting another; **Start next task**
-then begins the oldest waiting task. Capturing another task during this wait
+then begins the first waiting task. Capturing another task during this wait
 does not start the queue. This setting uses shared settings revisions/sync and
 backups. Old files default to the previous automatic-next behavior.
 
