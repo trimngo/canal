@@ -14,7 +14,7 @@ concurrency:
 jobs:
   watch-ui:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -24,21 +24,29 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
       - name: Test direct Watch logging
-        run: bash native/scripts/test-watch-ui.sh
+        timeout-minutes: 30
+        run: |
+          mkdir -p native/build
+          set -o pipefail
+          bash native/scripts/test-watch-ui.sh 2>&1 | tee native/build/watch-validation.log
       - name: Export Watch interface review
         if: always()
         run: |
-          if [ -d native/build/WatchUITests.xcresult ]; then
+          if [ -f native/build/WatchUITests.xcresult/Info.plist ]; then
             mkdir -p native/build/watch-ui-review
             xcrun xcresulttool get test-results summary --path native/build/WatchUITests.xcresult > native/build/watch-ui-review/summary.json
             xcrun xcresulttool export attachments --path native/build/WatchUITests.xcresult --output-path native/build/watch-ui-attachments
             python3 native/scripts/export-ui-review.py native/build/watch-ui-attachments native/build/watch-ui-review
+          elif [ -d native/build/WatchUITests.xcresult ]; then
+            echo '::warning::Watch result bundle was interrupted before completion; see watch-validation.log.'
           fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-watch-ui-review
-          path: native/build/watch-ui-review
+          path: |
+            native/build/watch-ui-review
+            native/build/watch-validation.log
           retention-days: 7
   build:
     runs-on: macos-15

@@ -347,6 +347,7 @@ final class TimeLedgerUITests: XCTestCase {
         showToday(app)
         let log = app.buttons["today.log"]
         XCTAssertTrue(log.waitForExistence(timeout: 5)); log.tap()
+        XCTAssertTrue(app.navigationBars["Log"].waitForExistence(timeout: 10))
     }
 
     private func openLogs(_ app: XCUIApplication) {
@@ -597,15 +598,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-reminders-fixture"]; app.launch()
         app.tabBars.buttons["Settings"].tap(); app.buttons["settings.reminders"].tap()
-        let allow = app.buttons["reminders.allow"]
-        for _ in 0..<3 {
-            if app.buttons["reminders.create"].exists { break }
-            if allow.waitForExistence(timeout: 2) { allow.tap() }
-            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            let permission = springboard.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Allow")).firstMatch
-            if permission.waitForExistence(timeout: 3) { permission.tap() }
-            if app.buttons["reminders.create"].waitForExistence(timeout: 3) { break }
-        }
+        allowReminders(in: app)
         let create = app.buttons["reminders.create"]
         XCTAssertTrue(create.waitForExistence(timeout: 10)); create.tap()
         let importNow = app.buttons["reminders.import"]
@@ -1230,6 +1223,15 @@ final class TimeLedgerUITests: XCTestCase {
             let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@ OR value == %@", value, value), object: picker)
             XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
         }
+        func saveNotifications(_ button: XCUIElement) {
+            reveal(button, in: app)
+            button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let allow = springboard.alerts.buttons["Allow"]
+            if allow.waitForExistence(timeout: 3) { allow.tap() }
+            let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: button)
+            XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 15), .completed)
+        }
 
         app.tabBars.buttons["Settings"].tap()
         let timing = element(app, "settings.notification-timing")
@@ -1242,14 +1244,14 @@ final class TimeLedgerUITests: XCTestCase {
         interval.tap(); app.buttons["20 minutes"].tap()
         let explanation = element(app, "settings.notification-explanation")
         XCTAssertTrue(explanation.label.contains("13.3–26.7"))
-        let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
+        let save = app.buttons["settings.save-notifications"]; saveNotifications(save)
         recordScreen("RandomizedNotificationSettings", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); app.tabBars.buttons["Settings"].tap()
         assertPicker(timing, contains: "Randomized")
         assertPicker(interval, contains: "20 minutes")
         timing.tap(); app.buttons["Regular"].tap()
         assertPicker(interval, contains: "30 minutes")
-        reveal(save, in: app); save.tap()
+        saveNotifications(save)
         app.terminate(); app.launch(); app.tabBars.buttons["Settings"].tap()
         assertPicker(interval, contains: "30 minutes")
         assertPicker(timing, contains: "Regular")
@@ -1623,7 +1625,8 @@ final class TimeLedgerUITests: XCTestCase {
     func testCategorySearchKeepsHierarchyAndSelectionsAndCanCreateFromNoResults() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-allocation-fixture", "--ui-category-outline"]; app.launch()
         openLogPage(app)
-        let field = element(app, "checkin.activity"); field.tap(); field.typeText("Activity to categorize")
+        let field = element(app, "checkin.activity")
+        XCTAssertTrue(field.waitForExistence(timeout: 10)); field.tap(); field.typeText("Activity to categorize")
         let picker = element(app, "checkin.category"); reveal(picker, in: app); picker.tap()
         let search = app.textFields["category-search.field"]
         search.tap(); search.typeText("guitar")
@@ -1786,13 +1789,7 @@ final class TimeLedgerUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-reminders-fixture", "--ui-reminders-save-failure"]; app.launch()
         app.tabBars.buttons["Settings"].tap(); app.buttons["settings.reminders"].tap()
-        let allow = app.buttons["reminders.allow"]
-        if allow.waitForExistence(timeout: 2) {
-            allow.tap()
-            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            let permission = springboard.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Allow")).firstMatch
-            if permission.waitForExistence(timeout: 5) { permission.tap() }
-        }
+        allowReminders(in: app)
         app.buttons["reminders.create"].tap()
         let importNow = app.buttons["reminders.import"]; reveal(importNow, in: app)
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importNow)
@@ -2082,6 +2079,19 @@ final class TimeLedgerUITests: XCTestCase {
             let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
             XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         }
+    }
+
+    private func allowReminders(in app: XCUIApplication) {
+        let allow = app.buttons["reminders.allow"]
+        for _ in 0..<3 {
+            if app.buttons["reminders.create"].exists { break }
+            if allow.waitForExistence(timeout: 2) { allow.tap() }
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let permission = springboard.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Allow")).firstMatch
+            if permission.waitForExistence(timeout: 3) { permission.tap() }
+            if app.buttons["reminders.create"].waitForExistence(timeout: 3) { break }
+        }
+        XCTAssertTrue(app.buttons["reminders.create"].waitForExistence(timeout: 10))
     }
 
     private func assertPendingReminders(_ count: Int, in app: XCUIApplication) {
@@ -2821,7 +2831,9 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("IdeaReviewInlineDetails", in: app)
         app.buttons["idea-review.save-next"].tap()
         XCTAssertEqual(element(app, "idea-review.position").label, "2 of 6")
-        let done = app.buttons["idea-review.done"]; reveal(done, in: app); done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        let done = app.buttons["idea-review.done"]; reveal(done, in: app)
+        done.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "3 of 6"), object: element(app, "idea-review.position"))
         XCTAssertEqual(XCTWaiter.wait(for: [advanced], timeout: 5), .completed)
         app.buttons["idea-review.delete"].tap()

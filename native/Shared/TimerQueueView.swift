@@ -24,12 +24,14 @@ struct TimerQueueView: View {
     @ObservedObject private var alarm = WatchTimerAlarm.shared
     #endif
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+        Group {
             #if os(watchOS)
-            if watchShowsQueue { watchQueue(at: timeline.date) }
-            else { watchCurrentTimer(at: timeline.date) }
+            if watchShowsQueue { watchQueue() }
+            else {
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in watchCurrentTimer(at: timeline.date) }
+            }
             #else
-            queue(at: timeline.date)
+            TimelineView(.periodic(from: Date(), by: 1)) { timeline in queue(at: timeline.date) }
             #endif
         }
         #if os(watchOS)
@@ -105,17 +107,21 @@ struct TimerQueueView: View {
                 }
             })
     }
-    private func watchQueue(at now: Date) -> some View {
+    private func watchQueue() -> some View {
         let waiting = store.ledger.waitingTimers
         return List {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
+                // Keep countdown updates inside this fixed row. Refreshing the
+                // entire List every second interferes with native row dragging.
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(task.title).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                         .accessibilityIdentifier("timers.queue-current")
-                    Text(control.isFinished(at: now) ? "Now · Finished" : "Now · " + clock(control.remaining(at: now)))
+                    Text(control.isFinished(at: timeline.date) ? "Now · Finished" : "Now · " + clock(control.remaining(at: timeline.date)))
                         .font(.system(size: 13, design: .rounded).monospacedDigit())
                         .foregroundStyle(.mint)
-                }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }.frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                }
                     .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .moveDisabled(true)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -130,7 +136,7 @@ struct TimerQueueView: View {
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
                     Text(clock(task.duration)).font(.system(size: 13, design: .rounded).monospacedDigit())
                         .accessibilityIdentifier("timers.duration.\(task.id)")
-                }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .contentShape(Rectangle())
                     .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .accessibilityAction(named: "Move earlier") { moveWaitingTimer(task.id, by: -1) }
@@ -160,7 +166,7 @@ struct TimerQueueView: View {
             Button("Watch Home") { store.showingTimerQueue = false }
                 .accessibilityIdentifier("timers.watch-home")
         }.listStyle(.plain)
-            .environment(\.defaultMinListRowHeight, 44)
+            .environment(\.defaultMinListRowHeight, 40)
             .contentMargins(.vertical, 0, for: .scrollContent)
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
     }

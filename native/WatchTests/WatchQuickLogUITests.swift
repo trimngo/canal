@@ -117,7 +117,7 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(lastDuration.isHittable)
         XCTAssertLessThan(lastDuration.frame.maxY, app.frame.maxY)
         record("WatchThreeCompactTimerRows", app)
-        let extra = app.staticTexts["timers.waiting.timer-extra-5"]
+        let extra = app.staticTexts["timers.waiting.timer-extra-8"]
         for _ in 0..<6 {
             if extra.isHittable { break }
             app.swipeUp()
@@ -210,7 +210,7 @@ final class WatchQuickLogUITests: XCTestCase {
         if app.alerts.buttons["Allow"].waitForExistence(timeout: 1) { app.alerts.buttons["Allow"].tap() }
     }
     override func tearDownWithError() throws {
-        if testRun?.hasSucceeded == false {
+        if (testRun?.totalFailureCount ?? 0) > 0 {
             let app = XCUIApplication()
             record("WatchQuickLogFailure", app)
             // These tests run only synthetic capture data on unsigned simulators.
