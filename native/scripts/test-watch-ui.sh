@@ -30,4 +30,4 @@ xcrun simctl bootstatus "$WATCH_DEVICE_ID" -b
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch \
   -destination "platform=watchOS Simulator,id=$WATCH_DEVICE_ID" -derivedDataPath build \
   -resultBundlePath build/WatchUITests.xcresult CODE_SIGNING_ALLOWED=NO \
-  -parallel-testing-enabled NO -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testQueueCanDeleteAnyTimerAndDeletingCurrentWaitsForStart -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testTimerExpiryHasDirectDoneAndRestartAndKeepsQueueAfterRelaunch -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testWatchHomeCanAddATimerInOneTap test
+  -parallel-testing-enabled NO test
