@@ -8,6 +8,16 @@ from crash_diagnostics import AppleAPI, NoRedirect, collect, collect_build_statu
 
 
 class DiagnosticPrivacyTests(unittest.TestCase):
+    def test_crash_build_is_numeric_and_does_not_expose_header(self):
+        result = summarize("Process: PrivatePerson\nVersion: 1.0 (77)\nEXC_CRASH\n")
+        self.assertEqual(result["version"], "1.0")
+        self.assertEqual(result["build"], "77")
+        self.assertNotIn("PrivatePerson", json.dumps(result))
+        modern = summarize('{"bundleInfo":{"CFBundleVersion":"76"},"email":"private@example.com"}')
+        self.assertEqual(modern["build"], "76")
+        self.assertNotIn("private@example.com", json.dumps(modern))
+        self.assertNotIn("build", summarize('Version: secret (private)\n"CFBundleVersion":"private"'))
+
     def test_report_content_cannot_appear_in_summary(self):
         private = "tester@example.com PRIVATE_KEY_FIXTURE My private activity /Users/PrivatePerson"
         log = private + " EXC_BREAKPOINT _dispatch_assert_queue_fail CompanionSync LedgerStore"
