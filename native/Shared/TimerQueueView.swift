@@ -9,6 +9,7 @@ struct TimerQueueView: View {
     @State private var draft = ""
     @State private var inputError: String?
     @State private var inputOpen = false
+    @State private var inputRequest = UUID()
     @State private var showingHelp = false
     @FocusState private var focused: Bool
     @ObservedObject private var notifications = NotificationScheduler.shared
@@ -142,7 +143,7 @@ struct TimerQueueView: View {
                                 .frame(width: 42, height: 42).background(.mint, in: Circle())
                                 .shadow(color: .black.opacity(0.5), radius: 4)
                         }.buttonStyle(.plain).accessibilityLabel("Add timer")
-                            .disabled(inputOpen || !store.storageAvailable).accessibilityIdentifier("timers.dictate")
+                            .disabled(!store.storageAvailable).accessibilityIdentifier("timers.dictate")
                             .padding(.trailing, 6).padding(.bottom, 4)
                     }
             }
@@ -260,15 +261,23 @@ struct TimerQueueView: View {
     }
     #if os(watchOS)
     private func dictate() {
-        guard !inputOpen else { return }
+        // A system presentation can be dropped during a Watch page transition.
+        // If that happens, another tap can recover instead of leaving + locked.
+        let request = UUID(); inputRequest = request
+        if inputOpen { WKApplication.shared().visibleInterfaceController?.dismissTextInputController() }
         store.timerDictationRequested = false; inputOpen = true
+        inputError = nil
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-timer-dictation") {
             draft = "Practice guitar for twenty minutes"; inputOpen = false; save(); return
         }
         #endif
         Task { @MainActor in
+            // Let the button's state update and page transition finish before
+            // asking WatchKit to present its system text-entry controller.
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
             for _ in 0..<20 {
+                guard inputRequest == request, !Task.isCancelled else { return }
                 if WKApplication.shared().applicationState == .active, let controller = WKApplication.shared().visibleInterfaceController {
                     var suggestions: [String]?
                     #if DEBUG
@@ -277,6 +286,7 @@ struct TimerQueueView: View {
                     // Present directly from the main timer screen. A SwiftUI sheet
                     // above the hosting controller would cover this system input UI.
                     controller.presentTextInputController(withSuggestions: suggestions, allowedInputMode: .plain) { results in
+                        guard inputRequest == request else { return }
                         inputOpen = false
                         if let text = results?.first as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { draft = text; save() }
                     }
@@ -284,6 +294,7 @@ struct TimerQueueView: View {
                 }
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { inputOpen = false; return }
             }
+            guard inputRequest == request else { return }
             inputOpen = false; inputError = "Input is not ready. Tap Add timer to try again."
         }
     }
