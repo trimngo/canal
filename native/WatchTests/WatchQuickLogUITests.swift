@@ -123,7 +123,7 @@ final class WatchQuickLogUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(extra.isHittable)
-        XCTAssertTrue(app.buttons["timers.current-page"].isHittable)
+        XCTAssertTrue(app.buttons["timers.current-page"].exists)
         XCTAssertFalse(app.staticTexts["timers.current"].exists)
         record("WatchQueueTouchScrolled", app)
         swipeTimerPage(app, toQueue: false)
@@ -189,7 +189,10 @@ final class WatchQuickLogUITests: XCTestCase {
     private func swipeTimerPage(_ app: XCUIApplication, toQueue: Bool) {
         if !toQueue {
             let back = app.buttons["timers.current-page"]
-            XCTAssertTrue(back.waitForExistence(timeout: 5)); back.tap()
+            XCTAssertTrue(back.waitForExistence(timeout: 5))
+            // watchOS exposes a non-hittable accessibility wrapper around the
+            // toolbar button. Exercise its actual on-screen touch target.
+            back.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 5) || app.buttons["timers.start"].exists)
             return
         }
@@ -199,8 +202,7 @@ final class WatchQuickLogUITests: XCTestCase {
         let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
         from.press(forDuration: 0.01, thenDragTo: to)
         XCTAssertTrue(app.buttons["timers.current-page"].waitForExistence(timeout: 5))
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: app.buttons["timers.current-page"])
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForNonExistence(timeout: 5))
     }
     private func allowTimerNotifications(_ app: XCUIApplication) {
         let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")

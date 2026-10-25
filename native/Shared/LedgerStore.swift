@@ -705,7 +705,15 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.saveAllocationPlan(values, writer: writer); try commit(draft)
     }
     func updateAllocationGoal(categoryID: String, percentage: Double?) throws {
-        var draft = ledger; try draft.updateAllocationGoal(categoryID: categoryID, percentage: percentage, writer: writer)
+        var now = Date()
+        #if DEBUG
+        // The daily-goal UI fixture renders this frozen instant. Its edits must
+        // use the same clock rather than creating budgets in the fixture's future.
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
+            now = ISO8601DateFormatter().date(from: "2026-10-22T17:30:00Z")!
+        }
+        #endif
+        var draft = ledger; try draft.updateAllocationGoal(categoryID: categoryID, percentage: percentage, writer: writer, at: now)
         if draft != ledger { try commit(draft) }
     }
     func setCategoryFavorites(_ ids: Set<String>, favorite: Bool) throws {

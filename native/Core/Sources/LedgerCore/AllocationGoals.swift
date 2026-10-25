@@ -71,12 +71,12 @@ extension Ledger {
 
     /// Read the latest goals so finishing one field never overwrites another
     /// field that arrived from sync while the user was typing.
-    public mutating func updateAllocationGoal(categoryID: String, percentage: Double?, writer: String) throws {
+    public mutating func updateAllocationGoal(categoryID: String, percentage: Double?, writer: String, at date: Date = Date()) throws {
         guard categories.contains(where: { $0.id == categoryID }) else { throw LedgerError.invalidCategory }
         guard children(of: categoryID).isEmpty else { throw PlannerError.calculatedGoal }
-        var goals = editableAllocationGoals()
+        var goals = editableAllocationGoals(at: date)
         if let percentage { goals[categoryID] = percentage } else { goals.removeValue(forKey: categoryID) }
-        try saveAllocationGoals(goals, writer: writer)
+        try saveAllocationGoals(goals, effectiveAt: date, writer: writer)
     }
 
     public func goalPercentage(for id: String, from period: AllocationPeriod) -> Double? {
