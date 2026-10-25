@@ -52,7 +52,7 @@ jobs:
     runs-on: macos-15
     # Run every UI test, spread across bounded jobs. A single runner completed
     # only 24 of 120 tests before the previous 30-minute limit.
-    timeout-minutes: 45
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -72,7 +72,8 @@ jobs:
           ruby -c native/fastlane/Fastfile
           python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
       - name: Test core and build iPhone and Watch apps
-        timeout-minutes: 35
+        # Cold simulator startup has taken 11 minutes before tests begin.
+        timeout-minutes: 45
         env:
           LEDGER_UI_TESTS: '1'
           LEDGER_UI_TEST_SHARD: ${{ matrix.shard }}

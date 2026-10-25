@@ -43,5 +43,7 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
-    -parallel-testing-enabled NO "${UI_TEST_SELECTION[@]}" test
+    -parallel-testing-enabled NO -test-timeouts-enabled YES \
+    -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600 \
+    "${UI_TEST_SELECTION[@]}" test
 fi

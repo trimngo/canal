@@ -188,7 +188,7 @@ final class WatchQuickLogUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
     private func swipeTimerPage(_ app: XCUIApplication, toQueue: Bool) {
         if !toQueue {
-            let back = app.buttons["timers.current-page"]
+            let back = app.buttons["timers.current-page"].firstMatch
             XCTAssertTrue(back.waitForExistence(timeout: 5))
             // watchOS exposes a non-hittable accessibility wrapper around the
             // toolbar button. Exercise its actual on-screen touch target.
