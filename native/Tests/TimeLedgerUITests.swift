@@ -12,6 +12,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(current.waitForExistence(timeout: 20)); XCTAssertEqual(current.label, "Eat food")
     }
     func testTimersHaveOwnTabCanCreateEditReorderAndPersist() {
+        continueAfterFailure = false
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(app.tabBars.buttons["Timers"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.tabBars.buttons["More"].exists)
@@ -22,15 +23,20 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["timers.reorder"].tap()
         let walkCell = app.cells.containing(.any, identifier: "timers.waiting.timer-walk").firstMatch
         let emailCell = app.cells.containing(.any, identifier: "timers.waiting.timer-email").firstMatch
-        let from = walkCell.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5))
-        let to = emailCell.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.2))
+        let handle = walkCell.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Reorder")).firstMatch
+        XCTAssertTrue(handle.waitForExistence(timeout: 5))
+        recordScreen("PhoneTimerReorderHandles", in: app)
+        let from = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let to = emailCell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
         from.press(forDuration: 0.5, thenDragTo: to)
         app.buttons["timers.reorder"].tap()
+        XCTAssertLessThan(walk.frame.minY, email.frame.minY)
         reveal(app.buttons["timers.done"], in: app); app.buttons["timers.done"].tap()
         XCTAssertEqual(element(app, "timers.current").label, "Take a walk")
         element(app, "timers.current").tap()
         let title = element(app, "timers.edit-title"); XCTAssertTrue(title.waitForExistence(timeout: 5))
-        title.tap(); title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "Take a walk".count) + "Walk outside")
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40) + "Walk outside")
         let minutes = app.textFields["timers.edit-minutes"]; minutes.tap()
         minutes.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (minutes.value as? String ?? "").count) + "8")
         app.buttons["timers.edit-save"].tap()
@@ -47,13 +53,15 @@ final class TimeLedgerUITests: XCTestCase {
         let tea = app.staticTexts["Make tea"]; reveal(tea, in: app); XCTAssertTrue(tea.exists)
     }
     func testInboxCaptureCanReturnToTimersTab() {
+        continueAfterFailure = false
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
         XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 20))
         openInbox(app, capture: true)
         let field = element(app, "inbox.text"); XCTAssertTrue(field.waitForExistence(timeout: 10)); field.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        let done = app.buttons["keyboard.done"].firstMatch
-        XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+        app.navigationBars["Inbox"].tap()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         let timers = app.tabBars.buttons["Timers"]
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: timers)
         XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 10), .completed)
