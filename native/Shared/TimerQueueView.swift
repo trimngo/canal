@@ -133,7 +133,7 @@ struct TimerQueueView: View {
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: TimerRowFrames.self, value: [task.id: geometry.frame(in: .named("timer.queue"))])
                     })
-                    .listRowBackground(draggingTimer == task.id ? Color.mint.opacity(0.3) : Color.clear)
+                    .listRowBackground(draggingTimer == task.id ? Color.mint.opacity(0.3) : nil)
                     .offset(y: draggingTimer == task.id ? dragY - (rowFrames[task.id]?.midY ?? dragY) : 0)
                     .zIndex(draggingTimer == task.id ? 1 : 0)
                     .simultaneousGesture(timerReorderGesture(task.id))

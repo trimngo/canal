@@ -37,6 +37,16 @@ struct TimeLedgerApp: App {
                             }
                         }
                     }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-siri-timers") {
+                        do {
+                            for text in ["Eat food", "Cook food for ten minutes"] {
+                                if let task = try await SpokenTimerTaskQuery().entities(matching: text).first {
+                                    var intent = QueueSpokenTimerIntent(); intent.task = task
+                                    _ = try await intent.perform()
+                                }
+                            }
+                        } catch { store.report(error) }
+                    }
                     #endif
                 }
                 .onChange(of: scenePhase) { _, phase in
