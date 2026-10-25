@@ -183,6 +183,7 @@ final class FocusTasksTests: XCTestCase {
         }
         ledger.captures[0].snoozedUntil = date("2026-10-27T08:00:00Z")
         XCTAssertEqual(ledger.taskPacingStart(for: ledger.captures[0]), date("2026-10-25T07:00:00Z"))
+        XCTAssertTrue(ledger.inboxExport.text.contains("Work starts: 2026-10-25T07:00:00Z"))
         try ledger.setTaskPlan("prep", estimatedMinutes: 240, startDate: start, writer: "p")
         XCTAssertEqual(ledger.taskPacingStart(for: ledger.captures[0]), start)
     }
