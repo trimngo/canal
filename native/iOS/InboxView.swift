@@ -18,6 +18,7 @@ struct InboxView: View {
     @State private var showBacklog = false
     @State private var showSnoozed = false
     @State private var snoozing: Capture?
+    @State private var editingCapture: Capture?
     @State private var copiedIdeaCount: Int?
     private var snoozed: [Capture] { store.ledger.snoozedCaptures(at: clock) }
     private var ranked: [Capture] { store.inbox.ranked }
@@ -105,7 +106,7 @@ struct InboxView: View {
                     if !urgent.isEmpty {
                         Section {
                             ForEach(urgent) { capture in
-                                InboxCaptureRow(capture: capture, onSnooze: {
+                                InboxCaptureRow(capture: capture, onEdit: { endInput(); editingCapture = $0 }, onSnooze: {
                                     endInput(); snoozing = $0
                                 }, isUrgentSection: true)
                             }
@@ -200,6 +201,7 @@ struct InboxView: View {
                     if !presented { withAnimation { proxy.scrollTo("inbox.capture", anchor: .top) } }
                 }
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
+                .sheet(item: $editingCapture) { TaskPlanningView(capture: $0) }
                 .sheet(item: $categorizing) { CaptureCategoryReviewView(captureIDs: $0.captureIDs) }
                 .sheet(isPresented: $showingCategories) { InboxCategoriesView() }
                 .toolbar {
@@ -265,7 +267,7 @@ struct InboxView: View {
             "New ideas reviewed. Backlog review is optional; this list isn't a verified ranking of every idea."
     }
     private func captureRow(_ capture: Capture) -> some View {
-        InboxCaptureRow(capture: capture, onSnooze: {
+        InboxCaptureRow(capture: capture, onEdit: { endInput(); editingCapture = $0 }, onSnooze: {
             focused = false; searchFocused = false; snoozing = $0
         })
     }
@@ -282,9 +284,9 @@ struct InboxView: View {
 struct InboxCaptureRow: View {
     @EnvironmentObject private var store: LedgerStore
     let capture: Capture
+    let onEdit: (Capture) -> Void
     let onSnooze: (Capture) -> Void
     var isUrgentSection = false
-    @State private var editing = false
     private var prefix: String { isUrgentSection ? "inbox.urgent" : "inbox" }
     private var urgency: InboxUrgency? { store.ledger.urgency(for: capture) }
     private var categoryNames: [String] {
@@ -304,7 +306,7 @@ struct InboxCaptureRow: View {
                 InlineEntryText(text: capture.text, identifier: "\(prefix).details.\(capture.id)") {
                     try store.updateCaptureText(capture, text: $0)
                 }
-                Button { editing = true } label: {
+                Button { onEdit(capture) } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
                             Text(summary).font(.caption).foregroundStyle(urgency == nil ? Color.secondary : .orange)
@@ -332,9 +334,7 @@ struct InboxCaptureRow: View {
                 }.buttonStyle(.plain).accessibilityHint("Open all item details")
                     .accessibilityIdentifier("\(prefix).edit.\(capture.id)")
             }.frame(maxWidth: .infinity, alignment: .leading)
-        }.padding(.vertical, 2).contentShape(Rectangle())
-            .onTapGesture { editing = true }
-            .sheet(isPresented: $editing) { TaskPlanningView(capture: capture) }
+        }.padding(.vertical, 2)
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     do { try store.deleteCapture(capture) } catch { store.report(error) }

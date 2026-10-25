@@ -17,6 +17,7 @@ struct CategoryDetailView: View {
     let request: CategoryDetailRequest
     @State private var showingLogs = false
     @State private var snoozing: Capture?
+    @State private var editingCapture: Capture?
     @State private var categorizing: CaptureCategoryReviewRequest?
     @State private var showOtherLists = false
     @State private var progress: [DatedGoalProgress] = []
@@ -97,10 +98,11 @@ struct CategoryDetailView: View {
                         rangeStart: request.start, rangeEnd: request.end, allTime: request.allTime, directOnly: request.directOnly)
                 }
                 .sheet(item: $snoozing) { CaptureSnoozeView(capture: $0) }
+                .sheet(item: $editingCapture) { TaskPlanningView(capture: $0) }
                 .sheet(item: $categorizing) { CaptureCategoryReviewView(captureIDs: $0.captureIDs) }
         }
     }
     private func ideaRow(_ capture: Capture) -> some View {
-        InboxCaptureRow(capture: capture, onSnooze: { snoozing = $0 })
+        InboxCaptureRow(capture: capture, onEdit: { editingCapture = $0 }, onSnooze: { snoozing = $0 })
     }
 }
