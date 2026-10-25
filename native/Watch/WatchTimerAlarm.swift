@@ -10,6 +10,7 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
     @Published private(set) var status = ""
     @Published private(set) var needsAlarmUpdate = false
     private var session: WKExtendedRuntimeSession?
+    private weak var notifiedSession: WKExtendedRuntimeSession?
     private var token: String?
     private let scheduledKey = "timers.watch-alarm.scheduled"
     private let scheduledDueKey = "timers.watch-alarm.due"
@@ -120,7 +121,7 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
         value.delegate = self
         if value.state == .running { ring(value) }
     }
-    private func ring(_ value: WKExtendedRuntimeSession) {
+    private func ring(_ value: WKExtendedRuntimeSession, updateHaptics: Bool = false) {
         guard value === session, value.state == .running else { return }
         let store = LedgerStore.shared
         let requested = requestedControl(store.ledger, writer: store.writer)
@@ -136,6 +137,9 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
             needsAlarmUpdate = true
             status = "Previous Watch timer · open Dash to apply phone changes"
         }
+        let firstAlert = notifiedSession !== value
+        guard firstAlert || updateHaptics else { return }
+        notifiedSession = value
         // Every managed running session alerts, even if a phone edit made it
         // stale while background cancellation was forbidden by WatchKit.
         let pattern = preferences.string(forKey: "timers.haptic-pattern") ?? "standard"
@@ -143,9 +147,11 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
         let saved = preferences.double(forKey: "timers.haptic-repeat")
         let interval = saved.isFinite && saved > 0 ? min(60, max(1, saved)) : 3
         value.notifyUser(hapticType: type) { _ in interval }
-        store.openTimers()
+        // Queue/settings views refresh alarm support when they appear. The
+        // system already repeats the haptic; do not navigate away on refresh.
+        if firstAlert { store.openTimers() }
     }
-    func refreshHaptics() { if let session, session.state == .running { ring(session) } }
+    func refreshHaptics() { if let session, session.state == .running { ring(session, updateHaptics: true) } }
     nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
         Task { @MainActor in self.ring(extendedRuntimeSession) }
     }

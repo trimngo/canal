@@ -60,6 +60,8 @@ Physical-device checks still needed:
 
 1. Queue a one-minute task and a second task, turn the phone off, and lower the
    wrist. Verify repeating expiry haptics, Stop/Open, Restart, and Done & Next.
+   While the alarm repeats, open the queue and timer settings; refreshes and
+   haptic changes must keep those screens open instead of returning to the timer.
 2. Reopen after the app leaves the foreground and verify the persisted deadline
    and queue. Check system cancellation/reboot behavior; do not assume a force
    quit or reboot preserves a scheduled system alarm.
