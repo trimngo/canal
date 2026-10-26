@@ -22,11 +22,6 @@ struct TimerQueueView: View {
     #endif
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
-    @State private var queueAtTop = true
-    @State private var queueRestingTop: CGFloat?
-    @GestureState private var queueSwipeStart: WatchQueueSwipeStart? = nil
-    @State private var dialFrame = CGRect.null
-    @State private var mainDragStartedInDial: Bool?
     #endif
     var body: some View {
         Group {
@@ -102,8 +97,6 @@ struct TimerQueueView: View {
         }.frame(maxWidth: .infinity, minHeight: geometry.size.height)
             .padding(.horizontal, 8).padding(.bottom, 4)
         }.background(.black)
-            .onPreferenceChange(WatchTimerDialFrameKey.self) { dialFrame = $0 }
-            .simultaneousGesture(showQueueGesture)
             .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
         }
     }
@@ -111,19 +104,6 @@ struct TimerQueueView: View {
         Text(title).font(.system(size: 20, weight: .semibold))
             .multilineTextAlignment(.center).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity).accessibilityIdentifier(identifier)
-    }
-    private var showQueueGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .global)
-            .onChanged { value in
-                if mainDragStartedInDial == nil {
-                    mainDragStartedInDial = dialFrame.contains(value.startLocation) || (store.ledger.currentTimer == nil && store.ledger.waitingTimers.isEmpty)
-                }
-            }.onEnded { value in
-                defer { mainDragStartedInDial = nil }
-                if mainDragStartedInDial == true, value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
-                    showTimerQueue?()
-                }
-            }
     }
     private func watchQueue() -> some View {
         let waiting = store.ledger.waitingTimers
@@ -141,7 +121,6 @@ struct TimerQueueView: View {
                         .foregroundStyle(.mint)
                 }.frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 }
-                    .background(queueTopMarker(id: task.id))
                     .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .moveDisabled(true)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -158,9 +137,6 @@ struct TimerQueueView: View {
                     Text(clock(task.duration)).font(.system(size: 13, design: .rounded).monospacedDigit())
                         .accessibilityIdentifier("timers.duration.\(task.id)")
                 }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-                    .background {
-                        if store.ledger.currentTimer == nil, task.id == waiting.first?.id { queueTopMarker(id: task.id) }
-                    }
                     .contentShape(Rectangle())
                     .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .accessibilityAction(named: "Move earlier") { moveWaitingTimer(task.id, by: -1) }
@@ -187,36 +163,15 @@ struct TimerQueueView: View {
                 Button("OK") { inputError = nil }
             } message: { Text(inputError ?? "") }
     }
-    private func queueTopMarker(id: String) -> some View {
-        GeometryReader { geometry in
-            let top = geometry.frame(in: .global).minY
-            Color.clear
-                .onAppear { updateQueueTop(top) }
-                .onChange(of: top) { _, value in updateQueueTop(value) }
-                .onDisappear {
-                    if (store.ledger.currentTimer?.id ?? store.ledger.waitingTimers.first?.id) == id { queueAtTop = false }
-                }
-        }
-    }
-    private func updateQueueTop(_ top: CGFloat) {
-        if queueRestingTop == nil { queueRestingTop = top }
-        queueAtTop = top >= (queueRestingTop ?? top) - 2
-    }
     private var returnToTimerGesture: some Gesture {
-        // Leave stationary touches to List's native long-press reordering.
-        // GestureState also resets when List cancels a swipe for a row action.
+        // Vertical paging and scrolling belong to the native TabView/List.
+        // A right swipe also returns from any scroll position, without claiming
+        // stationary touches needed for native row reordering.
         DragGesture(minimumDistance: 35)
-            .updating($queueSwipeStart) { value, state, _ in
-                if state == nil {
-                    state = WatchQueueSwipeStart(atTop: queueAtTop || (store.ledger.currentTimer == nil && store.ledger.waitingTimers.isEmpty), time: value.time)
-                }
-            }
             .onEnded { value in
-                guard value.time.timeIntervalSince(queueSwipeStart?.time ?? value.time) < 0.8 else { return }
                 let delta = value.translation
                 let swipeRight = delta.width > 55 && delta.width > abs(delta.height) * 1.3
-                let swipeDownAtTop = (queueSwipeStart?.atTop ?? queueAtTop) && delta.height > 45 && delta.height > abs(delta.width) * 1.3
-                if swipeRight || swipeDownAtTop { showCurrentTimer?() }
+                if swipeRight { showCurrentTimer?() }
             }
     }
     private func moveWaitingTimer(_ id: String, by delta: Int) {
@@ -261,12 +216,7 @@ struct TimerQueueView: View {
                     .accessibilityIdentifier("timers.pause-resume")
             }
             }.padding(10)
-        }.frame(width: size, height: size).padding(4).contentShape(Rectangle())
-            .background {
-                GeometryReader { geometry in
-                    Color.clear.preference(key: WatchTimerDialFrameKey.self, value: geometry.frame(in: .global))
-                }
-            }
+        }.frame(width: size, height: size).padding(4)
     }
     @ViewBuilder private var watchRestartButton: some View {
         let button = Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
@@ -428,31 +378,6 @@ struct TimerQueueView: View {
     }
     #endif
 }
-
-#if os(watchOS)
-private struct WatchQueueSwipeStart {
-    var atTop: Bool
-    var time: Date
-}
-
-private struct WatchTimerDialFrameKey: PreferenceKey {
-    static var defaultValue: CGRect { .null }
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        let next = nextValue()
-        if !next.isNull { value = next }
-    }
-}
-
-private struct CompactTimerButtonStyle: ButtonStyle {
-    var prominent = false
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.frame(maxWidth: .infinity).frame(height: 32)
-            .foregroundStyle(prominent ? Color.black : Color.mint)
-            .background(Capsule().fill(prominent ? Color.mint : Color.mint.opacity(0.18)))
-            .opacity(configuration.isPressed ? 0.65 : 1)
-    }
-}
-#endif
 
 private struct TimerEditorView: View {
     @EnvironmentObject private var store: LedgerStore

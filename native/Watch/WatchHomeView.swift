@@ -16,15 +16,14 @@ struct WatchHomeView: View {
         NavigationStack {
         Group {
             if store.showingTimerQueue {
-                ZStack {
-                if showingTimerRows {
-                    TimerQueueView(watchShowsQueue: true, showCurrentTimer: { showingTimerRows = false })
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom))
-                } else {
+                // The native vertical pager coordinates swipes with each page's
+                // scrolling content and List's long-press row reordering.
+                TabView(selection: $showingTimerRows) {
                     TimerQueueView(showTimerQueue: { showingTimerRows = true })
-                        .transition(reduceMotion ? .opacity : .move(edge: .top))
-                }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                        .tag(false)
+                    TimerQueueView(watchShowsQueue: true, showCurrentTimer: { showingTimerRows = false })
+                        .tag(true)
+                }.tabViewStyle(.verticalPage)
                     .animation(reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.3), value: showingTimerRows)
             } else { homePages }
         }

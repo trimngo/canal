@@ -268,7 +268,7 @@ final class WatchQuickLogUITests: XCTestCase {
     }
     override func setUpWithError() throws { continueAfterFailure = false }
     private func scrollLongTimerTitle(in app: XCUIApplication) {
-        // The gutter scrolls long text; swiping the dial opens the queue.
+        // Scroll within the current page before swiping past its bottom.
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8))
         let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.3))
         from.press(forDuration: 0.01, thenDragTo: to)
@@ -297,8 +297,8 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(ring.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(ring.frame.width, 80)
         XCTAssertGreaterThan(ring.frame.height, 80)
-        let from = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.9))
-        let to = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.1))
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.85))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.2))
         from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "timers.queue-list").firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["timers.current"].waitForNonExistence(timeout: 5))
