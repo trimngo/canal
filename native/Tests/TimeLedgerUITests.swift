@@ -924,6 +924,7 @@ final class TimeLedgerUITests: XCTestCase {
         let selection = element(app, "report.heatmap.selection")
         XCTAssertTrue(selection.waitForExistence(timeout: 5)); XCTAssertTrue(selection.label.contains("No data"))
         let populated = cells.matching(NSPredicate(format: "value CONTAINS %@", "percent")).firstMatch
+        revealHeatmapRow(populated, in: app)
         populated.tap()
         XCTAssertTrue(selection.label.contains("Work")); XCTAssertTrue(selection.label.contains("%"))
         recordScreen("FullScreenHeatmapPercentages", in: app)
@@ -931,11 +932,22 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(selection.label.contains("%")) // Details always retain both measures.
         XCTAssertTrue(app.buttons["dashboard.calendar"].isHittable)
         recordScreen("FullScreenHeatmapHours", in: app)
-        work.tap()
+        revealHeatmapRow(work, in: app); work.tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5)); closeCategoryLogs(in: app)
         app.buttons["dashboard.calendar"].tap()
         XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
+    }
+
+    private func revealHeatmapRow(_ target: XCUIElement, in app: XCUIApplication) {
+        let rows = app.scrollViews["report.heatmap.rows"]
+        XCTAssertTrue(rows.waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            if target.exists, target.isHittable { return }
+            if target.exists, target.frame.maxY < rows.frame.minY { rows.swipeDown() }
+            else { rows.swipeUp() }
+        }
+        XCTAssertTrue(target.isHittable)
     }
 
     func testHeatmapExpandsChildrenAndDirectTimeWithoutShiftingGridColumns() {

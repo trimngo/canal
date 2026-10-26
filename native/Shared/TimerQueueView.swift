@@ -26,6 +26,8 @@ struct TimerQueueView: View {
     @State private var queueRestingTop: CGFloat?
     @State private var queueDragStartedAtTop: Bool?
     @State private var queueDragStart: Date?
+    @State private var dialFrame = CGRect.null
+    @State private var mainDragStartedInDial: Bool?
     #endif
     var body: some View {
         Group {
@@ -76,7 +78,6 @@ struct TimerQueueView: View {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                 watchTaskTitle(task.title, identifier: "timers.current")
                 watchDial(duration: task.duration, control: control, at: now, size: geometry.size.height - 72)
-                    .simultaneousGesture(showQueueGesture)
                 HStack {
                     Button(doneTitle, systemImage: "checkmark.circle.fill") { act("done") }
                         .labelStyle(.iconOnly).font(.title2).foregroundStyle(.mint)
@@ -87,13 +88,12 @@ struct TimerQueueView: View {
             } else if let next = store.ledger.waitingTimers.first {
                 watchTaskTitle(next.title, identifier: "timers.ready")
                 watchDial(duration: next.duration, control: nil, at: now, size: geometry.size.height - 72)
-                    .simultaneousGesture(showQueueGesture)
                 Button("Start", systemImage: "play.fill") { act("start") }
                     .buttonStyle(.borderedProminent).accessibilityIdentifier("timers.start")
             } else {
                 Text("No timers yet").font(.title3).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .center)
-                    .contentShape(Rectangle()).simultaneousGesture(showQueueGesture)
+                    .contentShape(Rectangle())
             }
             if alarm.needsAlarmUpdate {
                 Text(alarm.status).font(.caption2).foregroundStyle(.orange).lineLimit(2)
@@ -103,6 +103,9 @@ struct TimerQueueView: View {
         }.frame(maxWidth: .infinity, minHeight: geometry.size.height)
             .padding(.horizontal, 8).padding(.bottom, 4)
         }.background(.black)
+            .coordinateSpace(name: "watch.timer-main")
+            .onPreferenceChange(WatchTimerDialFrameKey.self) { dialFrame = $0 }
+            .simultaneousGesture(showQueueGesture)
             .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
         }
     }
@@ -112,11 +115,17 @@ struct TimerQueueView: View {
             .frame(maxWidth: .infinity).accessibilityIdentifier(identifier)
     }
     private var showQueueGesture: some Gesture {
-        DragGesture(minimumDistance: 35).onEnded { value in
-            if value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
-                showTimerQueue?()
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("watch.timer-main"))
+            .onChanged { value in
+                if mainDragStartedInDial == nil {
+                    mainDragStartedInDial = dialFrame.contains(value.startLocation) || (store.ledger.currentTimer == nil && store.ledger.waitingTimers.isEmpty)
+                }
+            }.onEnded { value in
+                defer { mainDragStartedInDial = nil }
+                if mainDragStartedInDial == true, value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                    showTimerQueue?()
+                }
             }
-        }
     }
     private func watchQueue() -> some View {
         let waiting = store.ledger.waitingTimers
@@ -221,10 +230,13 @@ struct TimerQueueView: View {
         let fraction = min(1, max(0, remaining / max(1, duration)))
         let finished = control?.isFinished(at: now) == true
         return ZStack {
-            Circle().stroke(Color.secondary.opacity(0.22), lineWidth: 7)
-            Circle().trim(from: 0, to: fraction)
+            ZStack {
+                Circle().stroke(Color.secondary.opacity(0.22), lineWidth: 7)
+                Circle().trim(from: 0, to: fraction)
                 .stroke(finished ? Color.orange : Color.mint, style: StrokeStyle(lineWidth: 7, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+            }.frame(width: size, height: size)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Timer progress").accessibilityValue("\(Int((1 - fraction) * 100)) percent complete")
                 .accessibilityIdentifier("timers.progress")
             VStack(spacing: 2) {
@@ -249,6 +261,11 @@ struct TimerQueueView: View {
             }
             }.padding(10)
         }.frame(width: size, height: size).padding(4).contentShape(Rectangle())
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: WatchTimerDialFrameKey.self, value: geometry.frame(in: .named("watch.timer-main")))
+                }
+            }
     }
     @ViewBuilder private var watchRestartButton: some View {
         let button = Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
@@ -417,6 +434,14 @@ private struct WatchTimerQueueTopKey: PreferenceKey {
     static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
 }
 
+private struct WatchTimerDialFrameKey: PreferenceKey {
+    static var defaultValue: CGRect { .null }
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if !next.isNull { value = next }
+    }
+}
+
 private struct CompactTimerButtonStyle: ButtonStyle {
     var prominent = false
     func makeBody(configuration: Configuration) -> some View {
@@ -476,6 +501,17 @@ struct TimerSettingsView: View {
     #endif
     var body: some View {
             Form {
+                #if os(watchOS)
+                Picker("Alert pattern", selection: $pattern) {
+                    Text("Standard pulse").tag("standard")
+                    Text("Attention pulse").tag("attention")
+                    Text("Light tap").tag("light")
+                }.accessibilityIdentifier("timers.haptic-pattern")
+                Picker("Repeat every", selection: $interval) {
+                    ForEach([2.0, 3, 5, 10], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
+                }.accessibilityIdentifier("timers.haptic-repeat")
+                Button("Preview alert pattern") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }.accessibilityIdentifier("timers.haptic-preview")
+                #endif
                 Section {
                     Toggle("Start next after Done", isOn: Binding(get: { store.ledger.settings.timerAutoStartNext }, set: { value in
                         var settings = store.ledger.settings; settings.timerAutoStartNext = value
@@ -486,15 +522,6 @@ struct TimerSettingsView: View {
                 }
                 #if os(watchOS)
                 if !alarm.status.isEmpty { Text(alarm.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("timers.alarm-status") }
-                Picker("Alert pattern", selection: $pattern) {
-                    Text("Standard pulse").tag("standard")
-                    Text("Attention pulse").tag("attention")
-                    Text("Light tap").tag("light")
-                }.accessibilityIdentifier("timers.haptic-pattern")
-                Picker("Repeat every", selection: $interval) {
-                    ForEach([2.0, 3, 5, 10], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
-                }.accessibilityIdentifier("timers.haptic-repeat")
-                Button("Preview alert pattern") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }.accessibilityIdentifier("timers.haptic-preview")
                 Text("Alarm sound follows your Watch’s system settings. Repeating haptics use the Watch’s system alarm, limited to about 30 minutes.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Text("Stop silences the system alarm. Open shows the timer controls and applies any synced changes. The Watch runs the timer without your phone.")

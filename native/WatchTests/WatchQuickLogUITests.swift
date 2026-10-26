@@ -268,9 +268,14 @@ final class WatchQuickLogUITests: XCTestCase {
     }
     override func setUpWithError() throws { continueAfterFailure = false }
     private func revealWatchControl(_ control: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<8 {
+        for attempt in 0..<20 {
             if control.exists, control.isHittable { return }
-            app.swipeUp()
+            let frame = control.exists ? control.frame : .null
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            if (!frame.isNull && frame.maxY < 70) || (frame.isNull && attempt >= 10) {
+                to.press(forDuration: 0.01, thenDragTo: from)
+            } else { from.press(forDuration: 0.01, thenDragTo: to) }
         }
         XCTAssertTrue(control.exists); XCTAssertTrue(control.isHittable)
     }
@@ -284,6 +289,8 @@ final class WatchQuickLogUITests: XCTestCase {
         }
         let ring = app.descendants(matching: .any).matching(identifier: "timers.progress").firstMatch
         XCTAssertTrue(ring.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(ring.frame.width, 80)
+        XCTAssertGreaterThan(ring.frame.height, 80)
         let from = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.9))
         let to = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.1))
         from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
