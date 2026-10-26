@@ -297,7 +297,9 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(ring.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(ring.frame.width, 80)
         XCTAssertGreaterThan(ring.frame.height, 80)
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.85))
+        // Start on app content, above watchOS's bottom safe area. Keep this a
+        // single swipe so a short timer page cannot consume an extra scroll.
+        let from = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.8))
         let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.2))
         from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "timers.queue-list").firstMatch.waitForExistence(timeout: 5))

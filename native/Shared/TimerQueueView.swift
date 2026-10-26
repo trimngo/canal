@@ -67,11 +67,24 @@ struct TimerQueueView: View {
     #if os(watchOS)
     private func watchCurrentTimer(at now: Date) -> some View {
         GeometryReader { geometry in
-        ScrollView {
+            ViewThatFits(in: .vertical) {
+                // Short pages hand vertical swipes directly to the native
+                // pager. Long titles retain their own scrolling fallback.
+                watchTimerContent(at: now, availableHeight: geometry.size.height)
+                    .fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    watchTimerContent(at: now, availableHeight: geometry.size.height)
+                }.scrollBounceBehavior(.basedOnSize)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.black).contentShape(Rectangle())
+                .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
+        }
+    }
+    private func watchTimerContent(at now: Date, availableHeight: CGFloat) -> some View {
         VStack(spacing: 6) {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                 watchTaskTitle(task.title, identifier: "timers.current")
-                watchDial(duration: task.duration, control: control, at: now, size: geometry.size.height - 72)
+                watchDial(duration: task.duration, control: control, at: now, size: availableHeight - 72)
                 HStack {
                     Button(doneTitle, systemImage: "checkmark.circle.fill") { act("done") }
                         .labelStyle(.iconOnly).font(.title2).foregroundStyle(.mint)
@@ -81,10 +94,10 @@ struct TimerQueueView: View {
                 }.buttonStyle(.plain).frame(minHeight: 32)
             } else if let next = store.ledger.waitingTimers.first {
                 watchTaskTitle(next.title, identifier: "timers.ready")
-                watchDial(duration: next.duration, control: nil, at: now, size: geometry.size.height - 72)
+                watchDial(duration: next.duration, control: nil, at: now, size: availableHeight - 72)
             } else {
                 Text("No timers yet").font(.title3).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .center)
+                    .frame(maxWidth: .infinity, minHeight: availableHeight, alignment: .center)
                     .contentShape(Rectangle())
             }
             if alarm.needsAlarmUpdate {
@@ -93,10 +106,7 @@ struct TimerQueueView: View {
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity)
-            .padding(.horizontal, 8).padding(.bottom, 4)
-        }.background(.black).scrollBounceBehavior(.basedOnSize)
-            .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
-        }
+            .padding(.horizontal, 8)
     }
     private func watchTaskTitle(_ title: String, identifier: String) -> some View {
         Text(title).font(.system(size: 20, weight: .semibold))
@@ -218,7 +228,7 @@ struct TimerQueueView: View {
                     .accessibilityIdentifier("timers.start")
             }
             }.padding(8)
-        }.frame(width: size, height: size)
+        }.frame(width: size, height: size).contentShape(Rectangle())
     }
     @ViewBuilder private var watchRestartButton: some View {
         let button = Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
