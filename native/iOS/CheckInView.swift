@@ -11,7 +11,7 @@ struct CheckInView: View {
     var body: some View {
         List {
             Section("What are you doing now?") {
-                CheckInEditor { saved = true }.id(store.sampleRequestID)
+                CheckInEditor(showsKeyboardDone: false) { saved = true }.id(store.sampleRequestID)
                 if saved { Label("Saved. You can change it anytime.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint) }
             }
             Section("Your logs") {
@@ -48,7 +48,7 @@ struct CheckInView: View {
                     }
                 } label: { Text("Logs (\(samples.count))").accessibilityIdentifier("today.logs") }
             }
-        }.listStyle(.insetGrouped).scrollDismissesKeyboard(.immediately)
+        }.listStyle(.insetGrouped).scrollDismissesKeyboard(.immediately).ledgerInputDismissal()
             .navigationTitle("Log").navigationBarTitleDisplayMode(.inline)
             .sheet(item: $editing) { entry in
                 NavigationStack {
@@ -63,6 +63,7 @@ struct CheckInView: View {
 struct CheckInEditor: View {
     @EnvironmentObject var store: LedgerStore
     var entry: CheckIn? = nil
+    var showsKeyboardDone = true
     var onSave: () -> Void = {}
     @State private var activity = ""
     @State private var categoryIDs: [String] = []
@@ -125,7 +126,7 @@ struct CheckInEditor: View {
                     do { try store.deleteLog(entry); focused = false; onSave() } catch { store.report(error) }
                 }.frame(maxWidth: .infinity).padding(.top, 8).accessibilityIdentifier("edit.delete")
             }
-        }.ledgerInputDismissal().onDisappear { focused = false }.onAppear {
+        }.ledgerInputDismissal(showsKeyboardDone: showsKeyboardDone).onDisappear { focused = false }.onAppear {
             if let entry {
                 activity = entry.activity; categoryIDs = store.ledger.effectiveCategoryIDs(for: entry)
                 timestamp = entry.end; recordNow = false

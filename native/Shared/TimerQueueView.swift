@@ -48,7 +48,7 @@ struct TimerQueueView: View {
             NavigationStack { TimerEditorView(task: task) }
         }
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
-            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Using timer controls or changing the running duration makes this device responsible for alerts. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
+            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Starting, resuming, completing, or changing duration uses this device for alerts. Restarting a Watch timer from iPhone keeps Watch alerts: open Dash on Watch once to rearm repeating haptics. A one-time iPhone backup alert is also scheduled. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
         }
         .task {
             store.refreshTimerSupport(force: true); await notifications.refreshStatus()
@@ -66,46 +66,52 @@ struct TimerQueueView: View {
     }
     #if os(watchOS)
     private func watchCurrentTimer(at now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        GeometryReader { geometry in
+            ViewThatFits(in: .vertical) {
+                // Short pages hand vertical swipes directly to the native
+                // pager. Long titles retain their own scrolling fallback.
+                watchTimerContent(at: now, availableHeight: geometry.size.height)
+                    .fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    watchTimerContent(at: now, availableHeight: geometry.size.height)
+                }.scrollBounceBehavior(.basedOnSize)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.black).contentShape(Rectangle())
+                .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
+        }
+    }
+    private func watchTimerContent(at now: Date, availableHeight: CGFloat) -> some View {
+        VStack(spacing: 6) {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
-                Spacer(minLength: 0)
-                Text(task.title).font(.system(size: 24, weight: .semibold)).lineLimit(3).minimumScaleFactor(0.75)
-                    .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("timers.current")
-                watchCountdown(task, control: control, at: now, large: true)
-                watchProgress(task, control: control, at: now)
-                Spacer(minLength: 0)
+                watchTaskTitle(task.title, identifier: "timers.current")
+                watchDial(duration: task.duration, control: control, at: now, size: availableHeight - 72)
                 HStack {
                     Button(doneTitle, systemImage: "checkmark.circle.fill") { act("done") }
                         .labelStyle(.iconOnly).font(.title2).foregroundStyle(.mint)
                         .accessibilityIdentifier("timers.done")
                     Spacer()
                     watchRestartButton.font(.title2)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).frame(minHeight: 32)
             } else if let next = store.ledger.waitingTimers.first {
-                Spacer(minLength: 0)
-                Text(next.title).font(.title2.bold()).accessibilityIdentifier("timers.ready")
-                Text(clock(next.duration)).font(.largeTitle.monospacedDigit()).foregroundStyle(.secondary)
-                Button("Start", systemImage: "play.fill") { act("start") }
-                    .buttonStyle(.borderedProminent).accessibilityIdentifier("timers.start")
-                Spacer(minLength: 0)
+                watchTaskTitle(next.title, identifier: "timers.ready")
+                watchDial(duration: next.duration, control: nil, at: now, size: availableHeight - 72)
             } else {
-                Spacer()
                 Text("No timers yet").font(.title3).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                Spacer()
+                    .frame(maxWidth: .infinity, minHeight: availableHeight, alignment: .center)
+                    .contentShape(Rectangle())
             }
             if alarm.needsAlarmUpdate {
                 Text(alarm.status).font(.caption2).foregroundStyle(.orange).lineLimit(2)
                     .accessibilityIdentifier("timers.alarm-update")
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
-        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 8).padding(.bottom, 4).background(.black)
-            .contentShape(Rectangle())
-            .simultaneousGesture(DragGesture(minimumDistance: 35).onEnded { value in
-                if value.translation.height < -45, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
-                    showTimerQueue?()
-                }
-            })
+        }.frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+    }
+    private func watchTaskTitle(_ title: String, identifier: String) -> some View {
+        Text(title).font(.system(size: 20, weight: .semibold))
+            .multilineTextAlignment(.center).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity).accessibilityIdentifier(identifier)
     }
     private func watchQueue() -> some View {
         let waiting = store.ledger.waitingTimers
@@ -115,7 +121,8 @@ struct TimerQueueView: View {
                 // entire List every second interferes with native row dragging.
                 TimelineView(.periodic(from: Date(), by: 1)) { timeline in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(task.title).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                    Text(task.title).font(.system(size: 16, weight: .semibold)).lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("timers.queue-current")
                     Text(control.isFinished(at: timeline.date) ? "Now · Finished" : "Now · " + clock(control.remaining(at: timeline.date)))
                         .font(.system(size: 13, design: .rounded).monospacedDigit())
@@ -131,7 +138,8 @@ struct TimerQueueView: View {
             }
             ForEach(waiting) { task in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(task.title).font(.system(size: 16, weight: .medium)).lineLimit(1)
+                    Text(task.title).font(.system(size: 16, weight: .medium)).lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
                     Text(clock(task.duration)).font(.system(size: 13, design: .rounded).monospacedDigit())
@@ -153,22 +161,26 @@ struct TimerQueueView: View {
             if store.ledger.currentTimer == nil, waiting.isEmpty {
                 Text("No queued timers").foregroundStyle(.secondary)
             }
-            if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
-            if alarm.needsAlarmUpdate || alarm.status.contains("unavailable") || alarm.status.hasPrefix("Open Dash") {
-                Text(alarm.status).font(.caption2).foregroundStyle(.orange).accessibilityIdentifier("timers.alarm-status")
-            }
-            if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
-                Button("Use Watch for alerts") { act("here") }.accessibilityIdentifier("timers.use-watch")
-            }
-            NavigationLink(destination: TimerSettingsView()) {
-                Label("Timer settings", systemImage: "slider.horizontal.3").font(.caption)
-            }.accessibilityIdentifier("timers.alarm-settings")
-            Button("Watch Home") { store.showingTimerQueue = false }
-                .accessibilityIdentifier("timers.watch-home")
         }.listStyle(.plain)
             .environment(\.defaultMinListRowHeight, 40)
             .contentMargins(.vertical, 0, for: .scrollContent)
+            .simultaneousGesture(returnToTimerGesture)
+            .accessibilityIdentifier("timers.queue-list")
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
+            .alert("Timer queue", isPresented: Binding(get: { inputError != nil }, set: { if !$0 { inputError = nil } })) {
+                Button("OK") { inputError = nil }
+            } message: { Text(inputError ?? "") }
+    }
+    private var returnToTimerGesture: some Gesture {
+        // Vertical paging and scrolling belong to the native TabView/List.
+        // A right swipe also returns from any scroll position, without claiming
+        // stationary touches needed for native row reordering.
+        DragGesture(minimumDistance: 35)
+            .onEnded { value in
+                let delta = value.translation
+                let swipeRight = delta.width > 55 && delta.width > abs(delta.height) * 1.3
+                if swipeRight { showCurrentTimer?() }
+            }
     }
     private func moveWaitingTimer(_ id: String, by delta: Int) {
         var ids = store.ledger.waitingTimers.map(\.id)
@@ -176,32 +188,47 @@ struct TimerQueueView: View {
         ids.swapAt(from, from + delta)
         do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription }
     }
-    private func watchCountdown(_ task: QueuedTimer, control: TimerQueueControl, at now: Date, large: Bool) -> some View {
-        HStack(spacing: 6) {
+    private func watchDial(duration: TimeInterval, control: TimerQueueControl?, at now: Date, size: CGFloat) -> some View {
+        let size = min(132, max(80, size))
+        let remaining = control?.remaining(at: now) ?? duration
+        let fraction = min(1, max(0, remaining / max(1, duration)))
+        let finished = control?.isFinished(at: now) == true
+        return ZStack {
+            ZStack {
+                Circle().stroke(Color.secondary.opacity(0.22), lineWidth: 7)
+                Circle().trim(from: 0, to: fraction)
+                .stroke(finished ? Color.orange : Color.mint, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            }.frame(width: size, height: size)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Timer progress").accessibilityValue("\(Int((1 - fraction) * 100)) percent complete")
+                .accessibilityIdentifier("timers.progress")
+            VStack(spacing: 2) {
             Group {
-                if control.isFinished(at: now) {
+                if finished {
                     Text("Finished").foregroundStyle(.orange).accessibilityIdentifier("timers.finished")
-                } else if let due = control.dueAt {
-                    Text(timerInterval: due.addingTimeInterval(-task.duration)...due, countsDown: true)
+                } else if let due = control?.dueAt {
+                    Text(timerInterval: due.addingTimeInterval(-duration)...due, countsDown: true)
                         .accessibilityIdentifier("timers.countdown")
+                } else if control != nil {
+                    Text(clock(remaining)).foregroundStyle(.secondary).accessibilityIdentifier("timers.paused")
                 } else {
-                    Text(clock(control.remaining(at: now))).foregroundStyle(.secondary).accessibilityIdentifier("timers.paused")
+                    Text(clock(duration)).foregroundStyle(.secondary).accessibilityIdentifier("timers.duration-ready")
                 }
-            }.font(.system(size: large ? 42 : 28, weight: .medium, design: .rounded).monospacedDigit())
-                .lineLimit(1).minimumScaleFactor(0.6).frame(maxWidth: .infinity, alignment: .leading)
-            if !control.isFinished(at: now) {
+            }.font(.system(size: 30, weight: .medium, design: .rounded).monospacedDigit())
+                .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: .infinity)
+            if let control, !finished {
                 Button(control.pausedRemaining == nil ? "Pause timer" : "Resume timer", systemImage: control.pausedRemaining == nil ? "pause.circle" : "play.circle") {
                     act(control.pausedRemaining == nil ? "pause" : "resume")
-                }.labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 32, height: 40)
+                }.labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 40, height: 32)
                     .accessibilityIdentifier("timers.pause-resume")
+            } else if control == nil {
+                Button("Start", systemImage: "play.circle.fill") { act("start") }
+                    .labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 40, height: 32)
+                    .accessibilityIdentifier("timers.start")
             }
-        }
-    }
-    private func watchProgress(_ task: QueuedTimer, control: TimerQueueControl, at now: Date) -> some View {
-        let progress = min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration)))
-        return ProgressView(value: progress).progressViewStyle(.linear).tint(control.isFinished(at: now) ? .orange : .mint)
-            .accessibilityLabel("Timer progress").accessibilityValue("\(Int(progress * 100)) percent complete")
-            .accessibilityIdentifier("timers.progress")
+            }.padding(8)
+        }.frame(width: size, height: size).contentShape(Rectangle())
     }
     @ViewBuilder private var watchRestartButton: some View {
         let button = Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
@@ -256,6 +283,15 @@ struct TimerQueueView: View {
                         }
                         Text(control.onWatch ? "Alerts on Apple Watch" : "Alerts on iPhone")
                             .font(.caption).foregroundStyle(.secondary)
+                        if control.isRemoteWatchRestart {
+                            Text("Open Dash on Watch once to rearm repeating haptics after restarting here. An iPhone backup alert stays scheduled.")
+                                .font(.caption).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("timers.watch-rearm")
+                        }
+                        if control.onWatch {
+                            Button("Use iPhone for alerts") { act("here") }
+                                .accessibilityIdentifier("timers.alerts-here")
+                        }
                     }.swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")
@@ -364,18 +400,6 @@ struct TimerQueueView: View {
     #endif
 }
 
-#if os(watchOS)
-private struct CompactTimerButtonStyle: ButtonStyle {
-    var prominent = false
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.frame(maxWidth: .infinity).frame(height: 32)
-            .foregroundStyle(prominent ? Color.black : Color.mint)
-            .background(Capsule().fill(prominent ? Color.mint : Color.mint.opacity(0.18)))
-            .opacity(configuration.isPressed ? 0.65 : 1)
-    }
-}
-#endif
-
 private struct TimerEditorView: View {
     @EnvironmentObject private var store: LedgerStore
     @Environment(\.dismiss) private var dismiss
@@ -424,6 +448,17 @@ struct TimerSettingsView: View {
     #endif
     var body: some View {
             Form {
+                #if os(watchOS)
+                Picker("Alert pattern", selection: $pattern) {
+                    Text("Standard pulse").tag("standard")
+                    Text("Attention pulse").tag("attention")
+                    Text("Light tap").tag("light")
+                }.accessibilityIdentifier("timers.haptic-pattern")
+                Picker("Repeat every", selection: $interval) {
+                    ForEach([2.0, 3, 5, 10], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
+                }.accessibilityIdentifier("timers.haptic-repeat")
+                Button("Preview alert pattern") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }.accessibilityIdentifier("timers.haptic-preview")
+                #endif
                 Section {
                     Toggle("Start next after Done", isOn: Binding(get: { store.ledger.settings.timerAutoStartNext }, set: { value in
                         var settings = store.ledger.settings; settings.timerAutoStartNext = value
@@ -434,15 +469,6 @@ struct TimerSettingsView: View {
                 }
                 #if os(watchOS)
                 if !alarm.status.isEmpty { Text(alarm.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("timers.alarm-status") }
-                Picker("Alert pattern", selection: $pattern) {
-                    Text("Standard pulse").tag("standard")
-                    Text("Attention pulse").tag("attention")
-                    Text("Light tap").tag("light")
-                }.accessibilityIdentifier("timers.haptic-pattern")
-                Picker("Repeat every", selection: $interval) {
-                    ForEach([2.0, 3, 5, 10], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
-                }
-                Button("Preview alert pattern") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }.accessibilityIdentifier("timers.haptic-preview")
                 Text("Alarm sound follows your Watch’s system settings. Repeating haptics use the Watch’s system alarm, limited to about 30 minutes.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Text("Stop silences the system alarm. Open shows the timer controls and applies any synced changes. The Watch runs the timer without your phone.")

@@ -47,6 +47,10 @@ struct TimeLedgerApp: App {
                             }
                         } catch { store.report(error) }
                     }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-live-timer-restart"), let token = store.ledger.timerControl?.token {
+                        do { _ = try await RestartTimerIntent(token: token).perform() }
+                        catch { store.report(error) }
+                    }
                     #endif
                 }
                 .onChange(of: scenePhase) { _, phase in

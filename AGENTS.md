@@ -62,18 +62,31 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 124 iPhone UI tests run across six shards. Keep the complete test set and
+- All 124 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
   Run all 16 Watch UI tests. Repeating WatchKit haptics still require
   physical-device verification.
-- A cancelled Xcode run can leave an incomplete `.xcresult`. Export it only
-  when `Info.plist` exists; preserve `validation.log` / `watch-validation.log`
-  for diagnosis. An export error after interruption is a secondary failure.
+- A cancelled Xcode run can leave an incomplete `.xcresult`. Skip heavy exports
+  after cancellation. For completed runs, export only when `Info.plist` exists.
+  Raw `validation.log` / `watch-validation.log` are retained even on cancellation;
+  complete simulator results and apps are uploaded for failures.
 - Merging native changes to `main` starts the Native TestFlight delivery
   workflow. Verify the actual packaged build number, successful Apple
   processing, and distribution to internal testers. An accepted upload alone
   does not complete a TestFlight release task.
+
+## Faster CI iteration
+
+Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
+Use an isolated `ci/watch-*` branch for the five focused Watch paging/queue
+regressions before moving another Watch fix onto the feature PR. This keeps a
+healthy full iPhone run active. Focused checks never replace the full release
+checks: all 448 core, 124 iPhone UI, and 16 Watch UI tests must pass.
+
+Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
+PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
+processing/distribution even if another main commit arrives.
 
 ## Release handoff snapshot: 2026-10-26
 
@@ -84,9 +97,11 @@ until a new TestFlight build is processed and available. Keep that objective
 active when new ideas are discussed. Build 79 is the previous release.
 
 - PR #3: https://github.com/trimngo/canal/pull/3
-- Current source: `1b860794cdff42217bef43f56053b8a90b3374d6`.
-- Full CI: https://github.com/trimngo/canal/actions/runs/40381141224
-  Running: 448 core tests, all 124 iPhone UI tests, all 16 Watch UI tests.
+- Follow PR #3’s current head and Native Apple checks for the latest source
+  and full run; earlier runs were superseded while fixing Watch paging.
+- All 448 core tests passed in run 40381141224. The actual phone Live Activity
+  restart preserving Watch alerts and explicit phone takeover passed too.
+  Full iPhone/Watch validation remains pending; do not release on focused checks.
 - After green checks, merge the validated head and follow Native TestFlight
   delivery through Apple processing and internal distribution. Verify the actual
   packaged build number; upload acceptance alone is insufficient.

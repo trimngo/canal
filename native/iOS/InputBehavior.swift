@@ -4,8 +4,9 @@ import LedgerCore
 
 extension UIApplication {
     func dismissLedgerKeyboard() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-            .filter(\.isKeyWindow).forEach { $0.endEditing(true) }
+            .forEach { $0.endEditing(true) }
     }
 }
 
@@ -68,17 +69,22 @@ private struct KeyboardTapInstaller: UIViewRepresentable {
 private struct InputDismissal: ViewModifier {
     var preservingKeyboard: Bool
     var showsKeyboardDone: Bool
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.background(KeyboardTapInstaller(preservesKeyboard: preservingKeyboard).allowsHitTesting(false))
-            .toolbar {
+        let installed = content.background(KeyboardTapInstaller(preservesKeyboard: preservingKeyboard).allowsHitTesting(false))
+        if showsKeyboardDone {
+            installed.toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    if showsKeyboardDone {
-                        Spacer()
-                        Button("Done") { UIApplication.shared.dismissLedgerKeyboard() }
-                            .accessibilityIdentifier("keyboard.done")
-                    }
+                    Spacer()
+                    Button("Done") { UIApplication.shared.dismissLedgerKeyboard() }
+                        .accessibilityIdentifier("keyboard.done")
                 }
             }
+        } else {
+            // An empty keyboard toolbar on a child can suppress the parent's
+            // Done control, including while editing a different List row.
+            installed
+        }
     }
 }
 extension View {

@@ -227,6 +227,19 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-today-urgent") {
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music")]
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                for (id, text) in [("alan", "Get back to Alan"), ("joe", "Reply to Joe"), ("rent", "Pay the rent"), ("guitar", "Practice guitar")] {
+                    try fixture.addCapture(text: text, id: id, writer: "fixture")
+                }
+                try fixture.categorizeCapture(id: "alan", categoryIDs: ["teaching"], writer: "fixture")
+                try fixture.categorizeCapture(id: "joe", categoryIDs: ["music", "teaching"], writer: "fixture")
+                try fixture.categorizeCapture(id: "guitar", categoryIDs: ["music"], writer: "fixture")
+                try fixture.saveSample(at: Date().addingTimeInterval(-1200), activity: "Today log waiting for review", categoryIDs: [], writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-watch-notification-ledger") || ProcessInfo.processInfo.arguments.contains("--ui-watch-automatic-notification-ledger") {
                 var fixture = Ledger()
                 var settings = fixture.settings
@@ -404,6 +417,18 @@ final class LedgerStore: ObservableObject {
                         try fixture.enqueueTimer(id: "timer-extra-\(index)", title: "Queued task \(index)", duration: 300,
                             writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(Double(index + 2)))
                     }
+                }
+                if ProcessInfo.processInfo.arguments.contains("--ui-watch-owned-timer") {
+                    fixture.moveTimerAlerts(writer: "paired-watch", onWatch: true)
+                }
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-timer-long-title") {
+                var fixture = Ledger()
+                let title = "Prepare the complete presentation for the project review with the design team tomorrow morning"
+                try fixture.enqueueTimer(id: "long-title", title: title, duration: 300, writer: writer, onWatch: Self.isWatch)
+                if ProcessInfo.processInfo.arguments.contains("--ui-timer-waiting") {
+                    fixture.timerControl = nil
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
@@ -638,10 +663,10 @@ final class LedgerStore: ObservableObject {
         #endif
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await NotificationScheduler.shared.applyTimer(self.ledger, writer: self.writer)
             #if os(iOS)
             await TimerLiveActivity.shared.refresh(self.ledger)
             #endif
+            await NotificationScheduler.shared.applyTimer(self.ledger, writer: self.writer)
         }
     }
 

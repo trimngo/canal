@@ -83,7 +83,7 @@ struct CategoryHeatmapView: View {
                             Text("Choose Past 7 days or a longer period to compare days.")
                                 .font(.caption).foregroundStyle(.secondary).padding(.top, 4)
                         }
-                    }
+                    }.accessibilityIdentifier("report.heatmap.rows")
                 }
             }
         }.accessibilityElement(children: .contain).accessibilityIdentifier("report.view.heatmap")

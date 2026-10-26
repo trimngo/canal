@@ -3,6 +3,36 @@ import XCTest
 
 final class InboxUrgencyTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
+    func testUrgentGroupsPreserveCategoriesNestedPathsAndDeadlineOrder() throws {
+        var ledger = Ledger()
+        ledger.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "admin", name: "Admin"), LedgerCategory(id: "music", name: "Music")]
+        try ledger.moveCategory("admin", to: "work", writer: "p")
+        for (id, text) in [("asap", "Reply to Jo"), ("due", "Pay rent"), ("orphan", "Call the bank"), ("ordinary", "Practice guitar")] {
+            try ledger.addCapture(text: text, id: id, writer: "p", now: now)
+        }
+        try ledger.categorizeCapture(id: "asap", categoryIDs: ["music", "admin"], writer: "p")
+        try ledger.categorizeCapture(id: "due", categoryIDs: ["admin"], writer: "p")
+        try ledger.categorizeCapture(id: "ordinary", categoryIDs: ["music"], writer: "p")
+        try ledger.setCaptureTiming("due", timing: .due(now.addingTimeInterval(3600)), writer: "p")
+        ledger.captures[2].categoryIDs = ["removed-category"]
+        let saved = ledger
+        let groups = ledger.urgentCaptureGroups(at: now)
+        XCTAssertEqual(groups.map(\.id), ["music", "admin", "uncategorized"])
+        XCTAssertEqual(groups.map(\.name), ["Music", "Work › Admin", "Uncategorized"])
+        XCTAssertEqual(groups.map { $0.captures.map(\.id) }, [["asap"], ["due", "asap"], ["orphan"]])
+        XCTAssertEqual(ledger, saved)
+    }
+    func testCompletingSharedTaskRemovesItFromEveryUrgentGroup() throws {
+        var ledger = Ledger()
+        ledger.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "music", name: "Music")]
+        try ledger.addCapture(text: "Reply to Jo", id: "task", writer: "p", now: now)
+        try ledger.categorizeCapture(id: "task", categoryIDs: ["work", "music"], writer: "p")
+        XCTAssertEqual(ledger.urgentCaptureGroups(at: now).count, 2)
+        ledger.snoozeCapture("task", until: now.addingTimeInterval(86400 * 7), writer: "p", now: now)
+        XCTAssertTrue(ledger.urgentCaptureGroups(at: now).isEmpty)
+        ledger.setCaptureDone(id: "task", done: true, writer: "p")
+        XCTAssertTrue(ledger.urgentCaptureGroups(at: now.addingTimeInterval(86400 * 8)).isEmpty)
+    }
     func testUserExamplesAreASAPWithoutDeadlineAndExplainWhy() {
         for (text, reason) in [("Get back to Alan", InboxUrgency.Reason.communication), ("reply back to Joe", .communication),
                                ("Schedule meeting with Jo", .meeting), ("Pay the rent", .payment), ("Pay the bill", .payment)] {

@@ -1,6 +1,7 @@
 import SwiftUI
 import WidgetKit
 import ActivityKit
+import AppIntents
 
 private struct Countdown: View {
     let state: TimerLiveAttributes.ContentState
@@ -23,15 +24,26 @@ struct DashTimerLiveWidget: Widget {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.state.title).font(.headline).lineLimit(2)
                     Countdown(state: context.state).font(.title2)
+                    WatchRearmHint(state: context.state)
                 }
                 Spacer()
+                RestartTimerButton(state: context.state)
             }.padding().activityBackgroundTint(.black).activitySystemActionForegroundColor(.mint)
                 .widgetURL(URL(string: "canal-dash://timers"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) { Image(systemName: "timer") }
                 DynamicIslandExpandedRegion(.center) { Text(context.state.title).lineLimit(2) }
-                DynamicIslandExpandedRegion(.bottom) { Countdown(state: context.state).font(.title2) }
+                DynamicIslandExpandedRegion(.bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Countdown(state: context.state).font(.title2)
+                        Spacer()
+                        RestartTimerButton(state: context.state)
+                    }
+                    WatchRearmHint(state: context.state)
+                    }
+                }
             } compactLeading: {
                 Text(context.state.title).font(.caption2.weight(.semibold))
                     .lineLimit(1).truncationMode(.tail).frame(maxWidth: 76, alignment: .leading)
@@ -40,6 +52,27 @@ struct DashTimerLiveWidget: Widget {
               compactTrailing: { Countdown(state: context.state).frame(maxWidth: 64) }
               minimal: { Image(systemName: "timer") }
               .widgetURL(URL(string: "canal-dash://timers"))
+        }
+    }
+}
+
+private struct WatchRearmHint: View {
+    let state: TimerLiveAttributes.ContentState
+    var body: some View {
+        if state.watchRearmHint == true {
+            Text("Open Dash on Watch to rearm repeating alerts")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct RestartTimerButton: View {
+    let state: TimerLiveAttributes.ContentState
+    var body: some View {
+        if let token = state.token {
+            Button(intent: RestartTimerIntent(token: token)) {
+                Label("Restart", systemImage: "arrow.clockwise").font(.caption.weight(.semibold))
+            }.buttonStyle(.bordered).tint(.mint).accessibilityIdentifier("timers.live-restart")
         }
     }
 }

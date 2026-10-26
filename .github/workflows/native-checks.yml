@@ -1,7 +1,7 @@
 name: Native Apple checks
 on:
   push:
-    branches: [main, 'feat/native-*']
+    branches: [main]
     paths: ['native/**', '.github/workflows/native-*.yml']
   pull_request:
     paths: ['native/**', '.github/workflows/native-*.yml']
@@ -13,51 +13,19 @@ concurrency:
   cancel-in-progress: true
 jobs:
   watch-ui:
-    runs-on: macos-15
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-      - name: Install project generator
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-        run: brew install xcodegen
-      - name: Test direct Watch logging
-        timeout-minutes: 30
-        run: |
-          mkdir -p native/build
-          set -o pipefail
-          bash native/scripts/test-watch-ui.sh 2>&1 | tee native/build/watch-validation.log
-      - name: Export Watch interface review
-        if: always()
-        run: |
-          if [ -f native/build/WatchUITests.xcresult/Info.plist ]; then
-            mkdir -p native/build/watch-ui-review
-            xcrun xcresulttool get test-results summary --path native/build/WatchUITests.xcresult > native/build/watch-ui-review/summary.json
-            xcrun xcresulttool export attachments --path native/build/WatchUITests.xcresult --output-path native/build/watch-ui-attachments
-            python3 native/scripts/export-ui-review.py native/build/watch-ui-attachments native/build/watch-ui-review
-          elif [ -d native/build/WatchUITests.xcresult ]; then
-            echo '::warning::Watch result bundle was interrupted before completion; see watch-validation.log.'
-          fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: native-watch-ui-review
-          path: |
-            native/build/watch-ui-review
-            native/build/watch-validation.log
-          retention-days: 7
+    uses: ./.github/workflows/native-watch.yml
+    with:
+      focus: false
   build:
     runs-on: macos-15
-    # Run every UI test, spread across bounded jobs. A single runner completed
-    # only 24 of 120 tests before the previous 30-minute limit.
+    # Four phone shards plus Watch fit the observed five-Mac concurrency.
+    # Keep every UI test; extra shards create a second simulator-boot wave.
     timeout-minutes: 55
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 4
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -77,13 +45,13 @@ jobs:
         env:
           LEDGER_UI_TESTS: '1'
           LEDGER_UI_TEST_SHARD: ${{ matrix.shard }}
-          LEDGER_UI_TEST_SHARDS: '6'
+          LEDGER_UI_TEST_SHARDS: '4'
         run: |
           mkdir -p native/build
           set -o pipefail
           bash native/scripts/validate.sh 2>&1 | tee native/build/validation.log
       - name: Export compact interface review
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           if [ -f native/build/UITests.xcresult/Info.plist ]; then
             mkdir -p native/build/ui-review
@@ -94,14 +62,14 @@ jobs:
             echo '::warning::UI result bundle was interrupted before completion; see validation.log.'
           fi
       - name: Save interface screenshots and summary
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: native-ui-review-${{ matrix.shard }}
           path: native/build/ui-review
           retention-days: 7
       - name: Save simulator apps and test results
-        if: always()
+        if: failure() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: native-simulator-results-${{ matrix.shard }}
@@ -110,4 +78,11 @@ jobs:
             native/build/Build/Products/Debug-watchsimulator/*.app
             native/build/UITests.xcresult
             native/build/validation.log
+          retention-days: 7
+      - name: Save validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-validation-log-${{ matrix.shard }}
+          path: native/build/validation.log
           retention-days: 7

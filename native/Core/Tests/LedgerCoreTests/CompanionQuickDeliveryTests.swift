@@ -2,6 +2,81 @@ import XCTest
 @testable import LedgerCore
 
 final class CompanionQuickDeliveryTests: XCTestCase {
+    func testRestartPreemptsAnInFlightLogAndLateReceiptCannotFinishNewTimerPacket() throws {
+        var watch = Ledger(), quick = CompanionQuickDelivery()
+        try watch.enqueueTimer(id: "timer", title: "Practice", duration: 300, writer: "watch", onWatch: true)
+        let initial = try packet(&quick, ledger: watch, id: "initial")
+        quick.finish(id: initial.id, saved: true)
+        try sample(&watch, id: "reply")
+        let log = try packet(&quick, ledger: watch, id: "log")
+        watch.restartTimer(writer: "watch", onWatch: true)
+        let restart = try packet(&quick, ledger: watch, id: "restart")
+        XCTAssertEqual(restart.ledger.timerControl, watch.timerControl)
+        XCTAssertTrue(restart.ledger.entries.isEmpty)
+        XCTAssertFalse(quick.finish(id: log.id, saved: true))
+        XCTAssertNil(try quick.prepare(watch, id: "still-in-flight"))
+        XCTAssertTrue(quick.finish(id: restart.id, saved: true))
+        XCTAssertFalse(quick.hasReceived(watch.entries[0]))
+        let retry = try packet(&quick, ledger: watch, id: "reply-retry")
+        XCTAssertEqual(retry.ledger.entries.map(\.id), ["reply"])
+        XCTAssertTrue(quick.finish(id: retry.id, saved: true))
+        XCTAssertTrue(quick.recentLogsReceived(in: watch))
+    }
+
+    func testRapidDoneActionsSupersedeOlderTimerMessagesAndCannotBeReverted() throws {
+        var watch = Ledger(), phone = Ledger(), quick = CompanionQuickDelivery()
+        try watch.enqueueTimer(id: "one", title: "First", duration: 300, writer: "watch", onWatch: true)
+        try watch.enqueueTimer(id: "two", title: "Next", duration: 300, writer: "watch", onWatch: true)
+        let first = try packet(&quick, ledger: watch, id: "first")
+        watch.finishTimer(writer: "watch", onWatch: true)
+        let next = try packet(&quick, ledger: watch, id: "next")
+        watch.finishTimer(writer: "watch", onWatch: true)
+        let stopped = try packet(&quick, ledger: watch, id: "stopped")
+        XCTAssertFalse(quick.finish(id: first.id, saved: true))
+        XCTAssertFalse(quick.finish(id: next.id, saved: true))
+        phone.merge(stopped.ledger); phone.merge(next.ledger); phone.merge(first.ledger)
+        XCTAssertNil(phone.currentTimer)
+        XCTAssertTrue(phone.waitingTimers.isEmpty)
+        XCTAssertEqual(phone.timerControl, watch.timerControl)
+        XCTAssertTrue(quick.finish(id: stopped.id, saved: true))
+    }
+
+    func testTimerContextSnapshotIsBoundedAndPreservesCurrentTaskAndPeerSettings() throws {
+        var watch = Ledger(), phone = Ledger()
+        for index in 0..<50 {
+            try watch.enqueueTimer(id: "timer-\(index)", title: String(repeating: "🦉", count: 500), duration: 300,
+                writer: "watch", onWatch: true)
+        }
+        try sample(&watch, id: "private-log")
+        try watch.addCapture(text: "Unrelated idea", writer: "watch")
+        var settings = phone.settings; settings.use24HourTime = true
+        try phone.saveSettings(settings, writer: "phone")
+        let savedSettings = phone.settings
+        let data = try XCTUnwrap(CompanionQuickDelivery.timerSnapshot(watch))
+        XCTAssertLessThanOrEqual(data.count, 16_000)
+        let snapshot = try JSONDecoder().decode(CompanionQuickPacket.self, from: data)
+        XCTAssertEqual(snapshot.ledger.currentTimer, watch.currentTimer)
+        XCTAssertTrue(snapshot.ledger.entries.isEmpty); XCTAssertTrue(snapshot.ledger.captures.isEmpty)
+        XCTAssertTrue(snapshot.ledger.categories.isEmpty)
+        phone.merge(snapshot.ledger)
+        XCTAssertEqual(phone.currentTimer, watch.currentTimer)
+        XCTAssertEqual(phone.settings, savedSettings)
+        XCTAssertNil(try CompanionQuickDelivery.timerSnapshot(Ledger()))
+    }
+
+    func testTimerControlGetsPacketSpaceBeforeLargeSettingsAndHistory() throws {
+        var watch = Ledger(), quick = CompanionQuickDelivery()
+        watch.settings.urgencyPhrases = Array(repeating: String(repeating: "large preference ", count: 300), count: 20)
+        let revision = watch.nextRevision(writer: "watch")
+        watch.settings.revision = revision
+        try watch.enqueueTimer(id: "timer", title: "Practice", duration: 300, writer: "watch", onWatch: true)
+        try sample(&watch, id: "reply")
+        let timer = try packet(&quick, ledger: watch, limit: 4_000)
+        XCTAssertEqual(timer.ledger.timerControl, watch.timerControl)
+        XCTAssertEqual(timer.ledger.currentTimer, watch.currentTimer)
+        XCTAssertEqual(timer.ledger.settings.revision, Revision())
+        XCTAssertTrue(timer.ledger.entries.isEmpty)
+    }
     private func sample(_ ledger: inout Ledger, id: String, text: String = "Working") throws {
         try ledger.saveQuickSample(id: id, at: Date(), activity: text, writer: "watch")
     }

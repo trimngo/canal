@@ -9,21 +9,21 @@ struct WatchHomeView: View {
     @State private var saved = false
     @State private var tab = 2
     @State private var notificationSettings = false
+    @State private var timerOptions = false
     @State private var showingTimerRows = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         NavigationStack {
         Group {
             if store.showingTimerQueue {
-                ZStack {
-                if showingTimerRows {
-                    TimerQueueView(watchShowsQueue: true, showCurrentTimer: { showingTimerRows = false })
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom))
-                } else {
+                // The native vertical pager coordinates swipes with each page's
+                // scrolling content and List's long-press row reordering.
+                TabView(selection: $showingTimerRows) {
                     TimerQueueView(showTimerQueue: { showingTimerRows = true })
-                        .transition(reduceMotion ? .opacity : .move(edge: .top))
-                }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                        .tag(false)
+                    TimerQueueView(watchShowsQueue: true, showCurrentTimer: { showingTimerRows = false })
+                        .tag(true)
+                }.tabViewStyle(.verticalPage)
                     .animation(reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.3), value: showingTimerRows)
             } else { homePages }
         }
@@ -37,6 +37,22 @@ struct WatchHomeView: View {
                 }
             }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
+            .sheet(isPresented: $timerOptions) {
+                NavigationStack {
+                    List {
+                        NavigationLink(destination: TimerSettingsView()) {
+                            Label("Haptics & timer settings", systemImage: "waveform")
+                        }.accessibilityIdentifier("timers.alarm-settings")
+                        if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
+                            Button("Use Watch for alerts") {
+                                do { try store.changeTimer("here") } catch { store.report(error) }
+                            }
+                        }
+                        Button("Watch Home") { timerOptions = false; store.showingTimerQueue = false }
+                    }.navigationTitle("Timer options")
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { timerOptions = false } } }
+                }
+            }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
                 if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
@@ -47,13 +63,10 @@ struct WatchHomeView: View {
                 categoryIDs = []; saved = false
             }
             .toolbar {
-                if store.showingTimerQueue {
-                    if showingTimerRows {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button { showingTimerRows = false } label: { Image(systemName: "chevron.up").foregroundStyle(.black) }
-                                .accessibilityLabel("Current timer")
-                                .labelStyle(.iconOnly).accessibilityIdentifier("timers.current-page")
-                        }
+                if store.showingTimerQueue, !showingTimerRows {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { timerOptions = true } label: { Image(systemName: "ellipsis").foregroundStyle(.black) }
+                            .accessibilityLabel("Timer options").accessibilityIdentifier("timers.options")
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }

@@ -11,6 +11,8 @@ struct HistoryPanel: View {
     @State private var page: Int? = 0
     @State private var selectedGroupID: String?
     @State private var expandedCategories = Set<String>()
+    @State private var breakdownHeight: CGFloat = 150
+    @State private var showingHelp = false
     private let pages = ["Breakdown", "Pie chart", "Daily trend", "Heatmap", "Day comparison"]
     private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
     private func color(_ id: String) -> Color {
@@ -22,6 +24,16 @@ struct HistoryPanel: View {
         VStack(spacing: 8) {
             HStack {
                 Text("Where your time went").font(.headline).accessibilityIdentifier("dashboard.breakdown-title")
+                Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 32) }
+                    .buttonStyle(.plain).accessibilityLabel("About time estimates").accessibilityIdentifier("dashboard.help")
+                    .popover(isPresented: $showingHelp) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("About time estimates").font(.headline)
+                            Text("Percentages use the estimated period from half a notification interval before the first log to half an interval after the last. Random mode uses your configured average interval. Estimates stop at now and calendar-day boundaries. Days without logs are excluded.")
+                            Text("Parent totals include their subcategories. Percentages use the same total throughout.")
+                        }.font(.subheadline).padding(20).frame(idealWidth: 300, maxWidth: 340)
+                            .accessibilityIdentifier("dashboard.help-content").presentationCompactAdaptation(.popover)
+                    }
                 Spacer()
                 Text("\((page ?? 0) + 1) / \(pages.count)").font(.caption).foregroundStyle(.secondary)
             }.padding(.horizontal, 20)
@@ -52,7 +64,7 @@ struct HistoryPanel: View {
                     }.scrollTargetLayout()
                 }.scrollTargetBehavior(.paging).scrollPosition(id: $page).scrollIndicators(.hidden)
                     .accessibilityIdentifier("report.pages")
-            }
+            }.frame(height: (page ?? 0) == 0 ? breakdownHeight : 460)
             HStack {
                 Text(pages[page ?? 0]).font(.subheadline).foregroundStyle(.secondary)
                 Spacer()
@@ -66,27 +78,25 @@ struct HistoryPanel: View {
                     }
                 }
             }.padding(.horizontal, 20)
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.frame(maxWidth: .infinity)
+        .onPreferenceChange(BreakdownHeightKey.self) { breakdownHeight = max(150, $0) }
         .onChange(of: report.start) { _, _ in clearSelection() }
         .onChange(of: report.end) { _, _ in
             if !report.rows.contains(where: { $0.id == selectedGroupID }) { clearSelection() }
         }
     }
     private var breakdown: some View {
-        ScrollView {
             VStack(spacing: 14) {
                 if report.rows.isEmpty { empty }
                 ForEach(report.categoryOutline(in: store.ledger, expanded: expandedCategories, hideZeroTime: hideZeroTime)) { item in
                     breakdownRow(item)
                 }
-                if report.rows.contains(where: { !store.ledger.children(of: $0.id).isEmpty }) {
-                    Text("Parent totals include their subcategories. Percentages use the same total throughout.")
-                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Text("Percentages use the estimated period from half a notification interval before the first log to half an interval after the last. Random mode uses your configured average interval. Estimates stop at now and calendar-day boundaries. Days without logs are excluded.")
-                    .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(.bottom, 8)
-        }.accessibilityIdentifier("report.view.breakdown")
+            }.padding(.bottom, 8).fixedSize(horizontal: false, vertical: true)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: BreakdownHeightKey.self, value: geometry.size.height)
+                    }
+                }.accessibilityIdentifier("report.view.breakdown")
     }
     private func breakdownRow(_ item: HistoryCategoryRow) -> some View {
         HStack(spacing: 4) {
@@ -204,4 +214,9 @@ struct HistoryPanel: View {
             return value < total
         }?.id
     }
+}
+
+private struct BreakdownHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 150
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

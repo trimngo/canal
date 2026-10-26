@@ -1,6 +1,47 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    private static var preparedKeyboard = false
+    override func setUpWithError() throws {
+        guard !Self.preparedKeyboard else { return }
+        // Cold simulators can put QuickPath's introduction over the keyboard
+        // toolbar. Acknowledge Apple's setup before exercising Dash's controls.
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        let log = app.buttons["today.log"]
+        XCTAssertTrue(log.waitForExistence(timeout: 20)); log.tap()
+        let field = app.textFields["checkin.activity"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10)); field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        let introduction = app.otherElements["UIContinuousPathIntroductionView"]
+        if introduction.waitForExistence(timeout: 2) { dismissKeyboardIntroduction(in: app) }
+        field.typeText("Keyboard setup")
+        dismissKeyboardIntroduction(in: app)
+        app.terminate(); Self.preparedKeyboard = true
+    }
+    private func dismissKeyboardIntroduction(in app: XCUIApplication) {
+        let introduction = app.otherElements["UIContinuousPathIntroductionView"]
+        if introduction.exists {
+            let button = introduction.buttons["Continue"]
+            XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+            XCTAssertTrue(introduction.waitForNonExistence(timeout: 5))
+        }
+    }
+    func testPhoneRestartRetainsWatchAlertsAndOffersExplicitPhoneTakeover() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-watch-owned-timer", "--ui-live-timer-restart", "--ui-quiet-timer-alerts"]
+        app.launch()
+        XCTAssertTrue(element(app, "timers.countdown").waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
+        let hint = element(app, "timers.watch-rearm"); reveal(hint, in: app)
+        XCTAssertTrue(hint.exists)
+        XCTAssertTrue(app.staticTexts["Alerts on Apple Watch"].exists)
+        let takeover = app.buttons["timers.alerts-here"]; reveal(takeover, in: app); takeover.tap()
+        XCTAssertTrue(app.staticTexts["Alerts on iPhone"].waitForExistence(timeout: 5))
+        XCTAssertFalse(hint.exists)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(app.staticTexts["Alerts on iPhone"].waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
+    }
     func testSpokenTimerDraftCanRunWithoutAPreexistingTask() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-timers", "--ui-quiet-timer-alerts"]; app.launch()
         let current = element(app, "timers.current")
@@ -168,6 +209,57 @@ final class TimeLedgerUITests: XCTestCase {
         let title = app.staticTexts["inbox.ranked-title"]; reveal(title, in: app)
         XCTAssertTrue(title.label.contains("(1)"))
     }
+    func testTodayShowsGroupedUrgentTasksBelowDashboardWithHelpAndTopReview() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-today-urgent"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]
+        XCTAssertTrue(review.waitForExistence(timeout: 10)); XCTAssertTrue(review.isHittable)
+        XCTAssertFalse(app.buttons["dashboard.groups"].exists)
+        let help = app.buttons["dashboard.help"]
+        help.tap()
+        XCTAssertTrue(element(app, "dashboard.help-content").waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        XCTAssertTrue(element(app, "dashboard.help-content").waitForNonExistence(timeout: 5))
+        let urgent = app.staticTexts["today.urgent-title"]
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent tasks (3)")
+        XCTAssertGreaterThan(urgent.frame.minY, element(app, "dashboard.breakdown-title").frame.minY)
+        XCTAssertTrue(app.staticTexts["today.urgent-category.music"].exists)
+        XCTAssertEqual(app.staticTexts["today.urgent-category.teaching"].label, "Work › Teaching")
+        XCTAssertTrue(app.staticTexts["today.urgent-category.uncategorized"].exists)
+        XCTAssertFalse(app.buttons["today.urgent-task.music.guitar"].exists)
+        let complete = app.buttons["today.urgent-complete.music.joe"]
+        reveal(complete, in: app); complete.tap()
+        XCTAssertEqual(urgent.label, "Urgent tasks (2)")
+        XCTAssertFalse(app.buttons["today.urgent-task.music.joe"].exists)
+        XCTAssertFalse(app.buttons["today.urgent-task.teaching.joe"].exists)
+        XCTAssertTrue(review.isHittable)
+        recordScreen("TodayGroupedUrgentTasks", in: app)
+    }
+    func testTodayUrgencyCorrectionPersistsAndUpdatesInbox() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-today-urgent"]; app.launch()
+        let task = app.buttons["today.urgent-task.teaching.alan"]
+        reveal(task, in: app); task.tap()
+        let timing = element(app, "task-planning.timing"); reveal(timing, in: app); timing.tap()
+        app.buttons["No date"].tap(); app.buttons["task-planning.save"].tap()
+        let urgent = app.staticTexts["today.urgent-title"]
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent tasks (2)")
+        app.terminate(); app.launchArguments = []; app.launch()
+        reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent tasks (2)")
+        XCTAssertFalse(task.exists)
+        openInbox(app)
+        let inboxUrgent = app.staticTexts["inbox.urgent-title"]
+        reveal(inboxUrgent, in: app); XCTAssertEqual(inboxUrgent.label, "Urgent (2)")
+    }
+    func testLiveActivityRestartIntentRestartsExpiredTimerWithoutChangingQueue() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-live-timer-restart"]
+        app.launch()
+        XCTAssertTrue(element(app, "timers.countdown").waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
+        XCTAssertTrue(element(app, "timers.waiting.timer-email").exists)
+        XCTAssertTrue(element(app, "timers.waiting.timer-walk").exists)
+        XCTAssertFalse(element(app, "timers.finished").exists)
+        recordScreen("LiveActivityRestartIntent", in: app)
+    }
     func testAutomaticMatchingSettingsCanAddPhraseAndCategoryRule() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-urgent-inbox"]; app.launch()
         app.tabBars.buttons["Settings"].tap()
@@ -299,6 +391,12 @@ final class TimeLedgerUITests: XCTestCase {
         showToday(app)
     }
 
+    private func openDashboardCategories(in app: XCUIApplication) {
+        app.buttons["dashboard.filter"].tap()
+        let manage = app.buttons["dashboard.manage-categories"]
+        XCTAssertTrue(manage.waitForExistence(timeout: 5)); manage.tap()
+    }
+
     private func dashboardGroup(_ id: String, in app: XCUIApplication) -> XCUIElement {
         let target = app.buttons["dashboard.group.\(id)"]
         if target.exists, target.isHittable { return target }
@@ -335,7 +433,14 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func showToday(_ app: XCUIApplication) {
+        dismissKeyboardIntroduction(in: app)
+        if app.keyboards.firstMatch.exists {
+            app.navigationBars.firstMatch.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        }
         app.tabBars.buttons["Today"].tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: app.tabBars.buttons["Today"])
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
         // Log is now a page within Today, so return using its normal back button.
         if app.navigationBars["Log"].exists, app.navigationBars.buttons["Today"].exists {
             app.navigationBars.buttons["Today"].tap()
@@ -372,16 +477,20 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
         let pages = element(app, "report.pages")
-        XCTAssertGreaterThan(pages.frame.height, app.frame.height * 0.5)
+        XCTAssertGreaterThan(pages.frame.height, 100)
         XCTAssertEqual(pages.frame.width, app.frame.width, accuracy: 2)
         let calendar = app.buttons["dashboard.calendar"]
         XCTAssertTrue(calendar.isHittable)
         XCTAssertLessThan(calendar.frame.maxY, header.frame.minY)
         XCTAssertFalse(app.buttons["dashboard.undo"].exists)
-        let initialHeight = pages.frame.height
+        let urgent = element(app, "today.urgent-title")
+        XCTAssertGreaterThan(urgent.frame.minY, pages.frame.maxY)
         app.buttons["Show pie chart"].tap()
         XCTAssertTrue(element(app, "report.pie.chart").waitForExistence(timeout: 5))
-        XCTAssertEqual(pages.frame.height, initialHeight, accuracy: 2)
+        let chart = element(app, "report.pie.chart")
+        XCTAssertGreaterThan(chart.frame.width, 160); XCTAssertGreaterThan(chart.frame.height, 160)
+        XCTAssertTrue(pages.frame.contains(chart.frame))
+        XCTAssertGreaterThan(urgent.frame.minY, pages.frame.maxY)
         XCTAssertTrue(app.buttons["today.log"].isHittable)
         app.buttons["Show breakdown"].tap()
         recordScreen("Dashboard", in: app)
@@ -476,7 +585,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Creative Practice")
         app.alerts.buttons["Create"].tap()
         app.buttons["group-selection.done"].tap()
-        closeCategoryLogs(in: app); app.buttons["dashboard.groups"].tap()
+        closeCategoryLogs(in: app); openDashboardCategories(in: app)
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "groups.open.", "Creative Practice")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let groupID = String(row.identifier.dropFirst("groups.open.".count))
@@ -524,19 +633,17 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 10))
         openLogs(app)
         let sample = app.staticTexts["Legacy sample UI fixture"]; reveal(sample, in: app); sample.tap()
-        XCTAssertTrue(app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "logs.entry.")).firstMatch.waitForExistence(timeout: 5))
+        let field = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "logs.entry.")).firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        let doneButtons = app.buttons.matching(identifier: "keyboard.done")
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            doneButtons.allElementsBoundByIndex.contains { $0.isHittable }
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
-        guard let done = doneButtons.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
-            XCTFail("Keyboard Done must be visible before tapping"); return
-        }
-        done.tap()
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.typeText(" updated")
+        XCTAssertEqual(field.value as? String, "Legacy sample UI fixture updated")
+        finishInlineEditing(in: app)
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture updated"].waitForExistence(timeout: 5))
+        app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
+        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture updated"].waitForExistence(timeout: 5))
     }
 
     func testNotificationOpenedLogCanBeSavedAndSurvivesRelaunch() {
@@ -867,6 +974,7 @@ final class TimeLedgerUITests: XCTestCase {
         let selection = element(app, "report.heatmap.selection")
         XCTAssertTrue(selection.waitForExistence(timeout: 5)); XCTAssertTrue(selection.label.contains("No data"))
         let populated = cells.matching(NSPredicate(format: "value CONTAINS %@", "percent")).firstMatch
+        revealHeatmapRow(populated, in: app)
         populated.tap()
         XCTAssertTrue(selection.label.contains("Work")); XCTAssertTrue(selection.label.contains("%"))
         recordScreen("FullScreenHeatmapPercentages", in: app)
@@ -874,11 +982,23 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(selection.label.contains("%")) // Details always retain both measures.
         XCTAssertTrue(app.buttons["dashboard.calendar"].isHittable)
         recordScreen("FullScreenHeatmapHours", in: app)
-        work.tap()
+        revealHeatmapRow(work, in: app); work.tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5)); closeCategoryLogs(in: app)
         app.buttons["dashboard.calendar"].tap()
         XCTAssertTrue(element(app, "timeline.grid").waitForExistence(timeout: 5))
+    }
+
+    private func revealHeatmapRow(_ target: XCUIElement, in app: XCUIApplication) {
+        let rows = app.scrollViews["report.heatmap.rows"]
+        XCTAssertTrue(rows.waitForExistence(timeout: 5))
+        reveal(rows, in: app)
+        for _ in 0..<8 {
+            if target.exists, target.isHittable, rows.frame.contains(target.frame) { return }
+            if target.exists, target.frame.maxY < rows.frame.minY { rows.swipeDown() }
+            else { rows.swipeUp() }
+        }
+        XCTAssertTrue(target.isHittable); XCTAssertTrue(rows.frame.contains(target.frame))
     }
 
     func testHeatmapExpandsChildrenAndDirectTimeWithoutShiftingGridColumns() {
@@ -908,14 +1028,14 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("ExpandedHeatmapAlignedColumns", in: app)
         units.buttons["Hours"].tap()
         recordScreen("ExpandedHeatmapHours", in: app)
-        direct.tap()
+        revealHeatmapRow(direct, in: app); direct.tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "group.log.today-parent-direct").exists)
         XCTAssertFalse(element(app, "group.log.today-teaching").exists)
         XCTAssertFalse(element(app, "group.log.today-guitar").exists)
         closeCategoryLogs(in: app)
-        reveal(guitar, in: app); guitar.tap()
+        revealHeatmapRow(guitar, in: app); guitar.tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(element(app, "group.log.today-guitar").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "group.log.today-parent-direct").exists)
@@ -923,7 +1043,7 @@ final class TimeLedgerUITests: XCTestCase {
 
     func testGroupCountsAndDeletionPreserveAllTimeLogsAfterRelaunch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-group-history"]; app.launch()
-        app.buttons["dashboard.groups"].tap()
+        openDashboardCategories(in: app)
         let group = app.buttons["groups.open.work"]; reveal(group, in: app)
         XCTAssertTrue(group.staticTexts["0 ideas"].exists); recordScreen("CategoryCounts", in: app)
         app.buttons["categories.edit.work"].tap()
@@ -940,7 +1060,7 @@ final class TimeLedgerUITests: XCTestCase {
         openCategoryLogs(in: app)
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Recent work observation"].exists)
-        app.terminate(); app.launchArguments = []; app.launch(); app.buttons["dashboard.groups"].tap()
+        app.terminate(); app.launchArguments = []; app.launch(); openDashboardCategories(in: app)
         XCTAssertFalse(app.buttons["groups.open.work"].exists)
         reveal(uncategorized, in: app); uncategorized.tap()
         openCategoryLogs(in: app)
@@ -1138,7 +1258,7 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("LogDeletedUndo", in: app)
         app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
         XCTAssertFalse(app.staticTexts["Recent work observation"].exists)
-        showToday(app); app.buttons["dashboard.groups"].tap()
+        showToday(app); openDashboardCategories(in: app)
         let work = app.buttons["categories.edit.work"]; reveal(work, in: app); work.tap()
         app.buttons["View all logs (1)"].tap()
         XCTAssertTrue(app.staticTexts["Older work observation"].waitForExistence(timeout: 5))
@@ -1626,10 +1746,18 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Choose group"].tap()
         app.buttons["mood.3"].tap(); tapCategory("work", in: app)
         editInline("category-context.activity", adding: " corrected", in: app)
-        XCTAssertTrue(((element(app, "category-context.activity").value as? String) ?? element(app, "category-context.activity").label).contains("corrected"))
+        let context = element(app, "category-context.activity")
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            context.label.contains("corrected") || (context.value as? String ?? "").contains("corrected")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
         XCTAssertTrue(app.buttons["category-tag.work"].exists)
         app.buttons["group-selection.done"].tap(); closeCategoryLogs(in: app)
-        XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 5))
+        let work = dashboardGroup("work", in: app)
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); work.tap(); openCategoryLogs(in: app)
+        let edited = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "corrected")).firstMatch
+        reveal(edited, in: app); XCTAssertTrue(edited.exists)
+        XCTAssertTrue(app.staticTexts["Mood: 3/5"].exists)
     }
 
     func testCategorySearchKeepsHierarchyAndSelectionsAndCanCreateFromNoResults() {
@@ -2152,18 +2280,40 @@ final class TimeLedgerUITests: XCTestCase {
         let label = element(app, id); reveal(label, in: app); label.tap()
         let field = element(app, id)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        dismissKeyboardIntroduction(in: app)
         field.typeText(suffix)
+        let typed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            ((field.value as? String) ?? field.label).contains(suffix)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [typed], timeout: 5), .completed)
         if finishEditing {
-            let done = app.buttons["keyboard.done"].firstMatch
-            XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+            finishInlineEditing(in: app)
         }
         if !id.hasPrefix("task-planning."), !id.hasPrefix("category-context.") { XCTAssertFalse(app.navigationBars["Edit idea"].exists) }
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
 
-    private func switchGoalUnit(_ label: String, in app: XCUIApplication) {
+    private func finishInlineEditing(in app: XCUIApplication) {
+        dismissKeyboardIntroduction(in: app)
+        let buttons = app.buttons.matching(identifier: "keyboard.done")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            buttons.allElementsBoundByIndex.contains { $0.isHittable }
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [ready], timeout: 10)
+        if result != .completed { print("INLINE KEYBOARD FAILURE: \(app.debugDescription)") }
+        XCTAssertEqual(result, .completed)
+        guard let done = buttons.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+            XCTFail("Keyboard Done must be visible and hittable"); return
+        }
+        done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+    }
+
+    private func switchGoalUnit(_ label: String, in app: XCUIApplication, expectedSelection: String? = nil) {
         let picker = app.segmentedControls["plan.unit"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.buttons[label].tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: picker.buttons[expectedSelection ?? label])
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
     func testDailyGoalsShowsTimeRemainingAndMatchingProgressWithoutTable() {
@@ -2517,7 +2667,7 @@ final class TimeLedgerUITests: XCTestCase {
         openGoalEditor(in: app); switchGoalUnit("Time", in: app)
         setPlanNumber("categories.target.teaching", to: "20", in: app)
         let error = element(app, "plan.error"); reveal(error, in: app); XCTAssertTrue(error.exists)
-        switchGoalUnit("%", in: app)
+        switchGoalUnit("%", in: app, expectedSelection: "Time")
         XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
         let teaching = app.textFields["categories.target.teaching"]; reveal(teaching, in: app)
         XCTAssertEqual(teaching.value as? String, "20")

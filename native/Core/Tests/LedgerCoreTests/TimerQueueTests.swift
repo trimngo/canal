@@ -16,6 +16,32 @@ final class TimerQueueTests: XCTestCase {
         XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(1200))
         XCTAssertTrue(ledger.entries.isEmpty); XCTAssertTrue(ledger.captures.isEmpty)
     }
+    func testSoleNewWatchTaskStartsAfterPreviousTaskWasFinishedOrDeleted() throws {
+        for delete in [false, true] {
+            var ledger = Ledger()
+            ledger.settings.timerAutoStartNext = false
+            try ledger.enqueueTimer(id: "old", title: "Old task", duration: 60, writer: "watch", onWatch: true, now: now)
+            if delete { ledger.deleteQueuedTimer("old", writer: "watch", onWatch: true, now: now) }
+            else { ledger.finishTimer(writer: "watch", onWatch: true, now: now) }
+            try ledger.enqueueTimer(id: "new", title: "New task", duration: 300, writer: "watch", onWatch: true, now: now)
+            XCTAssertEqual(ledger.currentTimer?.id, "new")
+            XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(300))
+            XCTAssertTrue(ledger.timerControl?.onWatch == true)
+            XCTAssertTrue(ledger.waitingTimers.isEmpty)
+        }
+    }
+    func testSoleNewTaskStartsWhenSyncLeftAControlForADeletedTask() throws {
+        var ledger = Ledger()
+        try ledger.enqueueTimer(id: "old", title: "Old task", duration: 60, writer: "phone", onWatch: false, now: now)
+        let staleControl = ledger.timerControl
+        ledger.deleteQueuedTimer("old", writer: "phone", onWatch: false, now: now)
+        ledger.timerControl = staleControl
+        XCTAssertNil(ledger.currentTimer)
+        try ledger.enqueueTimer(id: "new", title: "New task", duration: 300, writer: "watch", onWatch: true, now: now)
+        XCTAssertEqual(ledger.currentTimer?.id, "new")
+        XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(300))
+        XCTAssertEqual(ledger.timerControl?.owner, "watch")
+    }
     func testReorderingOnlyMovesUpcomingTimersAndDoneUsesNewOrder() throws {
         var ledger = try fixture()
         try ledger.enqueueTimer(id: "three", title: "Walk", duration: 300, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
@@ -156,6 +182,61 @@ final class TimerQueueTests: XCTestCase {
         ledger.finishTimer(expectedToken: old, writer: "watch", onWatch: true, now: now)
         ledger.restartTimer(expectedToken: old, writer: "watch", onWatch: true, now: now)
         XCTAssertEqual(ledger, saved)
+    }
+    func testRepeatedLiveActivityRestartCannotExtendANewerCountdown() throws {
+        var ledger = try fixture()
+        let token = ledger.timerControl!.token
+        let waiting = ledger.waitingTimers
+        ledger.restartTimer(expectedToken: token, writer: "phone", onWatch: false, now: now.addingTimeInterval(1300))
+        XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(2500))
+        XCTAssertEqual(ledger.timerControl?.owner, "watch")
+        XCTAssertEqual(ledger.timerControl?.onWatch, true)
+        XCTAssertEqual(ledger.waitingTimers, waiting)
+        let restarted = ledger
+        ledger.restartTimer(expectedToken: token, writer: "phone", onWatch: false, now: now.addingTimeInterval(1400))
+        XCTAssertEqual(ledger, restarted)
+    }
+    func testPhoneRestartOfExpiredWatchTimerPreservesRepeatingDestinationAndPhoneBackup() throws {
+        let original = try fixture()
+        var phone = original, watch = original
+        let old = try XCTUnwrap(original.timerControl)
+        let restartAt = now.addingTimeInterval(1300)
+        XCTAssertTrue(old.isFinished(at: restartAt))
+        phone.restartTimer(expectedToken: old.token, writer: "phone", onWatch: false, now: restartAt)
+        let control = try XCTUnwrap(phone.timerControl)
+        XCTAssertEqual(control.owner, "watch"); XCTAssertTrue(control.onWatch)
+        XCTAssertTrue(control.isRemoteWatchRestart)
+        XCTAssertEqual(control.dueAt, restartAt.addingTimeInterval(1200))
+        XCTAssertTrue(control.schedulesNotification(writer: "phone", onWatchDevice: false))
+        XCTAssertTrue(control.schedulesNotification(writer: "watch", onWatchDevice: true))
+        XCTAssertFalse(control.schedulesNotification(writer: "other-phone", onWatchDevice: false))
+        watch.merge(phone); watch.merge(original)
+        let requested = WatchTimerAlarmPolicy.controlToSchedule(in: watch, writer: "watch", silencedToken: old.token,
+            failedToken: nil, now: restartAt)
+        XCTAssertEqual(requested, control)
+        XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: old.token, requestedToken: control.token,
+            isActive: false, hasSession: true), .waitForForeground)
+        XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: old.token, requestedToken: control.token,
+            isActive: true, hasSession: true), .replace)
+        XCTAssertEqual(try LedgerBackup.decode(LedgerBackup(ledger: phone).encoded()).ledger.timerControl, control)
+        XCTAssertEqual(phone.waitingTimers, original.waitingTimers)
+        XCTAssertTrue(phone.entries.isEmpty)
+    }
+    func testExplicitPhoneAlertTakeoverClearsWatchRearmAndFollowingRestartsStayOnPhone() throws {
+        var ledger = try fixture()
+        ledger.restartTimer(writer: "phone", onWatch: false, now: now)
+        XCTAssertTrue(ledger.timerControl?.isRemoteWatchRestart == true)
+        let due = ledger.timerControl?.dueAt
+        ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        XCTAssertEqual(ledger.timerControl?.dueAt, due)
+        XCTAssertFalse(ledger.timerControl!.isRemoteWatchRestart)
+        ledger.restartTimer(writer: "phone", onWatch: false, now: now.addingTimeInterval(1))
+        XCTAssertEqual(ledger.timerControl?.owner, "phone"); XCTAssertEqual(ledger.timerControl?.onWatch, false)
+        XCTAssertTrue(ledger.timerControl!.schedulesNotification(writer: "phone", onWatchDevice: false))
+        XCTAssertFalse(ledger.timerControl!.schedulesNotification(writer: "watch", onWatchDevice: true))
+        ledger.restartTimer(writer: "watch", onWatch: true, now: now.addingTimeInterval(2))
+        XCTAssertEqual(ledger.timerControl?.owner, "watch"); XCTAssertTrue(ledger.timerControl!.onWatch)
+        XCTAssertFalse(ledger.timerControl!.isRemoteWatchRestart)
     }
     func testPauseResumePreservesRemainingTimeWithoutPhone() throws {
         var ledger = try fixture()

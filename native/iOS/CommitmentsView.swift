@@ -413,6 +413,7 @@ struct GoalEditorView: View {
     }
 
     @ViewBuilder private func goal(_ item: CategoryOutlineItem, goals: [String: Double]) -> some View {
+        let inputUnit = displayUnit
         if !item.direct && !categoryIndex.children(of: item.category.id).isEmpty {
             Text(goals[item.category.id].map(amount) ?? "—")
                 .font(.subheadline.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
@@ -424,7 +425,12 @@ struct GoalEditorView: View {
                 .accessibilityIdentifier("categories.calculated-goal.\(item.category.id)")
         } else if !item.direct {
             HStack(spacing: 0) {
-                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: { if plan.text[item.category.id] != $0 { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) } }))
+                TextField("—", text: Binding(get: { plan.text[item.category.id] ?? "" }, set: {
+                    // A resign-first-responder callback from the hours field
+                    // must not overwrite a freshly converted percentage.
+                    guard inputUnit == displayUnit else { return }
+                    if plan.text[item.category.id] != $0 { plan.text[item.category.id] = $0; dirtyGoals.insert(item.category.id) }
+                })).id(inputUnit)
                     .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .focused($focusedTarget, equals: item.category.id)
                     .disabled(multiSelecting || !store.storageAvailable || (displayUnit == .time && reference.goalBasisMinutes == nil)).allowsHitTesting(!multiSelecting)

@@ -48,6 +48,12 @@ public struct TimerQueueControl: Codable, Equatable, Sendable {
     }
     public func remaining(at now: Date) -> TimeInterval { max(0, pausedRemaining ?? dueAt?.timeIntervalSince(now) ?? 0) }
     public func isFinished(at now: Date) -> Bool { pausedRemaining == nil && dueAt.map { $0 <= now } == true }
+    /// A phone restart keeps the Watch destination. WatchKit still requires
+    /// the Watch app in foreground to replace its scheduled repeating alarm.
+    public var isRemoteWatchRestart: Bool { onWatch && owner != revision.writer && dueAt != nil }
+    public func schedulesNotification(writer: String, onWatchDevice: Bool) -> Bool {
+        owner == writer || (!onWatchDevice && isRemoteWatchRestart && revision.writer == writer)
+    }
 }
 
 public struct TimerWidgetSnapshot: Codable, Equatable, Sendable {
@@ -195,7 +201,9 @@ extension Ledger {
         let hadWaitingTasks = !waitingTimers.isEmpty
         let value = QueuedTimer(id: id, title: title, duration: duration, createdAt: now, revision: nextRevision(writer: writer))
         queuedTimers = (queuedTimers ?? []) + [value]
-        if currentTimer == nil, timerControl?.taskID == nil, !hadWaitingTasks { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
+        // An empty queue can retain an old control after completion or sync.
+        // A new sole task must start regardless of that stale task ID.
+        if currentTimer == nil, !hadWaitingTasks { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
     }
     public mutating func startNextTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard currentTimer == nil else { return }
@@ -213,8 +221,10 @@ extension Ledger {
         }
     }
     public mutating func restartTimer(expectedToken: String? = nil, writer: String, onWatch: Bool, now: Date = Date()) {
-        guard let task = currentTimer, expectedToken == nil || timerControl?.token == expectedToken else { return }
-        timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(task.duration), owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        guard let task = currentTimer, let previous = timerControl, expectedToken == nil || previous.token == expectedToken else { return }
+        let keepWatch = !onWatch && previous.onWatch
+        timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(task.duration),
+            owner: keepWatch ? previous.owner : writer, onWatch: keepWatch || onWatch, revision: nextRevision(writer: writer))
     }
     public mutating func pauseTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, let control = timerControl, control.pausedRemaining == nil, !control.isFinished(at: now) else { return }

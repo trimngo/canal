@@ -173,9 +173,11 @@ targets:
     sources:
       - TimerWidgets
       - path: Shared/TimerLiveAttributes.swift
+      - path: Shared/RestartTimerIntent.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.timerwidgets
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) LEDGER_WIDGETS_EXTENSION
         APPLICATION_EXTENSION_API_ONLY: YES
       configs:
         Release:
