@@ -18,7 +18,7 @@ On Watch, the **Timers** and **Current task** complications open the single-time
 
 Siri registers the full-sentence phrases **Add a Dash timer to [task]** and **Add a Dash timer for [task]**. Try “Hey Siri, add a Dash timer to eat food” (five minutes), or “Hey Siri, add a Dash timer to cook food for ten minutes.” A string-query entity resolves the spoken task into a draft without saving during lookup; the intent saves only when it runs. This avoids the unsupported free-form String parameter in an App Shortcut phrase. Apple SDK metadata validation passes, but actual one-sentence Siri recognition still needs a physical Watch check. The older **Add a Dash timer**, **Add Dash timer**, **Add a timer to Dash**, and **Queue a timer in Dash** triggers remain available; when no task is supplied, Siri asks what the timer is for.
 
-The iPhone has a dedicated **Timers** tab, with quick text entry, current countdown and progress, Pause/Resume, Restart, Done & Next, editing, and an upcoming queue. Log is accessible at the top of Today. Tap a timer title to edit its task and minutes; changing the current duration preserves elapsed time. Starting, restarting, resuming, or changing the running duration uses that device for alerts. Opening the screen alone leaves alert ownership unchanged. Device-to-device controls require delivery. Watch smart alarms can only be armed or cancelled while Dash is active on that Watch and holds the system session. After a phone change, reopen Dash on Watch to apply it to the alarm; use the Watch's existing alert takeover control to move a phone timer back there.
+The iPhone has a dedicated **Timers** tab, with quick text entry, current countdown and progress, Pause/Resume, Restart, Done & Next, editing, and an upcoming queue. Log is accessible at the top of Today. Tap a timer title to edit its task and minutes; changing the current duration preserves elapsed time. Starting, resuming, completing, or changing the running duration uses that device for alerts. Restart on iPhone (including a mirrored Mac Live Activity) preserves the Watch destination if the timer was using Watch alerts. Open Dash on Watch once to rearm the repeating alarm after a remote restart; a one-time phone backup alert is also scheduled. Use iPhone for alerts explicitly changes the destination without changing the deadline. Opening the screen alone leaves alert ownership unchanged. Device-to-device controls require delivery. Watch smart alarms can only be armed or cancelled while Dash is active on that Watch and holds the system session. After a phone change, reopen Dash on Watch to apply it to the alarm; use the Watch's existing alert takeover control to move a phone timer back there.
 
 If a phone change arrives while Dash is inactive on Watch, the already scheduled
 Watch alarm remains independent of the synced timer. It can still ring at its
@@ -137,8 +137,13 @@ the task name and countdown; expand it to reach the action.
 `RestartTimerIntent` is compiled into the app and widget extension and conforms
 to `LiveActivityIntent`, so Apple runs it in the iPhone app process without
 opening the app. The widget does not write a separate copy of the ledger. Restart
-uses the full current duration, preserves upcoming tasks, schedules alerts on
-iPhone, refreshes the Live Activity, and syncs through the existing store. The
+uses the full current duration, preserves upcoming tasks and the Watch alert
+destination, refreshes the Live Activity, and syncs through the existing store.
+When restarting a Watch timer remotely, iPhone schedules one backup notification
+and the expanded Live Activity explains opening Dash on Watch to rearm repeating
+haptics. watchOS forbids that rearm while Dash is inactive; the hint is an
+instruction, not confirmation that a new Watch alarm has been armed. An already
+scheduled old Watch alarm may still ring until opening Dash reconciles it. The
 displayed timer control token is required; old or repeated actions are ignored.
 An older activity state without a token still decodes, but needs a refresh before
 showing Restart. Expiry notifications retain their existing Done and Restart
@@ -148,9 +153,17 @@ References: [Apple Live Activity interactivity](https://developer.apple.com/docu
 [LiveActivityIntent](https://developer.apple.com/documentation/appintents/liveactivityintent),
 and [What's new in widgets, WWDC25, 13:51–14:15](https://developer.apple.com/videos/play/wwdc2025/278/).
 
+After the new build is installed, reproduce the expired-alarm report: start on
+Watch, let it expire, restart from iPhone and from the mirrored Mac action, and
+open Dash on Watch before lowering the wrist. The new deadline must retain
+repeating haptics. Repeat without opening Watch: verify the phone backup and
+rearm instruction, and the absence of a silent-session system warning. A
+foreground reopen should reconcile or adopt the old session before scheduling
+its replacement. These checks require real WatchKit sessions.
+
 ## Watch layout
 
-The current timer has its own page with full wrapping task text, a circular remaining-time ring around the countdown, completion and restart controls, and an upper-right +. Pause/Resume sits inside the ring. Waiting, running, paused, and finished titles use the same unrestricted layout; scroll long titles to read them completely without truncation. The native watchOS vertical pager smoothly reveals the queue when swiping up past the bottom of this page, and coordinates scrolling long titles with page navigation. Native paging respects Reduce Motion. Both timer complications open this single-task screen. Starting/restarting a timer selects it, and a running task restores this screen after relaunch.
+The current timer has its own page with full wrapping task text, a circular remaining-time ring around the countdown, completion and restart controls, and an upper-right +. Pause/Resume or the waiting timer’s Start control sits inside the ring. The ring adapts to available height; short timer pages fit without an extra scroll before paging. Waiting, running, paused, and finished titles use the same unrestricted layout; scroll long titles to read them completely without truncation. The native watchOS vertical pager smoothly reveals the queue when swiping up past the bottom of this page, and coordinates scrolling long titles with page navigation. Native paging respects Reduce Motion. Both timer complications open this single-task screen. Starting/restarting a timer selects it, and a running task restores this screen after relaunch.
 
 The secondary page contains only timer rows, without settings, Watch Home, Add, or navigation buttons. Swipe down past the top of the list or right from any scroll position to return to the current timer. Queue rows use a compact 40-point minimum so three ordinary task names fit together at standard text size; longer names wrap to their full height instead of truncating. Native List scrolling supports touch and the Digital Crown, and native long-press reordering preserves the fixed current task. Held row drags do not trigger page navigation. Swipe left on any row to delete. Timer settings, alert takeover, and Watch Home remain accessible in the main timer's options sheet. Restart keeps the system double-tap shortcut while the app is open.
 

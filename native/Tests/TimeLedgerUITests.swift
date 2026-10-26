@@ -1,6 +1,47 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    private static var preparedKeyboard = false
+    override func setUpWithError() throws {
+        guard !Self.preparedKeyboard else { return }
+        // Cold simulators can put QuickPath's introduction over the keyboard
+        // toolbar. Acknowledge Apple's setup before exercising Dash's controls.
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger"]; app.launch()
+        let log = app.buttons["today.log"]
+        XCTAssertTrue(log.waitForExistence(timeout: 20)); log.tap()
+        let field = app.textFields["checkin.activity"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10)); field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        let introduction = app.otherElements["UIContinuousPathIntroductionView"]
+        if introduction.waitForExistence(timeout: 2) { dismissKeyboardIntroduction(in: app) }
+        field.typeText("Keyboard setup")
+        dismissKeyboardIntroduction(in: app)
+        app.terminate(); Self.preparedKeyboard = true
+    }
+    private func dismissKeyboardIntroduction(in app: XCUIApplication) {
+        let introduction = app.otherElements["UIContinuousPathIntroductionView"]
+        if introduction.exists {
+            let button = introduction.buttons["Continue"]
+            XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+            XCTAssertTrue(introduction.waitForNonExistence(timeout: 5))
+        }
+    }
+    func testPhoneRestartRetainsWatchAlertsAndOffersExplicitPhoneTakeover() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-watch-owned-timer", "--ui-live-timer-restart", "--ui-quiet-timer-alerts"]
+        app.launch()
+        XCTAssertTrue(element(app, "timers.countdown").waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
+        let hint = element(app, "timers.watch-rearm"); reveal(hint, in: app)
+        XCTAssertTrue(hint.exists)
+        XCTAssertTrue(app.staticTexts["Alerts on Apple Watch"].exists)
+        let takeover = app.buttons["timers.alerts-here"]; reveal(takeover, in: app); takeover.tap()
+        XCTAssertTrue(app.staticTexts["Alerts on iPhone"].waitForExistence(timeout: 5))
+        XCTAssertFalse(hint.exists)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(app.staticTexts["Alerts on iPhone"].waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
+    }
     func testSpokenTimerDraftCanRunWithoutAPreexistingTask() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-siri-timers", "--ui-quiet-timer-alerts"]; app.launch()
         let current = element(app, "timers.current")
@@ -392,7 +433,14 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func showToday(_ app: XCUIApplication) {
+        dismissKeyboardIntroduction(in: app)
+        if app.keyboards.firstMatch.exists {
+            app.navigationBars.firstMatch.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        }
         app.tabBars.buttons["Today"].tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: app.tabBars.buttons["Today"])
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
         // Log is now a page within Today, so return using its normal back button.
         if app.navigationBars["Log"].exists, app.navigationBars.buttons["Today"].exists {
             app.navigationBars.buttons["Today"].tap()
@@ -2224,6 +2272,7 @@ final class TimeLedgerUITests: XCTestCase {
         let label = element(app, id); reveal(label, in: app); label.tap()
         let field = element(app, id)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        dismissKeyboardIntroduction(in: app)
         field.typeText(suffix)
         let typed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             ((field.value as? String) ?? field.label).contains(suffix)
@@ -2237,6 +2286,7 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func finishInlineEditing(in app: XCUIApplication) {
+        dismissKeyboardIntroduction(in: app)
         let buttons = app.buttons.matching(identifier: "keyboard.done")
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             buttons.allElementsBoundByIndex.contains { $0.isHittable }
@@ -2251,10 +2301,10 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
     }
 
-    private func switchGoalUnit(_ label: String, in app: XCUIApplication) {
+    private func switchGoalUnit(_ label: String, in app: XCUIApplication, expectedSelection: String? = nil) {
         let picker = app.segmentedControls["plan.unit"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.buttons[label].tap()
-        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: picker.buttons[label])
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: picker.buttons[expectedSelection ?? label])
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
@@ -2609,7 +2659,7 @@ final class TimeLedgerUITests: XCTestCase {
         openGoalEditor(in: app); switchGoalUnit("Time", in: app)
         setPlanNumber("categories.target.teaching", to: "20", in: app)
         let error = element(app, "plan.error"); reveal(error, in: app); XCTAssertTrue(error.exists)
-        switchGoalUnit("%", in: app)
+        switchGoalUnit("%", in: app, expectedSelection: "Time")
         XCTAssertTrue(app.segmentedControls["plan.unit"].buttons["Time"].isSelected)
         let teaching = app.textFields["categories.target.teaching"]; reveal(teaching, in: app)
         XCTAssertEqual(teaching.value as? String, "20")

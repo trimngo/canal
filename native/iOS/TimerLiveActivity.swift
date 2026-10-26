@@ -53,7 +53,8 @@ final class TimerLiveActivity {
             last = nil; return
         }
         let state = TimerLiveAttributes.ContentState(title: timer.title, dueAt: control.dueAt,
-            pausedRemaining: control.pausedRemaining, duration: timer.duration, token: control.token)
+            pausedRemaining: control.pausedRemaining, duration: timer.duration, token: control.token,
+            watchRearmHint: control.isRemoteWatchRestart)
         let content = ActivityContent(state: state, staleDate: control.dueAt)
         // One Live Activity spans task transitions, including changes received
         // while iOS is backgrounded. Creating a new activity would require foreground.

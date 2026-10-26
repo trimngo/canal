@@ -9,6 +9,7 @@ struct TimerLiveAttributes: ActivityAttributes {
         var pausedRemaining: Double?
         var duration: Double
         var token: String? = nil
+        var watchRearmHint: Bool? = nil
     }
     var queueID: String
 }

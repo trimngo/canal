@@ -24,6 +24,7 @@ struct DashTimerLiveWidget: Widget {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.state.title).font(.headline).lineLimit(2)
                     Countdown(state: context.state).font(.title2)
+                    WatchRearmHint(state: context.state)
                 }
                 Spacer()
                 RestartTimerButton(state: context.state)
@@ -34,10 +35,13 @@ struct DashTimerLiveWidget: Widget {
                 DynamicIslandExpandedRegion(.leading) { Image(systemName: "timer") }
                 DynamicIslandExpandedRegion(.center) { Text(context.state.title).lineLimit(2) }
                 DynamicIslandExpandedRegion(.bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Countdown(state: context.state).font(.title2)
                         Spacer()
                         RestartTimerButton(state: context.state)
+                    }
+                    WatchRearmHint(state: context.state)
                     }
                 }
             } compactLeading: {
@@ -48,6 +52,16 @@ struct DashTimerLiveWidget: Widget {
               compactTrailing: { Countdown(state: context.state).frame(maxWidth: 64) }
               minimal: { Image(systemName: "timer") }
               .widgetURL(URL(string: "canal-dash://timers"))
+        }
+    }
+}
+
+private struct WatchRearmHint: View {
+    let state: TimerLiveAttributes.ContentState
+    var body: some View {
+        if state.watchRearmHint == true {
+            Text("Open Dash on Watch to rearm repeating alerts")
+                .font(.caption2).foregroundStyle(.secondary)
         }
     }
 }

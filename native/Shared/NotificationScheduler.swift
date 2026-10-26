@@ -258,11 +258,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
         #endif
         let control = ledger.timerControl
-        let wanted = ledger.currentTimer != nil && control?.owner == writer && control?.dueAt != nil ? control?.token : nil
+        // A remote Watch restart retains repeating Watch alerts and also gets
+        // one phone backup in case the Watch cannot rearm until opened.
+        let localAlert = control?.schedulesNotification(writer: writer, onWatchDevice: LedgerStore.isWatch) == true
+        let wanted = ledger.currentTimer != nil && localAlert && control?.dueAt != nil ? control?.token : nil
         center.removePendingNotificationRequests(withIdentifiers: pending.filter { $0.identifier != wanted }.map(\.identifier))
         let delivered = await center.deliveredNotifications().filter { $0.request.identifier.hasPrefix("task-timer-") && $0.request.identifier != wanted }
         center.removeDeliveredNotifications(withIdentifiers: delivered.map { $0.request.identifier })
-        guard let current = ledger.currentTimer, let control, let due = control.dueAt, control.owner == writer else {
+        guard let current = ledger.currentTimer, let control, let due = control.dueAt, localAlert else {
             timerStatus = ledger.currentTimer == nil ? "" : control?.pausedRemaining != nil ? "Paused" : "Timer alerts on \(control?.onWatch == true ? "Apple Watch" : "iPhone")"
             return
         }
@@ -283,7 +286,9 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         guard due > Date() || UserDefaults.standard.string(forKey: key) != control.token else { return }
         let content = UNMutableNotificationContent()
         content.title = "\(current.title) finished"
-        content.body = "Done & Next starts the next task. Restart repeats this timer."
+        content.body = control.isRemoteWatchRestart
+            ? "Open Dash on Watch to rearm repeating haptics. Done & Next completes the task; Restart repeats its duration."
+            : "Done & Next starts the next task. Restart repeats this timer."
         content.sound = .default; content.categoryIdentifier = "TASK_TIMER"
         content.threadIdentifier = "task-timer"; content.interruptionLevel = .timeSensitive
         do {

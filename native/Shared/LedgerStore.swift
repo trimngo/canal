@@ -418,6 +418,9 @@ final class LedgerStore: ObservableObject {
                             writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(Double(index + 2)))
                     }
                 }
+                if ProcessInfo.processInfo.arguments.contains("--ui-watch-owned-timer") {
+                    fixture.moveTimerAlerts(writer: "paired-watch", onWatch: true)
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-timer-long-title") {

@@ -48,7 +48,7 @@ struct TimerQueueView: View {
             NavigationStack { TimerEditorView(task: task) }
         }
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
-            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Using timer controls or changing the running duration makes this device responsible for alerts. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
+            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Starting, resuming, completing, or changing duration uses this device for alerts. Restarting a Watch timer from iPhone keeps Watch alerts: open Dash on Watch once to rearm repeating haptics. A one-time iPhone backup alert is also scheduled. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
         }
         .task {
             store.refreshTimerSupport(force: true); await notifications.refreshStatus()
@@ -82,8 +82,6 @@ struct TimerQueueView: View {
             } else if let next = store.ledger.waitingTimers.first {
                 watchTaskTitle(next.title, identifier: "timers.ready")
                 watchDial(duration: next.duration, control: nil, at: now, size: geometry.size.height - 72)
-                Button("Start", systemImage: "play.fill") { act("start") }
-                    .buttonStyle(.borderedProminent).accessibilityIdentifier("timers.start")
             } else {
                 Text("No timers yet").font(.title3).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .center)
@@ -94,9 +92,9 @@ struct TimerQueueView: View {
                     .accessibilityIdentifier("timers.alarm-update")
             }
             if let inputError { Text(inputError).font(.caption2).foregroundStyle(.red) }
-        }.frame(maxWidth: .infinity, minHeight: geometry.size.height)
+        }.frame(maxWidth: .infinity)
             .padding(.horizontal, 8).padding(.bottom, 4)
-        }.background(.black)
+        }.background(.black).scrollBounceBehavior(.basedOnSize)
             .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
         }
     }
@@ -181,7 +179,7 @@ struct TimerQueueView: View {
         do { try store.reorderTimers(ids) } catch { inputError = error.localizedDescription }
     }
     private func watchDial(duration: TimeInterval, control: TimerQueueControl?, at now: Date, size: CGFloat) -> some View {
-        let size = min(132, max(96, size))
+        let size = min(132, max(80, size))
         let remaining = control?.remaining(at: now) ?? duration
         let fraction = min(1, max(0, remaining / max(1, duration)))
         let finished = control?.isFinished(at: now) == true
@@ -214,9 +212,13 @@ struct TimerQueueView: View {
                     act(control.pausedRemaining == nil ? "pause" : "resume")
                 }.labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 40, height: 32)
                     .accessibilityIdentifier("timers.pause-resume")
+            } else if control == nil {
+                Button("Start", systemImage: "play.circle.fill") { act("start") }
+                    .labelStyle(.iconOnly).font(.title3).buttonStyle(.plain).frame(width: 40, height: 32)
+                    .accessibilityIdentifier("timers.start")
             }
-            }.padding(10)
-        }.frame(width: size, height: size).padding(4)
+            }.padding(8)
+        }.frame(width: size, height: size)
     }
     @ViewBuilder private var watchRestartButton: some View {
         let button = Button("Restart", systemImage: "arrow.clockwise") { act("restart") }
@@ -271,6 +273,15 @@ struct TimerQueueView: View {
                         }
                         Text(control.onWatch ? "Alerts on Apple Watch" : "Alerts on iPhone")
                             .font(.caption).foregroundStyle(.secondary)
+                        if control.isRemoteWatchRestart {
+                            Text("Open Dash on Watch once to rearm repeating haptics after restarting here. An iPhone backup alert stays scheduled.")
+                                .font(.caption).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("timers.watch-rearm")
+                        }
+                        if control.onWatch {
+                            Button("Use iPhone for alerts") { act("here") }
+                                .accessibilityIdentifier("timers.alerts-here")
+                        }
                     }.swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", systemImage: "trash", role: .destructive) { remove(task.id) }
                             .accessibilityIdentifier("timers.delete.\(task.id)")

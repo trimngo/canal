@@ -39,7 +39,7 @@ final class WatchTimerAlarmPolicyTests: XCTestCase {
             isActive: true, hasSession: false), .schedule)
     }
 
-    func testPhoneEditsRetainAlarmInBackgroundAndCancelWhenWatchBecomesActive() throws {
+    func testPhoneEditsRetainAlarmInBackgroundAndReconcileWhenWatchBecomesActive() throws {
         for action in ["pause", "restart", "done", "delete", "edit", "takeover"] {
             var ledger = try fixture()
             let scheduled = try XCTUnwrap(requested(ledger))
@@ -52,13 +52,14 @@ final class WatchTimerAlarmPolicyTests: XCTestCase {
             default: ledger.moveTimerAlerts(writer: "phone", onWatch: false)
             }
             let next = requested(ledger)
-            XCTAssertNil(next, action)
+            if action == "restart" { XCTAssertNotNil(next, action) }
+            else { XCTAssertNil(next, action) }
             XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: scheduled, requestedToken: next,
                 isActive: false, hasSession: true), .waitForForeground, action)
             XCTAssertEqual(WatchTimerAlarmPolicy.wake(scheduledToken: scheduled, requestedToken: next,
                 isActive: false), .ringPrevious, action)
             XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: scheduled, requestedToken: next,
-                isActive: true, hasSession: true), .cancel, action)
+                isActive: true, hasSession: true), action == "restart" ? .replace : .cancel, action)
         }
     }
     func testBackgroundRelaunchPreservesTheOldSessionEvenBeforeWatchKitAdoptsIt() throws {
@@ -120,12 +121,14 @@ final class WatchTimerAlarmPolicyTests: XCTestCase {
         ledger.restartTimer(writer: "phone", onWatch: false, now: expired)
         XCTAssertEqual(ledger.timerControl?.dueAt, expired.addingTimeInterval(60))
         XCTAssertNotEqual(ledger.timerControl?.token, scheduled)
-        XCTAssertNil(requested(ledger, at: expired))
+        XCTAssertNotNil(requested(ledger, at: expired))
         XCTAssertEqual(WatchTimerAlarmPolicy.wake(scheduledToken: scheduled,
             requestedToken: requested(ledger, at: expired), isActive: false), .ringPrevious)
         XCTAssertEqual(WatchTimerAlarmPolicy.update(scheduledToken: scheduled,
-            requestedToken: requested(ledger, at: expired), isActive: true, hasSession: true), .cancel)
-        // Stopping that earlier alarm must not suppress a later Watch takeover.
+            requestedToken: requested(ledger, at: expired), isActive: true, hasSession: true), .replace)
+        // Stopping the old alarm cannot suppress the phone's restarted Watch
+        // alarm, even before an explicit Watch takeover.
+        XCTAssertNotNil(requested(ledger, at: expired, silenced: scheduled))
         ledger.moveTimerAlerts(writer: "watch", onWatch: true)
         XCTAssertNotNil(requested(ledger, at: expired, silenced: scheduled))
     }

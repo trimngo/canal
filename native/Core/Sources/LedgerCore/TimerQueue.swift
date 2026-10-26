@@ -48,6 +48,12 @@ public struct TimerQueueControl: Codable, Equatable, Sendable {
     }
     public func remaining(at now: Date) -> TimeInterval { max(0, pausedRemaining ?? dueAt?.timeIntervalSince(now) ?? 0) }
     public func isFinished(at now: Date) -> Bool { pausedRemaining == nil && dueAt.map { $0 <= now } == true }
+    /// A phone restart keeps the Watch destination. WatchKit still requires
+    /// the Watch app in foreground to replace its scheduled repeating alarm.
+    public var isRemoteWatchRestart: Bool { onWatch && owner != revision.writer && dueAt != nil }
+    public func schedulesNotification(writer: String, onWatchDevice: Bool) -> Bool {
+        owner == writer || (!onWatchDevice && isRemoteWatchRestart && revision.writer == writer)
+    }
 }
 
 public struct TimerWidgetSnapshot: Codable, Equatable, Sendable {
@@ -215,8 +221,10 @@ extension Ledger {
         }
     }
     public mutating func restartTimer(expectedToken: String? = nil, writer: String, onWatch: Bool, now: Date = Date()) {
-        guard let task = currentTimer, expectedToken == nil || timerControl?.token == expectedToken else { return }
-        timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(task.duration), owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        guard let task = currentTimer, let previous = timerControl, expectedToken == nil || previous.token == expectedToken else { return }
+        let keepWatch = !onWatch && previous.onWatch
+        timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(task.duration),
+            owner: keepWatch ? previous.owner : writer, onWatch: keepWatch || onWatch, revision: nextRevision(writer: writer))
     }
     public mutating func pauseTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, let control = timerControl, control.pausedRemaining == nil, !control.isFinished(at: now) else { return }
