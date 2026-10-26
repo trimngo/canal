@@ -90,37 +90,72 @@ processing/distribution even if another main commit arrives.
 
 ## Release handoff snapshot: 2026-10-26
 
-Current objective: release the Watch timer, Today urgent-task, Live Activity
-Restart, haptic options, and faster Watch Restart/Done sync changes in PR #3.
-The user explicitly authorized merging and uploading and requested continuing
-until a new TestFlight build is processed and available. Keep that objective
-active when new ideas are discussed. Build 79 is the previous release.
+Release objective **COMPLETE**: TestFlight **1.0 (80)** is processed and available
+to internal testers. The user explicitly authorized merging/uploading and asked
+for a new available build; do not repeat that upload or treat build 79 as latest.
+Keep existing work active when discussing new ideas.
 
-- PR #3: https://github.com/trimngo/canal/pull/3
-- Follow PR #3’s current head and Native Apple checks for the latest source
-  and full run; earlier runs were superseded while fixing Watch paging.
-- All 448 core tests passed in run 40381141224. The actual phone Live Activity
-  restart preserving Watch alerts and explicit phone takeover passed too.
-  Full iPhone/Watch validation remains pending; do not release on focused checks.
-- After green checks, merge the validated head and follow Native TestFlight
-  delivery through Apple processing and internal distribution. Verify the actual
-  packaged build number; upload acceptance alone is insufficient.
-- Watch options are on the main timer page. The queue page has only timer rows.
-  Haptics & timer settings exposes three presets, preview, and repeat intervals.
-- Watch Restart/Done use priority interactive delivery and a latest-state
-  application context. iPhone refreshes ActivityKit before notifications, with
-  pending-state coalescing and finite background time. Apple still controls the
-  Mac forwarding hop; physical iPhone/Mac timing and repeating haptics need a
-  device check after release.
-- iPhone/Mac Restart preserves an existing Watch alert destination and adds a
-  one-time iPhone backup notification. Dash must be opened on Watch to rearm
-  repeating haptics after remote restart; the expanded Live Activity and phone
-  timer explain this. Do not claim watchOS can rearm its alarm while inactive.
-- The workspace preserves uncommitted copies of published implementation.
-  Compare dirty files with current remote source before edits. Preserve local
-  changes and the index; do not reset or discard them.
-- The separate recent crash remains unidentified. Available reports were from
-  build 9; do not present them as evidence for a newer crash.
-- Friend accountability sharing remains planning only.
+- PR #3: https://github.com/trimngo/canal/pull/3 — merged as
+  `a150fdd79dffa0cc6b91bcc3fa934fb3b0777a31`.
+- Validated feature head: `3667af4b1f9879023a8728defbc4f9e720367aa9`.
+  Its tree `0787170525c4975efa1626c7d8dd4a6ccb677604` exactly matches the merge.
+- Full PR CI: https://github.com/trimngo/canal/actions/runs/40389281497 —
+  **SUCCESS**, all **448 core, 124 iPhone UI, and 16 Watch UI tests** passed.
+  A single XCTest activation-point error was retried in its phone shard on
+  unchanged source/assertions; the pinned goal-unit-picker case then passed.
+  Local Python validation passed all 22 tests.
+- Delivery: https://github.com/trimngo/canal/actions/runs/40402462192 —
+  **SUCCESS**, job `121851600612`. Packaged build **80** verified at 21:55:03 UTC;
+  Apple processing and internal distribution both succeeded at
+  **2026-10-26 22:00:51 UTC**. Upload acceptance alone was not used as proof.
+- Automatic main CI https://github.com/trimngo/canal/actions/runs/40402462395
+  passed all 124 iPhone tests and 448 core tests again. Its repeated Watch step
+  hit the 30-minute limit after 15 passing tests, with no assertion failure.
+  One Watch-only retry, job `121873487321`, is running on the unchanged merge;
+  check its final result before claiming this additional main run is green.
 
-Refresh this dated snapshot when release or diagnostic status changes.
+Implemented in build 80:
+
+- Watch: circular progress, full wrapping titles in every state, sole new timer
+  auto-start, complication opening the current task, native vertical paging,
+  compact queue-only list with scrolling/reordering/deletion and return swipes.
+  Main-screen options expose haptic presets, preview, and repeat intervals.
+- Today: urgent original Inbox tasks grouped by category below the time dashboard,
+  help popover, Review logs toolbar action, and category management in the filter.
+- iPhone and mirrored Mac Live Activity: Restart with stale-action protection.
+  Watch Restart/Done prioritize timer delivery over history/backoff. Latest timer
+  context, atomic merge, ActivityKit-first refresh, coalescing, and finite phone
+  background time improve the forwarding path. Apple controls the Mac hop;
+  physical timing and repeating haptics still need a device check.
+- iPhone/Mac Restart preserves an existing Watch alert destination and adds one
+  phone backup alert. **Open Dash on Watch once to rearm repeating haptics after
+  remote restart.** The phone timer and expanded Live Activity explain this.
+  watchOS cannot rearm that alarm while Dash is inactive; an old scheduled alarm
+  can still ring at its original deadline until reopening reconciles it.
+
+Deployment findings and follow-up:
+
+- Build 80 delivery spent about **32 minutes queued** behind all five occupied
+  standard Mac slots, then about **16 minutes** building/uploading/processing.
+  This fits the normal macOS concurrency limit, with no observed API rate-limit
+  or billing error. See https://docs.github.com/en/actions/reference/limits.
+- Already changed: four complete phone shards plus Watch, no duplicate native
+  feature-push run, isolated focused Watch branches, early simulator boot,
+  interrupted-result export guards, and non-cancelling TestFlight delivery.
+- Remaining CI cleanup: automatic main-push full validation repeats the already
+  validated PR tree and competes with delivery. Also, the Watch's 30-minute step
+  budget can be too short for cold startup plus all 16 tests; consider 35 minutes
+  within its 40-minute job budget. These are follow-ups, not changes in build 80.
+  Keep all PR tests and assertions. Do not restart full runs to iterate on Watch.
+
+The workspace still preserves uncommitted copies of published implementation.
+Compare dirty files with current remote source before edits. Preserve local files
+and the original Git index; do not reset or discard them. The index SHA-256 at
+this handoff is `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+
+The separate recent crash remains unidentified. The latest diagnostic run
+`40385505398` still found only two submitted reports, both from build 9; do not
+present those as evidence for a newer crash. Friend accountability sharing
+remains planning only.
+
+Refresh this snapshot when the additional main Watch retry or diagnostics change.
