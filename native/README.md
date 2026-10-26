@@ -184,6 +184,14 @@ bash native/scripts/validate.sh
 LEDGER_UI_TESTS=1 bash native/scripts/validate.sh
 ```
 
+CI partitions the complete iPhone UI suite across six jobs, with up to three
+running at once. To run one partition locally, add `LEDGER_UI_TEST_SHARD=0` and
+`LEDGER_UI_TEST_SHARDS=6` to the UI validation command (indices are zero-based).
+Without these variables, local UI validation runs the entire suite. Each CI
+partition uploads its own results and `validation.log`; an interrupted result
+bundle is skipped by the screenshot exporter, while the validation step still
+fails or times out normally.
+
 Projects and Info.plists are generated from `project.yml`. Shared business rules
 live in `Core`; shared app services live in `Shared`. Both platforms use the same
 data format. No account/server credentials are needed for simulator validation.

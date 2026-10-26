@@ -399,6 +399,12 @@ final class LedgerStore: ObservableObject {
                 try fixture.enqueueTimer(id: "timer-guitar", title: "Practice guitar", duration: 1200, writer: writer, onWatch: Self.isWatch, now: earlier)
                 try fixture.enqueueTimer(id: "timer-email", title: "Answer email", duration: 600, writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(1))
                 try fixture.enqueueTimer(id: "timer-walk", title: "Take a walk", duration: 300, writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(2))
+                if ProcessInfo.processInfo.arguments.contains("--ui-timer-long-queue") {
+                    for index in 1...8 {
+                        try fixture.enqueueTimer(id: "timer-extra-\(index)", title: "Queued task \(index)", duration: 300,
+                            writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(Double(index + 2)))
+                    }
+                }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-backup-fixture") {
@@ -699,7 +705,15 @@ final class LedgerStore: ObservableObject {
         var draft = ledger; try draft.saveAllocationPlan(values, writer: writer); try commit(draft)
     }
     func updateAllocationGoal(categoryID: String, percentage: Double?) throws {
-        var draft = ledger; try draft.updateAllocationGoal(categoryID: categoryID, percentage: percentage, writer: writer)
+        var now = Date()
+        #if DEBUG
+        // The daily-goal UI fixture renders this frozen instant. Its edits must
+        // use the same clock rather than creating budgets in the fixture's future.
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
+            now = ISO8601DateFormatter().date(from: "2026-10-22T17:30:00Z")!
+        }
+        #endif
+        var draft = ledger; try draft.updateAllocationGoal(categoryID: categoryID, percentage: percentage, writer: writer, at: now)
         if draft != ledger { try commit(draft) }
     }
     func setCategoryFavorites(_ ids: Set<String>, favorite: Bool) throws {

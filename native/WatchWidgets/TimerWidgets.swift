@@ -66,7 +66,7 @@ private struct TimerComplication: View {
 struct DashAddTimerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "DashAddTimer", provider: TimerProvider()) { TimerComplication(entry: $0, adding: true) }
-            .configurationDisplayName("Timers").description("Open your current timer. Tap + to dictate another task; swipe down to see the queue.")
+            .configurationDisplayName("Timers").description("Open your current timer. Tap + to dictate another task; swipe up to see the queue.")
             .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryRectangular, .accessoryInline])
     }
 }

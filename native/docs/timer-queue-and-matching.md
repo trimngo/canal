@@ -18,11 +18,27 @@ On Watch, the **Timers** and **Current task** complications open the single-time
 
 Siri registers the full-sentence phrases **Add a Dash timer to [task]** and **Add a Dash timer for [task]**. Try “Hey Siri, add a Dash timer to eat food” (five minutes), or “Hey Siri, add a Dash timer to cook food for ten minutes.” A string-query entity resolves the spoken task into a draft without saving during lookup; the intent saves only when it runs. This avoids the unsupported free-form String parameter in an App Shortcut phrase. Apple SDK metadata validation passes, but actual one-sentence Siri recognition still needs a physical Watch check. The older **Add a Dash timer**, **Add Dash timer**, **Add a timer to Dash**, and **Queue a timer in Dash** triggers remain available; when no task is supplied, Siri asks what the timer is for.
 
-The iPhone has a dedicated **Timers** tab, with quick text entry, current countdown and progress, Pause/Resume, Restart, Done & Next, editing, and an upcoming queue. Log is accessible at the top of Today. Tap a timer title to edit its task and minutes; changing the current duration preserves elapsed time. Starting, restarting, resuming, or changing the running duration uses that device for alerts. Opening the screen alone leaves alert ownership unchanged. Device-to-device controls require delivery; a disconnected Watch keeps its locally scheduled timer until it receives the change. Watch smart alarms can only be armed while Dash is active on that Watch, so use the Watch's existing alert takeover control to move a phone timer back there.
+The iPhone has a dedicated **Timers** tab, with quick text entry, current countdown and progress, Pause/Resume, Restart, Done & Next, editing, and an upcoming queue. Log is accessible at the top of Today. Tap a timer title to edit its task and minutes; changing the current duration preserves elapsed time. Starting, restarting, resuming, or changing the running duration uses that device for alerts. Opening the screen alone leaves alert ownership unchanged. Device-to-device controls require delivery. Watch smart alarms can only be armed or cancelled while Dash is active on that Watch and holds the system session. After a phone change, reopen Dash on Watch to apply it to the alarm; use the Watch's existing alert takeover control to move a phone timer back there.
 
-Only upcoming timers can be reordered. Drag their rows on iPhone (Edit also exposes reorder handles); on Watch hold an upcoming row and drag it above or below another. The current timer stays fixed and its deadline does not change. Queue order has its own revision, travels through companion quick delivery, full sync, iCloud, and backups, and never overwrites concurrent timer text edits. New captures not yet present in a reordered snapshot remain queued. Old files without an order keep creation order.
+If a phone change arrives while Dash is inactive on Watch, the already scheduled
+Watch alarm remains independent of the synced timer. It can still ring at its
+original deadline. Dash alerts rather than running that session silently, which
+would trigger a watchOS warning. Opening Dash reconciles the old alarm with the
+latest timer. If the process was terminated and no session handle is available,
+Dash preserves its saved alarm record until WatchKit hands back the session or
+its runtime window expires; it does not falsely claim cancellation or schedule
+a duplicate. The timer screen and settings show when the old alarm is pending.
+When migrating a token-only record from build 78 or earlier, a matching timer
+supplies its exact deadline. Otherwise Dash saves a conservative 36-hour
+deadline once and waits through its 30-minute runtime window, so an orphaned
+legacy record can eventually expire. Adopting the real session restores its
+actual deadline. These bounds follow [WatchKit's session limits](https://developer.apple.com/documentation/watchkit/using-extended-runtime-sessions).
+Stop silences only that alarm; a callback for an old alarm cannot silence a newer
+timer. Notification fallback is reserved for an unavailable alarm, not user Stop.
 
-Swipe down from the current timer to the separate queue page; swipe up to return. Only the first timer runs. Upcoming rows are dimmed and show their full duration. Swipe a row left to delete any timer. Deleting the current timer cancels its alarm and leaves the next task waiting for Start, independently of the Done & Next setting. Deleting an upcoming task leaves the running countdown untouched.
+Only upcoming timers can be reordered. Drag their rows on iPhone (Edit also exposes reorder handles); on Watch hold an upcoming row and use native list reordering to drag it above or below another. Touch scrolling and the Digital Crown both reach longer queues. The current timer stays fixed and its deadline does not change. Queue order has its own revision, travels through companion quick delivery, full sync, iCloud, and backups, and never overwrites concurrent timer text edits. New captures not yet present in a reordered snapshot remain queued. Old files without an order keep creation order.
+
+Swipe up from the current timer to reveal the queue below it. Tap the upper-left Current timer control to return; touch drags on the queue scroll its rows. Only the first timer runs. Upcoming rows are dimmed and show their full duration. Swipe a row left to delete any timer. Deleting the current timer cancels its alarm and leaves the next task waiting for Start, independently of the Done & Next setting. Deleting an upcoming task leaves the running countdown untouched.
 
 Repeating haptics use WatchKit's scheduled smart-alarm extended runtime session,
 not a workout, audio loop, or Apple Timers integration. The active app displays
@@ -44,6 +60,8 @@ Physical-device checks still needed:
 
 1. Queue a one-minute task and a second task, turn the phone off, and lower the
    wrist. Verify repeating expiry haptics, Stop/Open, Restart, and Done & Next.
+   While the alarm repeats, open the queue and timer settings; refreshes and
+   haptic changes must keep those screens open instead of returning to the timer.
 2. Reopen after the app leaves the foreground and verify the persisted deadline
    and queue. Check system cancellation/reboot behavior; do not assume a force
    quit or reboot preserves a scheduled system alarm.
@@ -51,6 +69,12 @@ Physical-device checks still needed:
 4. Reconnect the phone, open Dash once, and verify Lock Screen updates, including
    expiry and advancing to the next task. Check actual Siri recognition separately
    from the simulator's synthetic dictation fixture.
+5. Arm on Watch, lower the wrist, then pause/restart/complete/delete or change
+   duration from iPhone. Reopen Watch before the original deadline and verify the
+   old alarm is cancelled. Repeat without reopening: the original alarm should
+   alert, show the pending change on Open, and never consume its session silently.
+   Repeat after process termination, and verify Stop does not produce a fallback
+   notification or silence a newer timer.
 
 ## Inbox urgency and categories
 
@@ -82,6 +106,8 @@ continue to decode without resetting existing data.
 
 ## Watch layout
 
-The current timer has its own page with large task text, countdown, progress, completion and restart controls, and an upper-right +. Pause/Resume sits beside the countdown. Swipe down opens native-style queue rows and timer settings; swipe up returns immediately. The Digital Crown scrolls long queues. The two timer screens switch directly within one navigation stack, so row drags do not compete with the Watch Home pager and no modal queue covers system input. The queue’s upper-left back button returns to Watch Home. Restart keeps the system double-tap shortcut while the app is open.
+The current timer has its own page with large task text, countdown, progress, completion and restart controls, and an upper-right +. Pause/Resume sits beside the countdown. Both timer complications open this single-task screen. Starting/restarting a timer selects it, and a running task restores this screen after relaunch. Swipe up to reveal the queue with a vertical animated transition; Reduce Motion uses a short fade instead. The queue's upper-left control returns to the current timer. Queue rows use compact 40-point layouts so the current task and two upcoming tasks fit together at standard text size. Native List scrolling supports touch and the Digital Crown, and native long-press reordering preserves the fixed current task. Swipe left on any row to delete. Watch Home and timer settings are below the queue. Restart keeps the system double-tap shortcut while the app is open.
+
+Dash preserves the selected timer screen, but watchOS controls how long the app remains visible when the wrist is lowered. For longer visibility, use Watch Settings → General → Return to Clock → Dash → After 1 hour. The app cannot override this setting or keep the display awake indefinitely.
 
 Timer settings offers Standard pulse, Attention pulse, and Light tap, a preview, and repeat intervals of 2, 3, 5, or 10 seconds. These existing Watch haptic choices apply to the system's repeating alarm. Sound follows system settings; Dash cannot install arbitrary alarm sounds or remap Apple's background alarm gestures.

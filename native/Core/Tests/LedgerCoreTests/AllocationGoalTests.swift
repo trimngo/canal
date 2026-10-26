@@ -2,6 +2,17 @@ import XCTest
 @testable import LedgerCore
 
 final class AllocationGoalTests: XCTestCase {
+    func testEditingUsesTheProvidedClockForBothReadingAndSavingGoals() throws {
+        var ledger = Ledger()
+        ledger.categories = [LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "work", name: "Work")]
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        try ledger.saveAllocationGoals(["music": 20, "work": 10], effectiveAt: day, writer: "phone")
+        try ledger.saveAllocationGoals(["music": 50, "work": 40], effectiveAt: day.addingTimeInterval(86400), writer: "phone")
+        let edit = day.addingTimeInterval(60)
+        try ledger.updateAllocationGoal(categoryID: "music", percentage: 30, writer: "phone", at: edit)
+        XCTAssertEqual(ledger.editableAllocationGoals(at: edit), ["music": 30, "work": 10])
+        XCTAssertEqual(ledger.editableAllocationGoals(at: day.addingTimeInterval(86400)), ["music": 50, "work": 40])
+    }
     private func fixture() throws -> Ledger {
         var ledger = Ledger()
         ledger.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "life", name: "Energy giving"), LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "guitar", name: "Guitar"), LedgerCategory(id: "rest", name: "Rest")]

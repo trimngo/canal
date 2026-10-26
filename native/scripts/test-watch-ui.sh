@@ -28,4 +28,5 @@ xcrun simctl install "$PHONE_DEVICE_ID" build/Build/Products/Debug-iphonesimulat
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch \
   -destination "platform=watchOS Simulator,id=$WATCH_DEVICE_ID" -derivedDataPath build \
   -resultBundlePath build/WatchUITests.xcresult CODE_SIGNING_ALLOWED=NO \
-  -parallel-testing-enabled NO test
+  -parallel-testing-enabled NO -test-timeouts-enabled YES \
+  -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300 test

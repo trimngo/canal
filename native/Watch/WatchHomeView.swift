@@ -10,18 +10,32 @@ struct WatchHomeView: View {
     @State private var tab = 2
     @State private var notificationSettings = false
     @State private var showingTimerRows = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         NavigationStack {
         Group {
             if store.showingTimerQueue {
+                ZStack {
                 if showingTimerRows {
                     TimerQueueView(watchShowsQueue: true, showCurrentTimer: { showingTimerRows = false })
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom))
                 } else {
                     TimerQueueView(showTimerQueue: { showingTimerRows = true })
+                        .transition(reduceMotion ? .opacity : .move(edge: .top))
                 }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                    .animation(reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.3), value: showingTimerRows)
             } else { homePages }
         }
+            .onAppear {
+                if store.ledger.currentTimer != nil { store.showingTimerQueue = true; showingTimerRows = false }
+            }
             .onChange(of: store.timerRequestID) { _, _ in showingTimerRows = false }
+            .onChange(of: store.ledger.timerControl?.token) { _, _ in
+                if store.ledger.currentTimer != nil, store.ledger.timerControl?.dueAt != nil {
+                    store.showingTimerQueue = true; showingTimerRows = false
+                }
+            }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
@@ -36,9 +50,9 @@ struct WatchHomeView: View {
                 if store.showingTimerQueue {
                     if showingTimerRows {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button { store.showingTimerQueue = false } label: { Image(systemName: "chevron.left").foregroundStyle(.black) }
-                                .accessibilityLabel("Watch Home")
-                                .labelStyle(.iconOnly).accessibilityIdentifier("timers.watch-home")
+                            Button { showingTimerRows = false } label: { Image(systemName: "chevron.up").foregroundStyle(.black) }
+                                .accessibilityLabel("Current timer")
+                                .labelStyle(.iconOnly).accessibilityIdentifier("timers.current-page")
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
