@@ -20,8 +20,8 @@ struct RestartTimerIntent: LiveActivityIntent {
         store.start()
         // Ignore an old displayed button after another control or task change.
         try store.changeTimer("restart", expectedToken: token)
-        await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
         await TimerLiveActivity.shared.refresh(store.ledger)
+        await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
         #endif
         return .result()
     }

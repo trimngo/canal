@@ -52,26 +52,44 @@ public struct CompanionQuickDelivery {
         return !wanted.isEmpty && wanted.allSatisfy { acknowledged[$0.key] == $0.value }
     }
 
+    /// Latest timer state also travels through application context, independently
+    /// of interactive reachability and queued history files. Use the same wire
+    /// packet so older receivers can still handle the interactive path.
+    public static func timerSnapshot(_ source: Ledger, byteLimit: Int = 16_000) throws -> Data? {
+        guard source.timerControl != nil else { return nil }
+        var timer = Ledger(); timer.categories = []
+        timer.timerControl = source.timerControl
+        timer.queuedTimers = source.queuedTimers
+        var delivery = CompanionQuickDelivery()
+        return try delivery.prepare(timer, id: "timer-state", byteLimit: byteLimit)
+    }
+
     public mutating func prepare(_ source: Ledger, id: String, byteLimit: Int = 48_000) throws -> Data? {
-        guard active == nil else { return nil }
+        if let active {
+            // A Restart/Done/Pause must not wait for a previous log receipt or
+            // its 15-second timeout. Old callbacks cannot finish this new packet.
+            let sent = active.ledger.timerControl?.revision ?? acknowledged["timer-control"] ?? Revision()
+            guard let control = source.timerControl, control.revision > sent else { return nil }
+            self.active = nil
+        }
         let latest = recent(source)
         var partial = Ledger(); partial.categories = []
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         func fits(_ value: Ledger) throws -> Bool { try encoder.encode(CompanionQuickPacket(id: id, ledger: value)).count <= byteLimit }
-        // Small settings changes must not wait behind a large history transfer.
-        // Seed settings are omitted so legacy/default partial packets cannot
-        // overwrite a peer's saved preference or create an endless empty send.
-        if latest.settings.revision > Revision(), acknowledged["settings"] != latest.settings.revision {
-            partial.settings = latest.settings
-            if try !fits(partial) { partial.settings = Settings() }
-        }
+        let timerChanged = latest.timerControl.map { acknowledged["timer-control"] != $0.revision } ?? false
         // Send individual changes, never the full history ahead of a new reply.
-        // Timer control and its active task travel together, ahead of history.
+        // Timer control and its active task travel together, ahead of all other
+        // data, including large custom settings.
         if let control = latest.timerControl, acknowledged["timer-control"] != control.revision {
             let before = partial
             partial.timerControl = control
             partial.queuedTimers = latest.currentTimer.map { [$0] }
             if try !fits(partial) { partial = before }
+        }
+        // Seed settings cannot overwrite a peer's saved preference.
+        if latest.settings.revision > Revision(), acknowledged["settings"] != latest.settings.revision {
+            partial.settings = latest.settings
+            if try !fits(partial) { partial.settings = Settings() }
         }
         if let order = latest.timerQueueOrder, acknowledged["timer-order"] != order.revision {
             partial.timerQueueOrder = order
@@ -81,23 +99,26 @@ public struct CompanionQuickDelivery {
             partial.queuedTimers = (partial.queuedTimers ?? []) + [item]
             if try !fits(partial) { partial.queuedTimers?.removeLast() }
         }
-        for entry in latest.entries where !hasReceived(entry) {
+        // A timer action gets a small packet first. Receipt immediately drains
+        // the remaining logs and settings in the next packet, without losing
+        // their acknowledgments or durable background delivery.
+        for entry in latest.entries where !timerChanged && !hasReceived(entry) {
             partial.entries.append(entry)
             if try !fits(partial) { partial.entries.removeLast() }
         }
-        for item in latest.captures where acknowledged["idea:" + item.id] != item.revision {
+        for item in latest.captures where !timerChanged && acknowledged["idea:" + item.id] != item.revision {
             partial.captures.append(item)
             if try !fits(partial) { partial.captures.removeLast() }
         }
-        for item in latest.logDeletions ?? [] where acknowledged["deletion:" + item.id] != item.revision {
+        for item in latest.logDeletions ?? [] where !timerChanged && acknowledged["deletion:" + item.id] != item.revision {
             partial.logDeletions = (partial.logDeletions ?? []) + [item]
             if try !fits(partial) { partial.logDeletions?.removeLast() }
         }
-        for item in latest.datedGoals ?? [] where acknowledged["goal:" + item.id] != item.revision {
+        for item in latest.datedGoals ?? [] where !timerChanged && acknowledged["goal:" + item.id] != item.revision {
             partial.datedGoals = (partial.datedGoals ?? []) + [item]
             if try !fits(partial) { partial.datedGoals?.removeLast() }
         }
-        for item in latest.calendarEvents ?? [] where acknowledged["event:" + item.id] != item.revision {
+        for item in latest.calendarEvents ?? [] where !timerChanged && acknowledged["event:" + item.id] != item.revision {
             partial.calendarEvents = (partial.calendarEvents ?? []) + [item]
             if try !fits(partial) { partial.calendarEvents?.removeLast() }
         }

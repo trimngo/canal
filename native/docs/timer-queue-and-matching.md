@@ -106,6 +106,28 @@ continue to decode without resetting existing data.
 
 ## Live Activity restart
 
+Watch Restart, Done, and Pause/Resume updates take priority over an older
+interactive sync packet and its acknowledgment timeout. New timer controls reset
+the interactive retry delay; late receipts cannot acknowledge a newer packet.
+History remains in the durable file queue and drains after the timer receipt.
+An active Watch also attempts the documented iPhone wake-up message path.
+
+The latest application context carries a bounded timer snapshot beside settings,
+so an unreachable peer can receive current timer state without waiting for a
+large history file. Timer state and the active task are merged atomically using
+their existing revisions. Older snapshots cannot undo Restart or Done.
+
+On iPhone, the Live Activity updates before notification rescheduling. Pending
+ActivityKit updates coalesce to the latest state, and finite background time keeps
+an incoming Watch update alive through that work. Interactive delivery receipts
+wait for the mirror refresh after the atomic save. Apple still controls delivery
+to the paired phone and forwarding to Mac; device checks should compare the
+iPhone Live Activity with the Mac mirror to locate any remaining delay.
+
+UI fixtures stay isolated from the paired simulator's ledger; transport behavior
+is covered by the companion delivery core regressions and physical-device checks.
+The explicit unavailable-helper UI test retains its simulated failure path.
+
 The iPhone Lock Screen and expanded Dynamic Island Live Activity include Restart.
 The same Lock Screen presentation is shown when expanding the mirrored Live
 Activity on macOS Tahoe. Mirrored Live Activities require iOS 18 or later and

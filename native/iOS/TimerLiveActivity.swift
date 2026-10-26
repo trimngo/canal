@@ -8,13 +8,43 @@ final class TimerLiveActivity {
     static let shared = TimerLiveActivity()
     private var last: TimerLiveAttributes.ContentState?
     private var work: Task<Void, Never>?
+    private var pending: Ledger?
+    private var backgroundID = UIBackgroundTaskIdentifier.invalid
+    private var backgroundGeneration = UUID()
     func refresh(_ ledger: Ledger) async {
-        let previous = work
+        // Keep only the newest pending state while ActivityKit is updating.
+        // Rapid Watch actions must not build a queue of obsolete countdowns.
+        pending = ledger
+        if let work {
+            beginBackgroundWork()
+            await work.value
+            return
+        }
         let task = Task { @MainActor in
-            _ = await previous?.value
-            await self.refreshSerially(ledger)
+            self.beginBackgroundWork()
+            defer { self.work = nil; self.endBackgroundWork() }
+            while !Task.isCancelled, let latest = self.pending {
+                self.pending = nil
+                await self.refreshSerially(latest)
+            }
         }
         work = task; await task.value
+    }
+    private func beginBackgroundWork() {
+        guard backgroundID == .invalid, UIApplication.shared.applicationState != .active else { return }
+        let generation = UUID(); backgroundGeneration = generation
+        backgroundID = UIApplication.shared.beginBackgroundTask(withName: "Timer Live Activity") { [weak self] in
+            Task { @MainActor in
+                guard let self, self.backgroundGeneration == generation else { return }
+                self.work?.cancel()
+                self.endBackgroundWork()
+            }
+        }
+    }
+    private func endBackgroundWork() {
+        let identifier = backgroundID
+        backgroundID = .invalid; backgroundGeneration = UUID()
+        if identifier != .invalid { UIApplication.shared.endBackgroundTask(identifier) }
     }
     private func refreshSerially(_ ledger: Ledger) async {
         let activities = Activity<TimerLiveAttributes>.activities

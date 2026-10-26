@@ -660,10 +660,10 @@ final class LedgerStore: ObservableObject {
         #endif
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await NotificationScheduler.shared.applyTimer(self.ledger, writer: self.writer)
             #if os(iOS)
             await TimerLiveActivity.shared.refresh(self.ledger)
             #endif
+            await NotificationScheduler.shared.applyTimer(self.ledger, writer: self.writer)
         }
     }
 

@@ -4,8 +4,9 @@ import LedgerCore
 
 extension UIApplication {
     func dismissLedgerKeyboard() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-            .filter(\.isKeyWindow).forEach { $0.endEditing(true) }
+            .forEach { $0.endEditing(true) }
     }
 }
 

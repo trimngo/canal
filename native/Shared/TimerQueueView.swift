@@ -24,8 +24,7 @@ struct TimerQueueView: View {
     @ObservedObject private var alarm = WatchTimerAlarm.shared
     @State private var queueAtTop = true
     @State private var queueRestingTop: CGFloat?
-    @State private var queueDragStartedAtTop: Bool?
-    @State private var queueDragStart: Date?
+    @GestureState private var queueSwipeStart: WatchQueueSwipeStart? = nil
     @State private var dialFrame = CGRect.null
     @State private var mainDragStartedInDial: Bool?
     #endif
@@ -103,7 +102,6 @@ struct TimerQueueView: View {
         }.frame(maxWidth: .infinity, minHeight: geometry.size.height)
             .padding(.horizontal, 8).padding(.bottom, 4)
         }.background(.black)
-            .coordinateSpace(name: "watch.timer-main")
             .onPreferenceChange(WatchTimerDialFrameKey.self) { dialFrame = $0 }
             .simultaneousGesture(showQueueGesture)
             .accessibilityAction(named: "Show timer queue") { showTimerQueue?() }
@@ -115,7 +113,7 @@ struct TimerQueueView: View {
             .frame(maxWidth: .infinity).accessibilityIdentifier(identifier)
     }
     private var showQueueGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .named("watch.timer-main"))
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 if mainDragStartedInDial == nil {
                     mainDragStartedInDial = dialFrame.contains(value.startLocation) || (store.ledger.currentTimer == nil && store.ledger.waitingTimers.isEmpty)
@@ -143,7 +141,7 @@ struct TimerQueueView: View {
                         .foregroundStyle(.mint)
                 }.frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 }
-                    .background(queueTopMarker)
+                    .background(queueTopMarker(id: task.id))
                     .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .moveDisabled(true)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -161,7 +159,7 @@ struct TimerQueueView: View {
                         .accessibilityIdentifier("timers.duration.\(task.id)")
                 }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .background {
-                        if store.ledger.currentTimer == nil, task.id == waiting.first?.id { queueTopMarker }
+                        if store.ledger.currentTimer == nil, task.id == waiting.first?.id { queueTopMarker(id: task.id) }
                     }
                     .contentShape(Rectangle())
                     .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
@@ -182,12 +180,6 @@ struct TimerQueueView: View {
         }.listStyle(.plain)
             .environment(\.defaultMinListRowHeight, 40)
             .contentMargins(.vertical, 0, for: .scrollContent)
-            .coordinateSpace(name: "watch.timer-queue")
-            .onPreferenceChange(WatchTimerQueueTopKey.self) { top in
-                guard let top else { queueAtTop = store.ledger.currentTimer == nil && waiting.isEmpty; return }
-                if queueRestingTop == nil { queueRestingTop = top }
-                queueAtTop = top >= (queueRestingTop ?? top) - 2
-            }
             .simultaneousGesture(returnToTimerGesture)
             .accessibilityIdentifier("timers.queue-list")
             .accessibilityAction(named: "Show current timer") { showCurrentTimer?() }
@@ -195,26 +187,35 @@ struct TimerQueueView: View {
                 Button("OK") { inputError = nil }
             } message: { Text(inputError ?? "") }
     }
-    private var queueTopMarker: some View {
+    private func queueTopMarker(id: String) -> some View {
         GeometryReader { geometry in
-            Color.clear.preference(key: WatchTimerQueueTopKey.self, value: geometry.frame(in: .named("watch.timer-queue")).minY)
+            let top = geometry.frame(in: .global).minY
+            Color.clear
+                .onAppear { updateQueueTop(top) }
+                .onChange(of: top) { _, value in updateQueueTop(value) }
+                .onDisappear {
+                    if (store.ledger.currentTimer?.id ?? store.ledger.waitingTimers.first?.id) == id { queueAtTop = false }
+                }
         }
     }
+    private func updateQueueTop(_ top: CGFloat) {
+        if queueRestingTop == nil { queueRestingTop = top }
+        queueAtTop = top >= (queueRestingTop ?? top) - 2
+    }
     private var returnToTimerGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if queueDragStartedAtTop == nil {
-                    queueDragStartedAtTop = queueAtTop
-                    queueDragStart = value.time
+        // Leave stationary touches to List's native long-press reordering.
+        // GestureState also resets when List cancels a swipe for a row action.
+        DragGesture(minimumDistance: 35)
+            .updating($queueSwipeStart) { value, state, _ in
+                if state == nil {
+                    state = WatchQueueSwipeStart(atTop: queueAtTop || (store.ledger.currentTimer == nil && store.ledger.waitingTimers.isEmpty), time: value.time)
                 }
             }
             .onEnded { value in
-                defer { queueDragStartedAtTop = nil; queueDragStart = nil }
-                // A held row belongs to native reordering, never page navigation.
-                guard value.time.timeIntervalSince(queueDragStart ?? value.time) < 0.6 else { return }
+                guard value.time.timeIntervalSince(queueSwipeStart?.time ?? value.time) < 0.8 else { return }
                 let delta = value.translation
                 let swipeRight = delta.width > 55 && delta.width > abs(delta.height) * 1.3
-                let swipeDownAtTop = queueDragStartedAtTop == true && delta.height > 45 && delta.height > abs(delta.width) * 1.3
+                let swipeDownAtTop = (queueSwipeStart?.atTop ?? queueAtTop) && delta.height > 45 && delta.height > abs(delta.width) * 1.3
                 if swipeRight || swipeDownAtTop { showCurrentTimer?() }
             }
     }
@@ -263,7 +264,7 @@ struct TimerQueueView: View {
         }.frame(width: size, height: size).padding(4).contentShape(Rectangle())
             .background {
                 GeometryReader { geometry in
-                    Color.clear.preference(key: WatchTimerDialFrameKey.self, value: geometry.frame(in: .named("watch.timer-main")))
+                    Color.clear.preference(key: WatchTimerDialFrameKey.self, value: geometry.frame(in: .global))
                 }
             }
     }
@@ -429,9 +430,9 @@ struct TimerQueueView: View {
 }
 
 #if os(watchOS)
-private struct WatchTimerQueueTopKey: PreferenceKey {
-    static var defaultValue: CGFloat? { nil }
-    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
+private struct WatchQueueSwipeStart {
+    var atTop: Bool
+    var time: Date
 }
 
 private struct WatchTimerDialFrameKey: PreferenceKey {

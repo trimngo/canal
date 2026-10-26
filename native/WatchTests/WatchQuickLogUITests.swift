@@ -214,12 +214,12 @@ final class WatchQuickLogUITests: XCTestCase {
         let pattern = app.descendants(matching: .any).matching(identifier: "timers.haptic-pattern").firstMatch
         revealWatchControl(pattern, in: app)
         pattern.tap()
-        let light = app.staticTexts["Light tap"].firstMatch
+        let light = app.buttons["Light tap"].firstMatch
         XCTAssertTrue(light.waitForExistence(timeout: 5)); light.tap()
         let repeatInterval = app.descendants(matching: .any).matching(identifier: "timers.haptic-repeat").firstMatch
         revealWatchControl(repeatInterval, in: app)
         repeatInterval.tap()
-        let five = app.staticTexts["5 seconds"].firstMatch
+        let five = app.buttons["5 seconds"].firstMatch
         XCTAssertTrue(five.waitForExistence(timeout: 5)); five.tap()
         let preview = app.buttons["timers.haptic-preview"]
         revealWatchControl(preview, in: app); preview.tap()
@@ -246,27 +246,33 @@ final class WatchQuickLogUITests: XCTestCase {
         // Scroll the title itself; it must reveal the timer without paging away.
         ready.swipeUp()
         let start = app.buttons["timers.start"]
-        if !start.isHittable { app.swipeUp() }
+        if !start.isHittable { scrollLongTimerTitle(in: app) }
         XCTAssertTrue(start.isHittable)
         swipeTimerPage(app, toQueue: true)
         let queuedTitle = app.staticTexts["timers.waiting.long-title"]
         XCTAssertEqual(queuedTitle.label, title)
         XCTAssertGreaterThan(queuedTitle.frame.height, 60, "Waiting rows must also show the full task title.")
         swipeTimerPage(app, toQueue: false)
-        if !start.isHittable { app.staticTexts["timers.ready"].swipeUp() }
+        if !start.isHittable { scrollLongTimerTitle(in: app) }
         XCTAssertTrue(start.isHittable); start.tap()
         let current = app.staticTexts["timers.current"]
         XCTAssertTrue(current.waitForExistence(timeout: 5))
         XCTAssertEqual(current.label, title)
         XCTAssertGreaterThan(current.frame.height, 80)
         let pause = app.buttons["timers.pause-resume"]
-        if !pause.isHittable { current.swipeUp() }
+        if !pause.isHittable { scrollLongTimerTitle(in: app) }
         XCTAssertTrue(pause.isHittable); pause.tap()
         XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 5))
         XCTAssertEqual(current.label, title)
         record("WatchFullPausedTaskTitle", app)
     }
     override func setUpWithError() throws { continueAfterFailure = false }
+    private func scrollLongTimerTitle(in app: XCUIApplication) {
+        // The gutter scrolls long text; swiping the dial opens the queue.
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.3))
+        from.press(forDuration: 0.01, thenDragTo: to)
+    }
     private func revealWatchControl(_ control: XCUIElement, in app: XCUIApplication) {
         for attempt in 0..<20 {
             if control.exists, control.isHittable { return }
@@ -396,6 +402,20 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertEqual(mode.label, "Delivery: Automatic")
         XCTAssertFalse(app.buttons["watch.notifications.enable"].exists)
         record("WatchAutomaticDeliverySettings", app)
+        // Consume this test's actual 15-second alert before another test opens
+        // dictation. Otherwise the system notification can swallow Cancel.
+        let delivered = carousel.alerts.firstMatch
+        if delivered.waitForExistence(timeout: 20) {
+            for _ in 0..<4 {
+                if !delivered.exists { break }
+                let dismiss = carousel.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Dismiss"))
+                    .allElementsBoundByIndex.last(where: { $0.isHittable })
+                if let dismiss { dismiss.tap() }
+                else { delivered.swipeUp() }
+            }
+            XCTAssertTrue(delivered.waitForNonExistence(timeout: 10))
+        }
+        app.activate()
     }
 
     func testWatchCanSwitchSharedDeliveryAndShowItsOwnSchedule() {

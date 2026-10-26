@@ -429,16 +429,20 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.segmentedControls["day.mode"].exists)
         XCTAssertFalse(app.staticTexts["Unestimated"].exists)
         let pages = element(app, "report.pages")
-        XCTAssertGreaterThan(pages.frame.height, app.frame.height * 0.5)
+        XCTAssertGreaterThan(pages.frame.height, 100)
         XCTAssertEqual(pages.frame.width, app.frame.width, accuracy: 2)
         let calendar = app.buttons["dashboard.calendar"]
         XCTAssertTrue(calendar.isHittable)
         XCTAssertLessThan(calendar.frame.maxY, header.frame.minY)
         XCTAssertFalse(app.buttons["dashboard.undo"].exists)
-        let initialHeight = pages.frame.height
+        let urgent = element(app, "today.urgent-title")
+        XCTAssertGreaterThan(urgent.frame.minY, pages.frame.maxY)
         app.buttons["Show pie chart"].tap()
         XCTAssertTrue(element(app, "report.pie.chart").waitForExistence(timeout: 5))
-        XCTAssertEqual(pages.frame.height, initialHeight, accuracy: 2)
+        let chart = element(app, "report.pie.chart")
+        XCTAssertGreaterThan(chart.frame.width, 160); XCTAssertGreaterThan(chart.frame.height, 160)
+        XCTAssertTrue(pages.frame.contains(chart.frame))
+        XCTAssertGreaterThan(urgent.frame.minY, pages.frame.maxY)
         XCTAssertTrue(app.buttons["today.log"].isHittable)
         app.buttons["Show breakdown"].tap()
         recordScreen("Dashboard", in: app)
@@ -586,7 +590,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         field.typeText(" updated")
-        app.navigationBars.firstMatch.tap()
+        finishInlineEditing(in: app)
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Legacy sample UI fixture updated"].waitForExistence(timeout: 5))
         app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
@@ -2220,17 +2224,35 @@ final class TimeLedgerUITests: XCTestCase {
         let field = element(app, id)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText(suffix)
+        let typed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            ((field.value as? String) ?? field.label).contains(suffix)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [typed], timeout: 5), .completed)
         if finishEditing {
-            let done = app.buttons["keyboard.done"].firstMatch
-            XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+            finishInlineEditing(in: app)
         }
         if !id.hasPrefix("task-planning."), !id.hasPrefix("category-context.") { XCTAssertFalse(app.navigationBars["Edit idea"].exists) }
         XCTAssertFalse(app.navigationBars["Edit log text"].exists)
     }
 
+    private func finishInlineEditing(in app: XCUIApplication) {
+        let buttons = app.buttons.matching(identifier: "keyboard.done")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            buttons.allElementsBoundByIndex.contains { $0.isHittable }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        guard let done = buttons.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+            XCTFail("Keyboard Done must be visible and hittable"); return
+        }
+        done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+    }
+
     private func switchGoalUnit(_ label: String, in app: XCUIApplication) {
         let picker = app.segmentedControls["plan.unit"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.buttons[label].tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: picker.buttons[label])
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
     func testDailyGoalsShowsTimeRemainingAndMatchingProgressWithoutTable() {

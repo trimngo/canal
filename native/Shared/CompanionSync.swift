@@ -24,6 +24,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
     private var quickTimeout: Task<Void, Never>?
     private var quickRetry = CompanionRetry()
     private var quickRetryTask: Task<Void, Never>?
+    private var quickTimerRevision: Revision?
     private var retry = CompanionRetry()
     private var retryTask: Task<Void, Never>?
     nonisolated private let incomingWrites = CompanionWriteCounter()
@@ -48,7 +49,10 @@ final class CompanionSync: NSObject, WCSessionDelegate {
     }
 
     func refresh() {
-        if let context = session?.receivedApplicationContext { receiveSettings(context) }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) { send(); return }
+        #endif
+        if let context = session?.receivedApplicationContext { receiveLatestState(context) }
         retryTask?.cancel(); retryTask = nil; retry.reset()
         quickRetryTask?.cancel(); quickRetryTask = nil; quickRetry.reset()
         send()
@@ -56,24 +60,31 @@ final class CompanionSync: NSObject, WCSessionDelegate {
 
     func hasReceivedSample(_ entry: CheckIn) -> Bool { quick.hasReceived(entry) }
 
-    private func sendSettings() {
-        guard let session, let settings = store?.ledger.settings, settings.revision > Revision() else { return }
-        // Application context keeps only the newest small settings snapshot,
-        // independently of queued history files, even when the peer is asleep.
+    private func sendLatestState() {
+        guard let session, let store else { return }
+        // Keep timer state alongside settings: replacing the context with only
+        // settings would discard the newest pending Restart/Done state.
         do {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(settings)
-            if session.applicationContext["settings"] as? Data != data {
-                try session.updateApplicationContext(["settings": data])
+            var context: [String: Any] = [:]
+            if store.ledger.settings.revision > Revision() { context["settings"] = try encoder.encode(store.ledger.settings) }
+            if let timer = try CompanionQuickDelivery.timerSnapshot(store.ledger) { context["timer"] = timer }
+            guard !context.isEmpty else { return }
+            if session.applicationContext["settings"] as? Data != context["settings"] as? Data ||
+                session.applicationContext["timer"] as? Data != context["timer"] as? Data {
+                try session.updateApplicationContext(context)
             }
         } catch { /* The acknowledged fast lane and full-file queue also retry. */ }
     }
 
-    private func receiveSettings(_ context: [String: Any]) {
-        guard let data = context["settings"] as? Data else { return }
+    private func receiveLatestState(_ context: [String: Any]) {
+        guard context["settings"] is Data || context["timer"] is Data else { return }
         do {
             var partial = Ledger(); partial.categories = []
-            partial.settings = try JSONDecoder().decode(Settings.self, from: data)
+            if let data = context["settings"] as? Data { partial.settings = try JSONDecoder().decode(Settings.self, from: data) }
+            if let data = context["timer"] as? Data {
+                partial.merge(try JSONDecoder().decode(CompanionQuickPacket.self, from: data).ledger)
+            }
             try store?.merge(partial)
         } catch { /* Keep the saved local copy; the other sync paths retry. */ }
     }
@@ -88,10 +99,23 @@ final class CompanionSync: NSObject, WCSessionDelegate {
     }
 
     private func sendQuickly() {
-        guard let session, session.isReachable, let store, quickRetryTask == nil else { return }
+        guard let session, let store else { return }
+        if quickTimerRevision != store.ledger.timerControl?.revision {
+            quickTimerRevision = store.ledger.timerControl?.revision
+            quickRetryTask?.cancel(); quickRetryTask = nil; quickRetry.reset()
+        }
+        #if os(watchOS)
+        // An active Watch can wake its iPhone with sendMessageData. A cached
+        // reachability value must not prevent that attempt for a user action.
+        guard session.isReachable || WKApplication.shared().applicationState == .active else { return }
+        #else
+        guard session.isReachable else { return }
+        #endif
+        guard quickRetryTask == nil else { return }
         let id = UUID().uuidString
         do {
             guard let data = try quick.prepare(store.ledger, id: id) else { return }
+            quickTimeout?.cancel(); quickTimeout = nil
             quickID = id
             session.sendMessageData(data, replyHandler: { [weak self] response in
                 let receipt = try? JSONDecoder().decode(CompanionQuickReceipt.self, from: response)
@@ -165,6 +189,12 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             connectionFailed(NSError(domain: NSCocoaErrorDomain, code: 4099))
             return
         }
+        // UI fixtures replace their entire ledger. Do not exchange synthetic
+        // data with the paired simulator or wake its app into another fixture.
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
+            store.companionStatus = "Saved on this device"
+            return
+        }
         #endif
         guard session.activationState == .activated else {
             guard !activationRequested else { return }
@@ -181,7 +211,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         #endif
         // Unlike file transfers, a reachable Watch can wake its paired iPhone
         // for an interactive message. Never wait behind an older history file.
-        sendSettings()
+        sendLatestState()
         sendQuickly()
         guard retryTask == nil else { return }
         // WatchConnectivity already queues delivery while the other device is
@@ -221,12 +251,19 @@ final class CompanionSync: NSObject, WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         // Read the payload before leaving the delegate callback, as with files.
-        guard let data = applicationContext["settings"] as? Data else { return }
+        var context: [String: Data] = [:]
+        if let data = applicationContext["settings"] as? Data { context["settings"] = data }
+        if let data = applicationContext["timer"] as? Data { context["timer"] = data }
+        guard !context.isEmpty else { return }
+        let incomingContext = context
         incomingWrites.begin()
         let writes = incomingWrites
         Task { @MainActor [weak self] in
             defer { writes.end(); self?.completeBackgroundTasksIfReady() }
-            self?.receiveSettings(["settings": data])
+            self?.receiveLatestState(incomingContext)
+            #if os(iOS)
+            if let store = self?.store { await TimerLiveActivity.shared.refresh(store.ledger) }
+            #endif
         }
     }
 
@@ -241,6 +278,10 @@ final class CompanionSync: NSObject, WCSessionDelegate {
                 let packet = try result.get(); receipt.id = packet.id
                 guard let store = self?.store else { replyHandler(Data()); return }
                 try store.merge(packet.ledger) // Atomic disk commit precedes the receipt.
+                #if os(iOS)
+                // Finish ActivityKit work before acknowledging background receipt.
+                await TimerLiveActivity.shared.refresh(store.ledger)
+                #endif
                 receipt.saved = true
             } catch { /* Sender retains its local save and background fallback. */ }
             replyHandler((try? JSONEncoder().encode(receipt)) ?? Data())
@@ -253,7 +294,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             self.activationRequested = false
             if let error { self.connectionFailed(error) }
             else if activationState == .activated {
-                self.receiveSettings(session.receivedApplicationContext)
+                self.receiveLatestState(session.receivedApplicationContext)
                 self.send()
             }
             else { self.connectionFailed(WCError(.sessionNotActivated)) }
@@ -272,6 +313,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
                 guard let store = self?.store else { return }
                 try store.merge(result.get())
                 #if os(iOS)
+                await TimerLiveActivity.shared.refresh(store.ledger)
                 try await NotificationScheduler.shared.apply(store.ledger.settings)
                 #endif
             } catch { self?.store?.report(error) }
