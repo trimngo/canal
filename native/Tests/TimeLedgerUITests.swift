@@ -1746,10 +1746,18 @@ final class TimeLedgerUITests: XCTestCase {
         app.buttons["Choose group"].tap()
         app.buttons["mood.3"].tap(); tapCategory("work", in: app)
         editInline("category-context.activity", adding: " corrected", in: app)
-        XCTAssertTrue(((element(app, "category-context.activity").value as? String) ?? element(app, "category-context.activity").label).contains("corrected"))
+        let context = element(app, "category-context.activity")
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            context.label.contains("corrected") || (context.value as? String ?? "").contains("corrected")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
         XCTAssertTrue(app.buttons["category-tag.work"].exists)
         app.buttons["group-selection.done"].tap(); closeCategoryLogs(in: app)
-        XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 5))
+        let work = dashboardGroup("work", in: app)
+        XCTAssertTrue(work.waitForExistence(timeout: 5)); work.tap(); openCategoryLogs(in: app)
+        let edited = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "corrected")).firstMatch
+        reveal(edited, in: app); XCTAssertTrue(edited.exists)
+        XCTAssertTrue(app.staticTexts["Mood: 3/5"].exists)
     }
 
     func testCategorySearchKeepsHierarchyAndSelectionsAndCanCreateFromNoResults() {
