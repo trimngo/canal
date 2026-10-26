@@ -176,7 +176,7 @@ final class TimeLedgerUITests: XCTestCase {
         let help = app.buttons["dashboard.help"]
         help.tap()
         XCTAssertTrue(element(app, "dashboard.help-content").waitForExistence(timeout: 5))
-        app.navigationBars.firstMatch.tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
         XCTAssertTrue(element(app, "dashboard.help-content").waitForNonExistence(timeout: 5))
         let urgent = app.staticTexts["today.urgent-title"]
         reveal(urgent, in: app); XCTAssertEqual(urgent.label, "Urgent tasks (3)")
@@ -939,12 +939,13 @@ final class TimeLedgerUITests: XCTestCase {
     private func revealHeatmapRow(_ target: XCUIElement, in app: XCUIApplication) {
         let rows = app.scrollViews["report.heatmap.rows"]
         XCTAssertTrue(rows.waitForExistence(timeout: 5))
+        reveal(rows, in: app)
         for _ in 0..<8 {
-            if target.exists, target.isHittable { return }
+            if target.exists, target.isHittable, rows.frame.contains(target.frame) { return }
             if target.exists, target.frame.maxY < rows.frame.minY { rows.swipeDown() }
             else { rows.swipeUp() }
         }
-        XCTAssertTrue(target.isHittable)
+        XCTAssertTrue(target.isHittable); XCTAssertTrue(rows.frame.contains(target.frame))
     }
 
     func testHeatmapExpandsChildrenAndDirectTimeWithoutShiftingGridColumns() {
