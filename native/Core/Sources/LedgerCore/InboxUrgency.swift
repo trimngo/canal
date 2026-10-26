@@ -25,6 +25,12 @@ public struct InboxUrgency: Equatable, Sendable {
     public let isSuggested: Bool
 }
 
+public struct UrgentCaptureGroup: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let captures: [Capture]
+}
+
 /// A small, deterministic offline matcher. It never changes the idea's text or category.
 public enum OfflineInboxUrgency {
     private struct Rule {
@@ -93,6 +99,23 @@ extension Capture {
 }
 
 extension Ledger {
+    /// Preserve category order and urgency order within each group. A task
+    /// with several labels is visible under each, using the same capture ID.
+    public func urgentCaptureGroups(at now: Date = Date()) -> [UrgentCaptureGroup] {
+        var grouped: [String: [Capture]] = [:]
+        for capture in urgentCaptures(at: now) {
+            let ids = categoryIDs(for: capture)
+            for id in ids.isEmpty ? ["uncategorized"] : ids { grouped[id, default: []].append(capture) }
+        }
+        var result = orderedCategories.compactMap { category -> UrgentCaptureGroup? in
+            guard let captures = grouped[category.id] else { return nil }
+            return UrgentCaptureGroup(id: category.id, name: categoryPath(category.id), captures: captures)
+        }
+        if let captures = grouped["uncategorized"] {
+            result.append(UrgentCaptureGroup(id: "uncategorized", name: "Uncategorized", captures: captures))
+        }
+        return result
+    }
     /// Show all active dated/ASAP ideas, including ones that have never been ranked.
     /// Dated items come first by deadline; older ASAP items remain easy to find.
     public func urgentCaptures(at now: Date = Date()) -> [Capture] {

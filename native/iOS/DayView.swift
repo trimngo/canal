@@ -20,7 +20,11 @@ struct AllocationHistoryView: View {
     @AppStorage("dashboard.hide-zero-time") private var hideZeroTime = true
 
     var body: some View {
-        content(now: now)
+        let report = store.ledger.history(range: range, start: start, end: end, now: now, anchor: selectedDay)
+        let unreviewed = report.samples.filter { store.ledger.needsCategoryReview($0) || store.ledger.effectiveCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized") }
+        let pending = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.map(\.id)
+        let reviewCount = unreviewed.count + pending.count
+        return content(report: report)
             .onAppear { now = Date() }
             .onReceive(store.$ledger.dropFirst()) { _ in now = Date() }
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0; Task { await CalendarImport.shared.refresh() } }
@@ -32,10 +36,17 @@ struct AllocationHistoryView: View {
                     NavigationLink(value: LedgerScreen.calendar) {
                         Label("Calendar", systemImage: "calendar")
                     }.accessibilityIdentifier("dashboard.calendar")
-                    Button("Categories") { managingGroups = true }.accessibilityIdentifier("dashboard.groups")
+                    if reviewCount > 0 {
+                        Button {
+                            reviewing = LogReviewRequest(entryIDs: unreviewed.map(\.id), calendarIDs: pending)
+                        } label: { Label("Review logs (\(reviewCount))", systemImage: "tray") }
+                            .accessibilityIdentifier("dashboard.review.uncategorized")
+                    }
                     Menu {
                         Toggle("Hide zero-time categories", isOn: $hideZeroTime)
                             .accessibilityIdentifier("dashboard.hide-zero-time")
+                        Button("Manage categories") { managingGroups = true }
+                            .accessibilityIdentifier("dashboard.manage-categories")
                     } label: {
                         Label("Filter categories", systemImage: hideZeroTime ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     }.accessibilityIdentifier("dashboard.filter")
@@ -50,12 +61,9 @@ struct AllocationHistoryView: View {
 
     }
 
-    private func content(now: Date) -> some View {
-        let report = store.ledger.history(range: range, start: start, end: end, now: now, anchor: selectedDay)
-        let unreviewed = report.samples.filter { store.ledger.needsCategoryReview($0) || store.ledger.effectiveCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized") }
-        let pending = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.map(\.id)
-        let reviewCount = unreviewed.count + pending.count
-        return VStack(spacing: 0) {
+    private func content(report: HistoryReport) -> some View {
+        ScrollView {
+        VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 4) {
                     if range == .today || range == .week {
@@ -86,13 +94,6 @@ struct AllocationHistoryView: View {
                     DatePicker("From", selection: $start, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.from")
                     DatePicker("Through", selection: $end, in: ...now, displayedComponents: [.date]).accessibilityIdentifier("report.through")
                 }
-                if reviewCount > 0 {
-                    Button {
-                        reviewing = LogReviewRequest(entryIDs: unreviewed.map(\.id), calendarIDs: pending)
-                    } label: {
-                        Label("Review logs (\(reviewCount))", systemImage: "tray").font(.subheadline).frame(minHeight: 32)
-                    }.accessibilityIdentifier("dashboard.review.uncategorized")
-                }
                 DaylightDashboardView()
             }.padding(.horizontal, 20).padding(.vertical, 8)
             Divider()
@@ -101,7 +102,10 @@ struct AllocationHistoryView: View {
             }) { row in
                 selectedGroup = CategoryDetailRequest(id: row.id, name: row.name, start: report.start, end: report.end, allTime: false)
             }.padding(.top, 12)
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider().padding(.vertical, 20)
+            TodayUrgentTasksView(now: now).padding(.horizontal, 20).padding(.bottom, 24)
+        }.frame(maxWidth: .infinity)
+        }.accessibilityIdentifier("today.content")
     }
     private var periodLabel: String {
         let cal = store.ledger.reportingCalendar()

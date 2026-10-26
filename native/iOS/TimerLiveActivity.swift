@@ -2,7 +2,7 @@ import ActivityKit
 import UIKit
 import LedgerCore
 
-/// A display mirror only. The Watch remains responsible for its own alarm.
+/// Mirrors the shared timer. Explicit controls can move alert ownership to iPhone.
 @MainActor
 final class TimerLiveActivity {
     static let shared = TimerLiveActivity()
@@ -23,7 +23,7 @@ final class TimerLiveActivity {
             last = nil; return
         }
         let state = TimerLiveAttributes.ContentState(title: timer.title, dueAt: control.dueAt,
-            pausedRemaining: control.pausedRemaining, duration: timer.duration)
+            pausedRemaining: control.pausedRemaining, duration: timer.duration, token: control.token)
         let content = ActivityContent(state: state, staleDate: control.dueAt)
         // One Live Activity spans task transitions, including changes received
         // while iOS is backgrounded. Creating a new activity would require foreground.

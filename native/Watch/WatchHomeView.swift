@@ -9,6 +9,7 @@ struct WatchHomeView: View {
     @State private var saved = false
     @State private var tab = 2
     @State private var notificationSettings = false
+    @State private var timerOptions = false
     @State private var showingTimerRows = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
@@ -37,6 +38,20 @@ struct WatchHomeView: View {
                 }
             }
             .sheet(isPresented: $notificationSettings) { WatchNotificationSettingsView() }
+            .sheet(isPresented: $timerOptions) {
+                NavigationStack {
+                    List {
+                        NavigationLink("Timer settings", destination: TimerSettingsView())
+                        if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
+                            Button("Use Watch for alerts") {
+                                do { try store.changeTimer("here") } catch { store.report(error) }
+                            }
+                        }
+                        Button("Watch Home") { timerOptions = false; store.showingTimerQueue = false }
+                    }.navigationTitle("Timer options")
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { timerOptions = false } } }
+                }
+            }
             .onChange(of: activity) { old, value in
                 if !value.isEmpty { saved = false }
                 if OfflineGrouping.normalized(old) != OfflineGrouping.normalized(value) { categoryIDs = [] }
@@ -49,15 +64,7 @@ struct WatchHomeView: View {
             .toolbar {
                 if store.showingTimerQueue, !showingTimerRows {
                     ToolbarItem(placement: .topBarLeading) {
-                        Menu {
-                            NavigationLink("Timer settings", destination: TimerSettingsView())
-                            if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
-                                Button("Use Watch for alerts") {
-                                    do { try store.changeTimer("here") } catch { store.report(error) }
-                                }
-                            }
-                            Button("Watch Home") { store.showingTimerQueue = false }
-                        } label: { Image(systemName: "ellipsis").foregroundStyle(.black) }
+                        Button { timerOptions = true } label: { Image(systemName: "ellipsis").foregroundStyle(.black) }
                             .accessibilityLabel("Timer options").accessibilityIdentifier("timers.options")
                     }
                     ToolbarItem(placement: .topBarTrailing) {

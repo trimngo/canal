@@ -80,6 +80,19 @@ final class LedgerStore: ObservableObject {
                 ranking.revision = fixture.nextRevision(writer: "fixture"); fixture.inboxRanking = ranking
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-today-urgent") {
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music")]
+                try fixture.moveCategory("teaching", to: "work", writer: "fixture")
+                for (id, text) in [("alan", "Get back to Alan"), ("joe", "Reply to Joe"), ("rent", "Pay the rent"), ("guitar", "Practice guitar")] {
+                    try fixture.addCapture(text: text, id: id, writer: "fixture")
+                }
+                try fixture.categorizeCapture(id: "alan", categoryIDs: ["teaching"], writer: "fixture")
+                try fixture.categorizeCapture(id: "joe", categoryIDs: ["music", "teaching"], writer: "fixture")
+                try fixture.categorizeCapture(id: "guitar", categoryIDs: ["music"], writer: "fixture")
+                try fixture.saveSample(at: Date().addingTimeInterval(-1200), activity: "Today log waiting for review", categoryIDs: [], writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-daily-goals") }) {
                 defaults.removeObject(forKey: "goals.display-unit")
                 var fixture = Ledger()

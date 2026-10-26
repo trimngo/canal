@@ -46,7 +46,7 @@ Done & Next and Restart directly. In the background, watchOS owns the alarm UI
 and its Stop/Open buttons; they cannot be replaced by app actions. Stop silences
 the alarm without completing the task. Open goes to the timer controls. The
 system limits the alarm session to roughly 30 minutes. Haptic pattern and repeat
-interval are under the main timer's options menu → Timer settings. Sound follows Watch settings.
+interval are under the main timer's options sheet → Timer settings. Sound follows Watch settings.
 On supported Watches, double-tap is assigned to Restart while Dash's timer
 screen is visible. Apple owns gestures on the background system alarm screen.
 
@@ -104,11 +104,33 @@ Timing, matching settings and phrase rules use existing capture/settings revisio
 cloud/companion synchronization and backups. Older files without these fields
 continue to decode without resetting existing data.
 
+## Live Activity restart
+
+The iPhone Lock Screen and expanded Dynamic Island Live Activity include Restart.
+The same Lock Screen presentation is shown when expanding the mirrored Live
+Activity on macOS Tahoe. Mirrored Live Activities require iOS 18 or later and
+Apple's configured iPhone Mirroring connection. The compact presentation retains
+the task name and countdown; expand it to reach the action.
+
+`RestartTimerIntent` is compiled into the app and widget extension and conforms
+to `LiveActivityIntent`, so Apple runs it in the iPhone app process without
+opening the app. The widget does not write a separate copy of the ledger. Restart
+uses the full current duration, preserves upcoming tasks, schedules alerts on
+iPhone, refreshes the Live Activity, and syncs through the existing store. The
+displayed timer control token is required; old or repeated actions are ignored.
+An older activity state without a token still decodes, but needs a refresh before
+showing Restart. Expiry notifications retain their existing Done and Restart
+actions. Physical iPhone/Mac verification remains necessary for system mirroring.
+
+References: [Apple Live Activity interactivity](https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities),
+[LiveActivityIntent](https://developer.apple.com/documentation/appintents/liveactivityintent),
+and [What's new in widgets, WWDC25, 13:51–14:15](https://developer.apple.com/videos/play/wwdc2025/278/).
+
 ## Watch layout
 
 The current timer has its own page with full wrapping task text, a circular remaining-time ring around the countdown, completion and restart controls, and an upper-right +. Pause/Resume sits inside the ring. Waiting, running, paused, and finished titles use the same unrestricted layout; scroll long titles to read them completely without truncation. Swipe up over the ring to reveal the queue with a vertical animated transition; Reduce Motion uses a short fade instead. Both timer complications open this single-task screen. Starting/restarting a timer selects it, and a running task restores this screen after relaunch.
 
-The secondary page contains only timer rows, without settings, Watch Home, Add, or navigation buttons. Swipe down from the top of the list or right from any scroll position to return to the current timer. Queue rows use a compact 40-point minimum so three ordinary task names fit together at standard text size; longer names wrap to their full height instead of truncating. Native List scrolling supports touch and the Digital Crown, and native long-press reordering preserves the fixed current task. Held row drags do not trigger page navigation. Swipe left on any row to delete. Timer settings, alert takeover, and Watch Home remain accessible in the main timer's options menu. Restart keeps the system double-tap shortcut while the app is open.
+The secondary page contains only timer rows, without settings, Watch Home, Add, or navigation buttons. Swipe down from the top of the list or right from any scroll position to return to the current timer. Queue rows use a compact 40-point minimum so three ordinary task names fit together at standard text size; longer names wrap to their full height instead of truncating. Native List scrolling supports touch and the Digital Crown, and native long-press reordering preserves the fixed current task. Held row drags do not trigger page navigation. Swipe left on any row to delete. Timer settings, alert takeover, and Watch Home remain accessible in the main timer's options sheet. Restart keeps the system double-tap shortcut while the app is open.
 
 Dash preserves the selected timer screen, but watchOS controls how long the app remains visible when the wrist is lowered. For longer visibility, use Watch Settings → General → Return to Clock → Dash → After 1 hour. The app cannot override this setting or keep the display awake indefinitely.
 

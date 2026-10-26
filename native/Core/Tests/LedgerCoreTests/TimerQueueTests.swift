@@ -183,6 +183,18 @@ final class TimerQueueTests: XCTestCase {
         ledger.restartTimer(expectedToken: old, writer: "watch", onWatch: true, now: now)
         XCTAssertEqual(ledger, saved)
     }
+    func testRepeatedLiveActivityRestartCannotExtendANewerCountdown() throws {
+        var ledger = try fixture()
+        let token = ledger.timerControl!.token
+        let waiting = ledger.waitingTimers
+        ledger.restartTimer(expectedToken: token, writer: "phone", onWatch: false, now: now.addingTimeInterval(1300))
+        XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(2500))
+        XCTAssertEqual(ledger.timerControl?.owner, "phone")
+        XCTAssertEqual(ledger.waitingTimers, waiting)
+        let restarted = ledger
+        ledger.restartTimer(expectedToken: token, writer: "phone", onWatch: false, now: now.addingTimeInterval(1400))
+        XCTAssertEqual(ledger, restarted)
+    }
     func testPauseResumePreservesRemainingTimeWithoutPhone() throws {
         var ledger = try fixture()
         ledger.pauseTimer(writer: "watch", onWatch: true, now: now.addingTimeInterval(300))
