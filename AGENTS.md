@@ -25,9 +25,9 @@ xcrun simctl privacy "$DEVICE_ID" grant reminders com.trimngo.TimeLedger
 These commands run from `native/` inside the UI-test block of `validate.sh`.
 Keep that setup in the script. The tests exercise real EventKit list transfers,
 deletion safety, and persistence; they do not need to test Apple's permission
-dialog. Requesting Reminders access while another system permission sheet is
-appearing has left cold simulators waiting indefinitely. The `allowReminders`
-test helper also drains an initial notification permission sheet.
+dialog. This avoids cold-simulator permission setup failures and interference
+between permission sheets. The `allowReminders` test helper also drains an
+initial notification permission sheet.
 
 Clearing Inbox search can already be dismissing the keyboard asynchronously.
 Do not use `if keyboard.done.exists { keyboard.done.tap() }` for that setup:
@@ -54,16 +54,19 @@ the resulting UI state.
 
 Check live links before relying on this dated status:
 
-- [PR #2](https://github.com/trimngo/canal/pull/2) contains the Watch alarm
+- [PR #2](https://github.com/trimngo/canal/pull/2) merged as `2f1af02` with the Watch alarm
   lifecycle fix, current-timer-first screen, upward animated queue navigation,
   compact rows, touch scrolling, and native reordering.
 - [Full CI run 40281874588](https://github.com/trimngo/canal/actions/runs/40281874588)
-  validates commit `7fa6452` with the simulator setup above. The prior run passed
-  437 core tests and all 13 Watch UI tests; three of 120 iPhone tests failed
-  during permission or keyboard setup, prompting this harness fix.
-- The active release goal is a new processed, available TestFlight build
-  containing these changes. Build 78 was the latest verified release before
-  this work. Keep working through CI, merge, delivery, and processing.
+  passed for commit `7fa6452`: 437 core tests, all 120 iPhone UI tests, and all
+  13 Watch UI tests. The Reminders and search-keyboard setup fixes passed.
+- [TestFlight delivery run 40286793679](https://github.com/trimngo/canal/actions/runs/40286793679)
+  is preparing the new build from merge `2f1af02`. Build 78 remains the latest
+  verified release at this snapshot. Continue the active release task until
+  the new build is processed and distributed to internal testers.
+- The existing workspace preserves uncommitted copies of the implementation
+  while its commits were published through GitHub. Compare dirty files with
+  current `main` before further edits; preserve any additional local changes.
 - The user's separate recent crash remains unidentified. Available crash
   reports were from build 9; do not present them as evidence for a newer crash.
 
