@@ -175,7 +175,7 @@ struct TimerQueueView: View {
             .contentMargins(.vertical, 0, for: .scrollContent)
             .coordinateSpace(name: "watch.timer-queue")
             .onPreferenceChange(WatchTimerQueueTopKey.self) { top in
-                guard let top else { queueAtTop = false; return }
+                guard let top else { queueAtTop = store.ledger.currentTimer == nil && waiting.isEmpty; return }
                 if queueRestingTop == nil { queueRestingTop = top }
                 queueAtTop = top >= (queueRestingTop ?? top) - 2
             }
