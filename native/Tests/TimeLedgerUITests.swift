@@ -581,19 +581,16 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(dashboardGroup("work", in: app).waitForExistence(timeout: 10))
         openLogs(app)
         let sample = app.staticTexts["Legacy sample UI fixture"]; reveal(sample, in: app); sample.tap()
-        XCTAssertTrue(app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "logs.entry.")).firstMatch.waitForExistence(timeout: 5))
+        let field = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "logs.entry.")).firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        let doneButtons = app.buttons.matching(identifier: "keyboard.done")
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            doneButtons.allElementsBoundByIndex.contains { $0.isHittable }
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
-        guard let done = doneButtons.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
-            XCTFail("Keyboard Done must be visible before tapping"); return
-        }
-        done.tap()
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.typeText(" updated")
+        app.navigationBars.firstMatch.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture updated"].waitForExistence(timeout: 5))
+        app.terminate(); app.launchArguments = []; app.launch(); openLogs(app)
+        XCTAssertTrue(app.staticTexts["Legacy sample UI fixture updated"].waitForExistence(timeout: 5))
     }
 
     func testNotificationOpenedLogCanBeSavedAndSurvivesRelaunch() {
@@ -977,14 +974,14 @@ final class TimeLedgerUITests: XCTestCase {
         recordScreen("ExpandedHeatmapAlignedColumns", in: app)
         units.buttons["Hours"].tap()
         recordScreen("ExpandedHeatmapHours", in: app)
-        direct.tap()
+        revealHeatmapRow(direct, in: app); direct.tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(app.buttons["group.done"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, "group.log.today-parent-direct").exists)
         XCTAssertFalse(element(app, "group.log.today-teaching").exists)
         XCTAssertFalse(element(app, "group.log.today-guitar").exists)
         closeCategoryLogs(in: app)
-        reveal(guitar, in: app); guitar.tap()
+        revealHeatmapRow(guitar, in: app); guitar.tap()
         openCategoryLogs(in: app)
         XCTAssertTrue(element(app, "group.log.today-guitar").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "group.log.today-parent-direct").exists)
