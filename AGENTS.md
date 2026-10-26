@@ -50,7 +50,7 @@ the resulting UI state.
   processing, and distribution to internal testers. An accepted upload alone
   does not complete a TestFlight release task.
 
-## Active handoff snapshot: 2026-10-26
+## Release handoff snapshot: 2026-10-26
 
 Check live links before relying on this dated status:
 
@@ -61,13 +61,13 @@ Check live links before relying on this dated status:
   passed for commit `7fa6452`: 437 core tests, all 120 iPhone UI tests, and all
   13 Watch UI tests. The Reminders and search-keyboard setup fixes passed.
 - [TestFlight delivery run 40286793679](https://github.com/trimngo/canal/actions/runs/40286793679)
-  is preparing the new build from merge `2f1af02`. Build 78 remains the latest
-  verified release at this snapshot. Continue the active release task until
-  the new build is processed and distributed to internal testers.
+  successfully processed Dash 1.0 (build 79) and distributed it to internal
+  TestFlight testers. This release objective is complete; do not repeat its
+  upload when resuming the project.
 - The existing workspace preserves uncommitted copies of the implementation
   while its commits were published through GitHub. Compare dirty files with
   current `main` before further edits; preserve any additional local changes.
 - The user's separate recent crash remains unidentified. Available crash
   reports were from build 9; do not present them as evidence for a newer crash.
 
-Update this snapshot when the release completes.
+Refresh this dated snapshot when release or diagnostic status changes.
