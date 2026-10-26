@@ -36,12 +36,37 @@ bar and wait for the keyboard's nonexistence. When a test specifically exercises
 Done, wait for a visible, hittable Done control before tapping it, then wait for
 the resulting UI state.
 
+## UI automation details
+
+- Seed the Today urgent-task fixture **after** the generic `--ui-empty-ledger`
+  reset. Otherwise the reset erases the fixture before the screen launches.
+- DEBUG `--ui-*` fixtures do not exchange their synthetic ledger with the paired
+  simulator. The explicit `--ui-companion-unavailable` failure path stays enabled.
+  Companion transport has separate core regressions; verify actual device delivery.
+- Watch timer pages use the native vertical TabView. Scroll long content first,
+  then swipe past the page boundary to navigate. Native reorder requires a held
+  row drag; custom gestures must not claim that hold or vertical scrolling.
+- Watch haptic picker popup choices are accessibility **Buttons**. The selected
+  value in the settings form is a StaticText. Drain the test timer's own system
+  notification before launching the next fixture.
+- Cold simulators can show Apple’s `UIContinuousPathIntroductionView` over the
+  keyboard toolbar. The iPhone suite warms up the keyboard once per runner and
+  dismisses only that tutorial’s Continue button. Keep real typing/Done/persistence
+  assertions; do not diagnose an onboarding overlay as a missing app toolbar.
+- Log inline fields share the parent keyboard toolbar. Wait for a hittable Done
+  control and then keyboard disappearance when testing Done itself. Goal-unit
+  tests wait for the unit selection before editing the recreated numeric input.
+- Today has an intrinsic-height breakdown chart followed by urgent tasks. Avoid
+  assertions that every dashboard page has the same height. Scroll the heatmap's
+  own rows container after its selected detail increases in height.
+
 ## CI and release checks
 
-- All 120 iPhone UI tests run across six shards. Keep the complete test set and
+- All 124 iPhone UI tests run across six shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
-  Repeating WatchKit haptics still require physical-device verification.
+  Run all 16 Watch UI tests. Repeating WatchKit haptics still require
+  physical-device verification.
 - A cancelled Xcode run can leave an incomplete `.xcresult`. Export it only
   when `Info.plist` exists; preserve `validation.log` / `watch-validation.log`
   for diagnosis. An export error after interruption is a secondary failure.
@@ -52,22 +77,35 @@ the resulting UI state.
 
 ## Release handoff snapshot: 2026-10-26
 
-Check live links before relying on this dated status:
+Current objective: release the Watch timer, Today urgent-task, Live Activity
+Restart, haptic options, and faster Watch Restart/Done sync changes in PR #3.
+The user explicitly authorized merging and uploading and requested continuing
+until a new TestFlight build is processed and available. Keep that objective
+active when new ideas are discussed. Build 79 is the previous release.
 
-- [PR #2](https://github.com/trimngo/canal/pull/2) merged as `2f1af02` with the Watch alarm
-  lifecycle fix, current-timer-first screen, upward animated queue navigation,
-  compact rows, touch scrolling, and native reordering.
-- [Full CI run 40281874588](https://github.com/trimngo/canal/actions/runs/40281874588)
-  passed for commit `7fa6452`: 437 core tests, all 120 iPhone UI tests, and all
-  13 Watch UI tests. The Reminders and search-keyboard setup fixes passed.
-- [TestFlight delivery run 40286793679](https://github.com/trimngo/canal/actions/runs/40286793679)
-  successfully processed Dash 1.0 (build 79) and distributed it to internal
-  TestFlight testers. This release objective is complete; do not repeat its
-  upload when resuming the project.
-- The existing workspace preserves uncommitted copies of the implementation
-  while its commits were published through GitHub. Compare dirty files with
-  current `main` before further edits; preserve any additional local changes.
-- The user's separate recent crash remains unidentified. Available crash
-  reports were from build 9; do not present them as evidence for a newer crash.
+- PR #3: https://github.com/trimngo/canal/pull/3
+- Current source: `1b860794cdff42217bef43f56053b8a90b3374d6`.
+- Full CI: https://github.com/trimngo/canal/actions/runs/40381141224
+  Running: 448 core tests, all 124 iPhone UI tests, all 16 Watch UI tests.
+- After green checks, merge the validated head and follow Native TestFlight
+  delivery through Apple processing and internal distribution. Verify the actual
+  packaged build number; upload acceptance alone is insufficient.
+- Watch options are on the main timer page. The queue page has only timer rows.
+  Haptics & timer settings exposes three presets, preview, and repeat intervals.
+- Watch Restart/Done use priority interactive delivery and a latest-state
+  application context. iPhone refreshes ActivityKit before notifications, with
+  pending-state coalescing and finite background time. Apple still controls the
+  Mac forwarding hop; physical iPhone/Mac timing and repeating haptics need a
+  device check after release.
+- iPhone/Mac Restart preserves an existing Watch alert destination and adds a
+  one-time iPhone backup notification. Dash must be opened on Watch to rearm
+  repeating haptics after remote restart; the expanded Live Activity and phone
+  timer explain this. Do not claim watchOS can rearm its alarm while inactive.
+- The workspace preserves uncommitted copies of published implementation.
+  Compare dirty files with current remote source before edits. Preserve local
+  changes and the index; do not reset or discard them.
+- The separate recent crash remains unidentified. Available reports were from
+  build 9; do not present them as evidence for a newer crash.
+- Friend accountability sharing remains planning only.
 
 Refresh this dated snapshot when release or diagnostic status changes.
