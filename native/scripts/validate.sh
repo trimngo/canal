@@ -40,6 +40,12 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
     done < build/ui-test-selection.txt
   fi
   DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+  xcrun simctl bootstatus "$DEVICE_ID" -b
+  xcrun simctl install "$DEVICE_ID" build/Build/Products/Debug-iphonesimulator/TimeLedger.app
+  # The Reminders integration tests cover list transfer and persistence. Grant
+  # their prerequisite before launch so a simultaneous notification prompt
+  # cannot block EventKit's system permission sheet on a cold simulator.
+  xcrun simctl privacy "$DEVICE_ID" grant reminders com.trimngo.TimeLedger
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \

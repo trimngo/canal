@@ -2006,14 +2006,18 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Idea to analyze\nKeep every line"].exists)
         recordScreen("InboxSearchCompleted", in: app)
         app.buttons["inbox.search-clear"].tap()
-        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        // Clearing can already be dismissing the keyboard. Tap the stable
+        // navigation bar instead of a Done control that may disappear mid-tap.
+        app.navigationBars["Inbox"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         editNotes("inbox.notes.open", adding: "Unique bicycle wheels", in: app)
         reveal(search, in: app); search.tap(); search.typeText("BICYCLE")
         XCTAssertTrue(app.staticTexts["Idea to analyze\nKeep every line"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Completed idea"].exists)
         recordScreen("InboxSearchNotes", in: app)
         app.buttons["inbox.search-clear"].tap()
-        if app.buttons["keyboard.done"].exists { app.buttons["keyboard.done"].tap() }
+        app.navigationBars["Inbox"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(element(app, "inbox.waiting-title").exists)
         XCTAssertFalse(app.navigationBars["Rank ideas"].exists)
     }
@@ -2093,11 +2097,14 @@ final class TimeLedgerUITests: XCTestCase {
 
     private func allowReminders(in app: XCUIApplication) {
         let allow = app.buttons["reminders.allow"]
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let permission = springboard.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Allow")).firstMatch
         for _ in 0..<3 {
+            // The validation script grants EventKit access before launch, but
+            // an unrelated notification prompt can still cover this screen.
+            if permission.waitForExistence(timeout: 1) { permission.tap() }
             if app.buttons["reminders.create"].exists { break }
             if allow.waitForExistence(timeout: 2) { allow.tap() }
-            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            let permission = springboard.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Allow")).firstMatch
             if permission.waitForExistence(timeout: 3) { permission.tap() }
             if app.buttons["reminders.create"].waitForExistence(timeout: 3) { break }
         }
