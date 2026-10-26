@@ -590,6 +590,7 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         field.typeText(" updated")
+        XCTAssertEqual(field.value as? String, "Legacy sample UI fixture updated")
         finishInlineEditing(in: app)
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Legacy sample UI fixture updated"].waitForExistence(timeout: 5))
@@ -2240,7 +2241,9 @@ final class TimeLedgerUITests: XCTestCase {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             buttons.allElementsBoundByIndex.contains { $0.isHittable }
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        let result = XCTWaiter.wait(for: [ready], timeout: 10)
+        if result != .completed { print("INLINE KEYBOARD FAILURE: \(app.debugDescription)") }
+        XCTAssertEqual(result, .completed)
         guard let done = buttons.allElementsBoundByIndex.first(where: { $0.isHittable }) else {
             XCTFail("Keyboard Done must be visible and hittable"); return
         }
