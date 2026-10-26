@@ -216,6 +216,13 @@ final class WatchQuickLogUITests: XCTestCase {
         ready.swipeUp()
         let start = app.buttons["timers.start"]
         if !start.isHittable { app.swipeUp() }
+        XCTAssertTrue(start.isHittable)
+        swipeTimerPage(app, toQueue: true)
+        let queuedTitle = app.staticTexts["timers.waiting.long-title"]
+        XCTAssertEqual(queuedTitle.label, title)
+        XCTAssertGreaterThan(queuedTitle.frame.height, 60, "Waiting rows must also show the full task title.")
+        swipeTimerPage(app, toQueue: false)
+        if !start.isHittable { app.staticTexts["timers.ready"].swipeUp() }
         XCTAssertTrue(start.isHittable); start.tap()
         let current = app.staticTexts["timers.current"]
         XCTAssertTrue(current.waitForExistence(timeout: 5))

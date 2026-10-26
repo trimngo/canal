@@ -126,7 +126,8 @@ struct TimerQueueView: View {
                 // entire List every second interferes with native row dragging.
                 TimelineView(.periodic(from: Date(), by: 1)) { timeline in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(task.title).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                    Text(task.title).font(.system(size: 16, weight: .semibold)).lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("timers.queue-current")
                     Text(control.isFinished(at: timeline.date) ? "Now · Finished" : "Now · " + clock(control.remaining(at: timeline.date)))
                         .font(.system(size: 13, design: .rounded).monospacedDigit())
@@ -143,7 +144,8 @@ struct TimerQueueView: View {
             }
             ForEach(waiting) { task in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(task.title).font(.system(size: 16, weight: .medium)).lineLimit(1)
+                    Text(task.title).font(.system(size: 16, weight: .medium)).lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("timers.waiting.\(task.id)")
                     Text(clock(task.duration)).font(.system(size: 13, design: .rounded).monospacedDigit())
