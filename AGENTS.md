@@ -108,11 +108,13 @@ Keep existing work active when discussing new ideas.
   **SUCCESS**, job `121851600612`. Packaged build **80** verified at 21:55:03 UTC;
   Apple processing and internal distribution both succeeded at
   **2026-10-26 22:00:51 UTC**. Upload acceptance alone was not used as proof.
-- Automatic main CI https://github.com/trimngo/canal/actions/runs/40402462395
-  passed all 124 iPhone tests and 448 core tests again. Its repeated Watch step
-  hit the 30-minute limit after 15 passing tests, with no assertion failure.
-  One Watch-only retry, job `121873487321`, is running on the unchanged merge;
-  check its final result before claiming this additional main run is green.
+- Automatic main CI https://github.com/trimngo/canal/actions/runs/40402462395 —
+  **SUCCESS**, all **448 core, 124 iPhone UI, and 16 Watch UI tests** passed again
+  on the merged source. Its initial Watch step hit the 30-minute limit after
+  15 passing tests with no assertion failure. One Watch-only retry, job
+  `121873487321`, passed all 16 tests (429.9 seconds of UI tests); the successful
+  phone shards were retained. Both full CI runs and TestFlight delivery are
+  complete; no validation or upload remains pending.
 
 Implemented in build 80:
 
@@ -158,4 +160,4 @@ The separate recent crash remains unidentified. The latest diagnostic run
 present those as evidence for a newer crash. Friend accountability sharing
 remains planning only.
 
-Refresh this snapshot when the additional main Watch retry or diagnostics change.
+Refresh this snapshot when release, CI, or diagnostic status changes.
