@@ -202,6 +202,37 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         XCTAssertFalse(app.buttons["timers.start"].exists)
     }
+    func testMainTimerOptionsOfferHapticPatternsPreviewAndRepeatInterval() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]
+        app.launch()
+        let options = app.buttons["timers.options"].firstMatch
+        XCTAssertTrue(options.waitForExistence(timeout: 30))
+        options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let settings = app.buttons["timers.alarm-settings"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 5)); settings.tap()
+        let pattern = app.descendants(matching: .any).matching(identifier: "timers.haptic-pattern").firstMatch
+        revealWatchControl(pattern, in: app)
+        pattern.tap()
+        let light = app.staticTexts["Light tap"].firstMatch
+        XCTAssertTrue(light.waitForExistence(timeout: 5)); light.tap()
+        let repeatInterval = app.descendants(matching: .any).matching(identifier: "timers.haptic-repeat").firstMatch
+        revealWatchControl(repeatInterval, in: app)
+        repeatInterval.tap()
+        let five = app.staticTexts["5 seconds"].firstMatch
+        XCTAssertTrue(five.waitForExistence(timeout: 5)); five.tap()
+        let preview = app.buttons["timers.haptic-preview"]
+        revealWatchControl(preview, in: app); preview.tap()
+        record("WatchTimerHapticOptions", app)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(options.waitForExistence(timeout: 20))
+        options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(settings.waitForExistence(timeout: 5)); settings.tap()
+        revealWatchControl(pattern, in: app)
+        XCTAssertTrue(app.staticTexts["Light tap"].exists)
+        revealWatchControl(repeatInterval, in: app)
+        XCTAssertTrue(app.staticTexts["5 seconds"].exists)
+    }
     func testFullTaskTitleWrapsWhileWaitingRunningAndPaused() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-open", "--ui-timer-long-title", "--ui-timer-waiting", "--ui-quiet-timer-alerts"]
@@ -236,6 +267,13 @@ final class WatchQuickLogUITests: XCTestCase {
         record("WatchFullPausedTaskTitle", app)
     }
     override func setUpWithError() throws { continueAfterFailure = false }
+    private func revealWatchControl(_ control: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<8 {
+            if control.exists, control.isHittable { return }
+            app.swipeUp()
+        }
+        XCTAssertTrue(control.exists); XCTAssertTrue(control.isHittable)
+    }
     private func swipeTimerPage(_ app: XCUIApplication, toQueue: Bool) {
         if !toQueue {
             let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))

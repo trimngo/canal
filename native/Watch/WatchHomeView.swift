@@ -41,7 +41,9 @@ struct WatchHomeView: View {
             .sheet(isPresented: $timerOptions) {
                 NavigationStack {
                     List {
-                        NavigationLink("Timer settings", destination: TimerSettingsView())
+                        NavigationLink(destination: TimerSettingsView()) {
+                            Label("Haptics & timer settings", systemImage: "waveform")
+                        }.accessibilityIdentifier("timers.alarm-settings")
                         if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
                             Button("Use Watch for alerts") {
                                 do { try store.changeTimer("here") } catch { store.report(error) }

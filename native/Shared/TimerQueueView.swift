@@ -493,7 +493,7 @@ struct TimerSettingsView: View {
                 }.accessibilityIdentifier("timers.haptic-pattern")
                 Picker("Repeat every", selection: $interval) {
                     ForEach([2.0, 3, 5, 10], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
-                }
+                }.accessibilityIdentifier("timers.haptic-repeat")
                 Button("Preview alert pattern") { WKInterfaceDevice.current().play(pattern == "attention" ? .retry : pattern == "light" ? .click : .notification) }.accessibilityIdentifier("timers.haptic-preview")
                 Text("Alarm sound follows your Watch’s system settings. Repeating haptics use the Watch’s system alarm, limited to about 30 minutes.")
                     .font(.caption2).foregroundStyle(.secondary)
