@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import re
 import unittest
@@ -13,7 +14,11 @@ class UIShardingTests(unittest.TestCase):
     def test_every_actual_ui_test_runs_exactly_once_across_ci_shards(self):
         source = (ROOT / "Tests/TimeLedgerUITests.swift").read_text()
         expected = re.findall(r"func (test\w+)\(", source)
-        shards = [selection.select_tests(source, index, 6) for index in range(6)]
+        workflow = (ROOT.parent / ".github/workflows/native-checks.yml").read_text()
+        indices = json.loads(re.search(r"shard: (\[[^\]]+\])", workflow).group(1))
+        count = int(re.search(r"LEDGER_UI_TEST_SHARDS: '(\d+)'", workflow).group(1))
+        self.assertEqual(indices, list(range(count)))
+        shards = [selection.select_tests(source, index, count) for index in indices]
         self.assertCountEqual([test for shard in shards for test in shard], expected)
         self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
 

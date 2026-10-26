@@ -2,6 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate
+if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
+  # Overlap cold simulator startup with core tests and app compilation.
+  DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
+  xcrun simctl boot "$DEVICE_ID" || true
+fi
 python3 -m unittest discover -s TestsPython -p 'test_*packaging.py' -v
 python3 -m unittest discover -s TestsPython -p 'test_ui_sharding.py' -v
 swift test --package-path Core
@@ -39,7 +44,6 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
       UI_TEST_SELECTION+=("$selected")
     done < build/ui-test-selection.txt
   fi
-  DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,devices in d["devices"].items() if "iOS" in runtime for x in devices if x["name"].startswith("iPhone")))')
   xcrun simctl bootstatus "$DEVICE_ID" -b
   xcrun simctl install "$DEVICE_ID" build/Build/Products/Debug-iphonesimulator/TimeLedger.app
   # The Reminders integration tests cover list transfer and persistence. Grant

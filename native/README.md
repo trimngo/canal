@@ -186,7 +186,7 @@ LEDGER_UI_TESTS=1 bash native/scripts/validate.sh
 
 CI partitions the complete iPhone UI suite across six jobs, with up to three
 running at once. To run one partition locally, add `LEDGER_UI_TEST_SHARD=0` and
-`LEDGER_UI_TEST_SHARDS=6` to the UI validation command (indices are zero-based).
+`LEDGER_UI_TEST_SHARDS=4` to the UI validation command (indices are zero-based).
 Without these variables, local UI validation runs the entire suite. Each CI
 partition uploads its own results and `validation.log`; an interrupted result
 bundle is skipped by the screenshot exporter, while the validation step still
@@ -225,3 +225,5 @@ key inside the GitHub environment. It emits only fixed allowlisted exception and
 component indicators. Raw reports, tester metadata, comments, and activity text
 are never printed or uploaded as artifacts. This feedback API may not expose all
 automatically collected Apple crash reports, and new reports may be delayed.
+
+CI iteration, runner scheduling, and TestFlight completion checks are documented in [docs/ci-and-testflight.md](docs/ci-and-testflight.md).

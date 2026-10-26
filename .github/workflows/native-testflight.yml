@@ -8,7 +8,8 @@ permissions:
   contents: read
 concurrency:
   group: native-testflight
-  cancel-in-progress: true
+  # Finish processing/distribution even if another main commit arrives.
+  cancel-in-progress: false
 jobs:
   deliver:
     if: github.ref == 'refs/heads/main' && vars.APPLE_SIGNING_READY == 'true'

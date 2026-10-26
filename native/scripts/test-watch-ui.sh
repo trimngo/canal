@@ -2,8 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 xcodegen generate
-xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
-  -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 mkdir -p build
 python3 - <<'PY' > build/watch-test-devices.json
 import json, subprocess
@@ -22,11 +20,17 @@ print(json.dumps({'watch': watch, 'phone': phone}))
 PY
 WATCH_DEVICE_ID=$(python3 -c 'import json; print(json.load(open("build/watch-test-devices.json"))["watch"])')
 PHONE_DEVICE_ID=$(python3 -c 'import json; print(json.load(open("build/watch-test-devices.json"))["phone"])')
+# Start simulator warmup while the unsigned app compiles. bootstatus below
+# remains the synchronization point if a paired device could not boot yet.
 xcrun simctl boot "$PHONE_DEVICE_ID" || true
+xcrun simctl boot "$WATCH_DEVICE_ID" || true
+xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 xcrun simctl bootstatus "$PHONE_DEVICE_ID" -b
+xcrun simctl bootstatus "$WATCH_DEVICE_ID" -b
 xcrun simctl install "$PHONE_DEVICE_ID" build/Build/Products/Debug-iphonesimulator/TimeLedger.app
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch \
   -destination "platform=watchOS Simulator,id=$WATCH_DEVICE_ID" -derivedDataPath build \
   -resultBundlePath build/WatchUITests.xcresult CODE_SIGNING_ALLOWED=NO \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
-  -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300 test
+  -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300 "$@" test
