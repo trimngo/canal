@@ -407,6 +407,15 @@ final class LedgerStore: ObservableObject {
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-timer-long-title") {
+                var fixture = Ledger()
+                let title = "Prepare the complete presentation for the project review with the design team tomorrow morning"
+                try fixture.enqueueTimer(id: "long-title", title: title, duration: 300, writer: writer, onWatch: Self.isWatch)
+                if ProcessInfo.processInfo.arguments.contains("--ui-timer-waiting") {
+                    fixture.timerControl = nil
+                }
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-backup-fixture") {
                 var fixture = Ledger()
                 let earlier = Date().addingTimeInterval(-2 * 86400)

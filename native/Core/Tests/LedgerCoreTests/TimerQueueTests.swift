@@ -16,6 +16,32 @@ final class TimerQueueTests: XCTestCase {
         XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(1200))
         XCTAssertTrue(ledger.entries.isEmpty); XCTAssertTrue(ledger.captures.isEmpty)
     }
+    func testSoleNewWatchTaskStartsAfterPreviousTaskWasFinishedOrDeleted() throws {
+        for delete in [false, true] {
+            var ledger = Ledger()
+            ledger.settings.timerAutoStartNext = false
+            try ledger.enqueueTimer(id: "old", title: "Old task", duration: 60, writer: "watch", onWatch: true, now: now)
+            if delete { ledger.deleteQueuedTimer("old", writer: "watch", onWatch: true, now: now) }
+            else { ledger.finishTimer(writer: "watch", onWatch: true, now: now) }
+            try ledger.enqueueTimer(id: "new", title: "New task", duration: 300, writer: "watch", onWatch: true, now: now)
+            XCTAssertEqual(ledger.currentTimer?.id, "new")
+            XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(300))
+            XCTAssertTrue(ledger.timerControl?.onWatch == true)
+            XCTAssertTrue(ledger.waitingTimers.isEmpty)
+        }
+    }
+    func testSoleNewTaskStartsWhenSyncLeftAControlForADeletedTask() throws {
+        var ledger = Ledger()
+        try ledger.enqueueTimer(id: "old", title: "Old task", duration: 60, writer: "phone", onWatch: false, now: now)
+        let staleControl = ledger.timerControl
+        ledger.deleteQueuedTimer("old", writer: "phone", onWatch: false, now: now)
+        ledger.timerControl = staleControl
+        XCTAssertNil(ledger.currentTimer)
+        try ledger.enqueueTimer(id: "new", title: "New task", duration: 300, writer: "watch", onWatch: true, now: now)
+        XCTAssertEqual(ledger.currentTimer?.id, "new")
+        XCTAssertEqual(ledger.timerControl?.dueAt, now.addingTimeInterval(300))
+        XCTAssertEqual(ledger.timerControl?.owner, "watch")
+    }
     func testReorderingOnlyMovesUpcomingTimersAndDoneUsesNewOrder() throws {
         var ledger = try fixture()
         try ledger.enqueueTimer(id: "three", title: "Walk", duration: 300, writer: "watch", onWatch: true, now: now.addingTimeInterval(2))

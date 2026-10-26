@@ -195,7 +195,9 @@ extension Ledger {
         let hadWaitingTasks = !waitingTimers.isEmpty
         let value = QueuedTimer(id: id, title: title, duration: duration, createdAt: now, revision: nextRevision(writer: writer))
         queuedTimers = (queuedTimers ?? []) + [value]
-        if currentTimer == nil, timerControl?.taskID == nil, !hadWaitingTasks { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
+        // An empty queue can retain an old control after completion or sync.
+        // A new sole task must start regardless of that stale task ID.
+        if currentTimer == nil, !hadWaitingTasks { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
     }
     public mutating func startNextTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard currentTimer == nil else { return }

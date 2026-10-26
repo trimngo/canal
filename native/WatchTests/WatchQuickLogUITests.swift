@@ -57,6 +57,7 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
         allowTimerNotifications(app)
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        XCTAssertTrue(app.staticTexts["timers.countdown"].waitForExistence(timeout: 5))
         record("WatchTimerDictationSaved", app)
     }
     func testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes() {
@@ -123,10 +124,14 @@ final class WatchQuickLogUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(extra.isHittable)
-        XCTAssertTrue(app.buttons["timers.current-page"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "timers.queue-list").firstMatch.exists)
         XCTAssertFalse(app.staticTexts["timers.current"].exists)
         record("WatchQueueTouchScrolled", app)
-        swipeTimerPage(app, toQueue: false)
+        // Rightward navigation stays available without scrolling to the top.
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
     }
     func testRunningTimerRemainsTheOpeningScreenAfterRelaunch() {
@@ -185,24 +190,64 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["timers.countdown"].exists)
         record("WatchHomeAddedDefaultTimer", app)
     }
+    func testNewSoleTimerStartsAgainAfterFinishingThePreviousQueue() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-open", "--ui-timer-dictation", "--ui-quiet-timer-alerts"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timers.countdown"].waitForExistence(timeout: 30))
+        app.buttons["timers.done"].tap()
+        XCTAssertTrue(app.staticTexts["No timers yet"].waitForExistence(timeout: 5))
+        app.buttons["timers.dictate"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["timers.countdown"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
+        XCTAssertFalse(app.buttons["timers.start"].exists)
+    }
+    func testFullTaskTitleWrapsWhileWaitingRunningAndPaused() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-open", "--ui-timer-long-title", "--ui-timer-waiting", "--ui-quiet-timer-alerts"]
+        app.launch()
+        let title = "Prepare the complete presentation for the project review with the design team tomorrow morning"
+        let ready = app.staticTexts["timers.ready"]
+        XCTAssertTrue(ready.waitForExistence(timeout: 30))
+        XCTAssertEqual(ready.label, title)
+        XCTAssertGreaterThan(ready.frame.height, 80, "The whole title must wrap beyond three lines.")
+        record("WatchFullWaitingTaskTitle", app)
+        // Scroll the title itself; it must reveal the timer without paging away.
+        ready.swipeUp()
+        let start = app.buttons["timers.start"]
+        if !start.isHittable { app.swipeUp() }
+        XCTAssertTrue(start.isHittable); start.tap()
+        let current = app.staticTexts["timers.current"]
+        XCTAssertTrue(current.waitForExistence(timeout: 5))
+        XCTAssertEqual(current.label, title)
+        XCTAssertGreaterThan(current.frame.height, 80)
+        let pause = app.buttons["timers.pause-resume"]
+        if !pause.isHittable { current.swipeUp() }
+        XCTAssertTrue(pause.isHittable); pause.tap()
+        XCTAssertTrue(app.staticTexts["timers.paused"].waitForExistence(timeout: 5))
+        XCTAssertEqual(current.label, title)
+        record("WatchFullPausedTaskTitle", app)
+    }
     override func setUpWithError() throws { continueAfterFailure = false }
     private func swipeTimerPage(_ app: XCUIApplication, toQueue: Bool) {
         if !toQueue {
-            let back = app.buttons["timers.current-page"].firstMatch
-            XCTAssertTrue(back.waitForExistence(timeout: 5))
-            // watchOS exposes a non-hittable accessibility wrapper around the
-            // toolbar button. Exercise its actual on-screen touch target.
-            back.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+            from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
             XCTAssertTrue(app.buttons["timers.restart"].waitForExistence(timeout: 5) || app.buttons["timers.start"].exists)
             return
         }
-        // A real page swipe crosses the content area. Swiping a one-line title
-        // can generate only a few points of movement in watchOS XCTest.
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
-        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
-        from.press(forDuration: 0.01, thenDragTo: to)
-        XCTAssertTrue(app.buttons["timers.current-page"].waitForExistence(timeout: 5))
+        let ring = app.descendants(matching: .any).matching(identifier: "timers.progress").firstMatch
+        XCTAssertTrue(ring.waitForExistence(timeout: 5))
+        let from = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.9))
+        let to = ring.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.1))
+        from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "timers.queue-list").firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["timers.current"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["timers.options"].exists)
+        XCTAssertFalse(app.buttons["timers.dictate"].exists)
+        XCTAssertFalse(app.buttons["timers.alarm-settings"].exists)
+        XCTAssertFalse(app.buttons["timers.watch-home"].exists)
     }
     private func allowTimerNotifications(_ app: XCUIApplication) {
         let carousel = XCUIApplication(bundleIdentifier: "com.apple.Carousel")

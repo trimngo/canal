@@ -47,13 +47,18 @@ struct WatchHomeView: View {
                 categoryIDs = []; saved = false
             }
             .toolbar {
-                if store.showingTimerQueue {
-                    if showingTimerRows {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button { showingTimerRows = false } label: { Image(systemName: "chevron.up").foregroundStyle(.black) }
-                                .accessibilityLabel("Current timer")
-                                .labelStyle(.iconOnly).accessibilityIdentifier("timers.current-page")
-                        }
+                if store.showingTimerQueue, !showingTimerRows {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu {
+                            NavigationLink("Timer settings", destination: TimerSettingsView())
+                            if let control = store.ledger.timerControl, store.ledger.currentTimer != nil, control.owner != store.writer {
+                                Button("Use Watch for alerts") {
+                                    do { try store.changeTimer("here") } catch { store.report(error) }
+                                }
+                            }
+                            Button("Watch Home") { store.showingTimerQueue = false }
+                        } label: { Image(systemName: "ellipsis").foregroundStyle(.black) }
+                            .accessibilityLabel("Timer options").accessibilityIdentifier("timers.options")
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { store.openTimers(dictate: true) } label: { Image(systemName: "plus").font(.title3.bold()).foregroundStyle(.black) }
