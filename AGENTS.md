@@ -5,33 +5,79 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
-## Active work: optional AlarmKit feedback and Stop settings (build 82)
+## Latest release: TestFlight 82 (2026-10-27)
 
-The user confirmed basic Watch → iPhone AlarmKit handoff works in build 81; the
-earlier one-off cause remains unknown. They then requested haptic-only alarms
-on **both iPhone and Watch**, specifically as a setting, and reported that Stop
-on the forwarded Watch alarm should be able to start the next timer without
-opening Dash. Continue through full CI, merge, and a new processed/internally
-distributed TestFlight build. Release actions remain authorized; preserve all
-local files and the original index. No sub-agents.
+Release objective **COMPLETE**: TestFlight **1.0 (82)** finished Apple processing
+and was distributed to internal testers at **2026-10-27 13:20:16 UTC**. Do not
+repeat this upload. The user's requested settings are shipped; physical checks
+of silent/repeating haptics and forwarded Watch Stop behavior remain below.
+Preserve all local files and the original Git index before further work.
 
-Two opt-in switches under iPhone Timers → Timer settings (after enabling the
-system-alarm trial): **Haptics only (trial)** and **Stop completes task**. Both
-default off. The first uses a bundled silent CAF; Apple still controls physical
-haptics and mirroring, so this needs device checks. The second completes only
-the matching expired phone alarm and follows Start next after Done; this keeps
-Restart and duplicate/stale callbacks safe. Hardware dismissals can invoke Stop.
-Watch-owned fallback alarms and notification backups keep existing sound rules.
+- PR #5: https://github.com/trimngo/canal/pull/5 — merged as
+  `5b73e0d3fc7d1e91c7b2c5be0bc67fdc83255deb`, the build 82 app source.
+- Validated head `0b766b67e802e0d54e3d4c39c86124d0ef7a474f` and merge have the
+  identical tree `b9ad6079a88099d3498fb14bc5acbcb20752d117`. The native subtree is
+  `bb07581a9ade33f7d4b8f0b1fb5bf555367f3c79`; later root handoff changes do not
+  change application source or trigger another upload.
+- Full CI: https://github.com/trimngo/canal/actions/runs/40503598254 — **SUCCESS**:
+  **473 core, all 130 iPhone UI, and all 17 Watch UI tests**, on the first full
+  attempt. Source coverage was checked with no missing or duplicated UI cases.
+- Focused checks: `40500673769`, job `122177265755`, passed all 473 core tests,
+  both app builds, and all six phone alarm flows. Apple's decoder confirmed the
+  bundled CAF as mono PCM16, 44100 Hz, 0.5 seconds. Release validation checks
+  that its audio samples are all zero and that the signed IPA includes it.
+- Delivery: https://github.com/trimngo/canal/actions/runs/40509629042 — **SUCCESS**,
+  job `122207796373`. Actual packaged build **82** verified at 13:16:39 UTC;
+  Apple processing and internal distribution both succeeded at 13:20:16 UTC.
+  Accepted upload alone was not used as release proof.
+- Local and post-merge signing checks (`40509629011`, job `122207795660`) passed
+  all **25 packaging/CI tests**. Full checks took about 44 minutes; delivery got
+  a Mac immediately and finished in about 11 minutes, without a duplicate main
+  UI run. Phone validation allows 55 minutes inside a 65-minute job; Watch UI
+  allows 35 minutes inside a 45-minute job. Keep all full PR tests.
 
-Checkpoint: `/workspace/work/alarmkit-82/state.json`. Expected full validation:
-473 core / 130 iPhone UI / 17 Watch UI tests, plus 25 packaging/CI tests. The
-six-flow focused phone check includes both new settings before the full PR.
-Native source stays frozen while a healthy full run finishes. Phone validation
-has a 55-minute step inside a 65-minute job; build 81 approached its previous
-50-minute limit. Do not drop tests or treat accepted upload as release complete.
-Read native/docs/alarmkit-trial.md for scope and device verification.
+### Enable the new settings
 
-## Latest release: TestFlight 81 (2026-10-27)
+On iPhone, open **Timers → Timer settings** with **iPhone system alarms (trial)**
+enabled. Two additional switches are available; **both default off** and persist
+in backups/settings sync:
+
+- **Haptics only (trial)** requests silent audio for iPhone system alarms and
+  their paired-Watch alerts. Dash uses the bundled `DashSilent.caf` through the
+  supported custom-sound API, with the filename extension included. Apple exposes
+  no direct haptic-only or custom mirrored-Watch vibration control. Test silence
+  and repeating haptics on both physical devices before relying on it. Future
+  alarms keep their existing deadline when sound changes; ringing alarms keep
+  their original sound until Restart, and stopped alarms stay silenced.
+  Watch-owned fallback alarms and notification backups keep existing sound rules.
+- **Stop completes task** lets Stop on the expired phone-owned system alarm
+  complete its matching queued task, including Stop on the forwarded Watch alert.
+  Leave **Start next after Done** on to start the next task and schedule its
+  AlarmKit alarm directly on iPhone without opening Dash on Watch. Turning
+  auto-start off leaves the next task waiting. Hardware-button dismissals can
+  also invoke Stop; the settings footer explains that. Early, repeated, stale,
+  and Watch-owned callbacks cannot complete another task. Restart stays separate.
+
+Read [native/docs/alarmkit-trial.md](native/docs/alarmkit-trial.md). Install the
+update on phone and Watch, queue two one-minute timers, and check silence,
+repeating haptics, Watch Stop advancing exactly once, Restart retaining the same
+task, and phone/Mac Live Activity updates. Those physical behaviors cannot be
+established by simulator checks. Basic Watch → phone handoff was already
+confirmed by the user on build 81; no handoff protocol change was made in 82.
+The earlier one-off observation remains unexplained. Existing inactive-Watch
+and mid-timer disconnection limits still apply; do not claim perfect failover.
+
+The separate recent crash remains unidentified. The repaired diagnostic check
+last documented 3 feedback submissions: two available logs from build 9 and one
+unavailable log. Do not attribute a current crash to build 9 or infer the missing
+log's build. Friend accountability sharing remains planning only.
+
+Detailed checkpoint: `/workspace/work/alarmkit-82/state.json`. Local uncommitted
+copies of published work and the original index are intentionally preserved.
+Original index SHA-256:
+`665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+
+## Previous release: TestFlight 81 (2026-10-27)
 
 Release objective **COMPLETE**: TestFlight **1.0 (81)** finished Apple processing
 and was distributed to internal testers at **2026-10-27 10:12:08 UTC**. Do not
@@ -113,8 +159,9 @@ race as its established cause or repeat the already-complete build 81 release.
 The user also asked about haptic-only AlarmKit alerts. Apple's documented sound
 API exposes default/custom audio, with no direct haptic-only or independent
 Watch-sound setting. A silent bundled sound is only a possible workaround and
-needs physical verification of retained/repeating Watch haptics. The user chose both iPhone and Watch and requested a setting. See the active
-build 82 work above; the basic handoff report itself did not require a fix.
+needs physical verification of retained/repeating Watch haptics. The user chose both iPhone and Watch and requested a setting. The optional
+feedback and Stop settings are now shipped in build 82 as documented above;
+the basic handoff report itself did not require a fix.
 
 ## Simulator test setup
 
