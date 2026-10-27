@@ -17,12 +17,14 @@ final class PhoneTimerAlarm: ObservableObject {
     private var generation = UUID()
     private var preparationBackgroundID = UIBackgroundTaskIdentifier.invalid
     private var preparationExpired = false
+    private var preparationGeneration = UUID()
     enum PreparationError: Error { case busy }
     private struct Record: Codable {
         var id: UUID
         var token: String
         var title: String
         var dueAt: Date
+        var confirmed: Bool? = nil
     }
     private var record: Record? {
         get { UserDefaults.standard.data(forKey: recordKey).flatMap { try? JSONDecoder().decode(Record.self, from: $0) } }
@@ -80,7 +82,9 @@ final class PhoneTimerAlarm: ObservableObject {
         let ledger = LedgerStore.shared.ledger
         guard ledger.timerControl?.token == token,
               PhoneTimerAlarmPolicy.schedulesSystemAlarm(ledger, writer: LedgerStore.shared.writer) else { return }
-        status = "System alarm unavailable · " + message
+        status = status.hasPrefix("Previous iPhone alarm cancellation pending")
+            ? "Previous iPhone alarm cancellation pending · " + message
+            : "System alarm unavailable · " + message
     }
 
     /// Returns true only when AlarmKit owns this exact timer or the user stopped
@@ -107,9 +111,10 @@ final class PhoneTimerAlarm: ObservableObject {
         guard preparing == nil, let token = ledger.timerControl?.token else { throw PreparationError.busy }
         preparing = token
         preparationExpired = false
+        let preparationID = UUID(); preparationGeneration = preparationID
         preparationBackgroundID = UIApplication.shared.beginBackgroundTask(withName: "Timer alarm handover") { [weak self] in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.preparationGeneration == preparationID else { return }
                 self.preparationExpired = true
                 if self.preparationBackgroundID != .invalid { UIApplication.shared.endBackgroundTask(self.preparationBackgroundID) }
                 self.preparationBackgroundID = .invalid
@@ -121,7 +126,7 @@ final class PhoneTimerAlarm: ObservableObject {
     func preparationIsValid(_ token: String) -> Bool { preparing == token && !preparationExpired }
     func finishPreparation(_ token: String) {
         guard preparing == token else { return }
-        preparing = nil
+        preparing = nil; preparationGeneration = UUID()
         if preparationBackgroundID != .invalid { UIApplication.shared.endBackgroundTask(preparationBackgroundID) }
         preparationBackgroundID = .invalid
     }
@@ -145,21 +150,24 @@ final class PhoneTimerAlarm: ObservableObject {
             return false
         }
         do {
-            if let old = record, old.token == control.token, old.title == timer.title, old.dueAt == due {
+            if let old = record, PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: old.token,
+                savedDueAt: old.dueAt, savedTitle: old.title, token: control.token,
+                dueAt: due, title: timer.title) {
                 if mock { status = "iPhone system alarm scheduled"; return true }
                 if #available(iOS 26.0, *), try AlarmManager.shared.alarms.contains(where: { $0.id == old.id }) {
+                    if old.confirmed != true { var adopted = old; adopted.confirmed = true; record = adopted }
                     status = "iPhone system alarm scheduled"; return true
                 }
                 // Once a scheduled alarm has disappeared at/after its deadline,
                 // reopening must not recreate it or turn user Stop into an alert.
-                if due <= Date() {
+                if PhoneTimerAlarmPolicy.absentAlarmHasFinished(dueAt: due, schedulingConfirmed: old.confirmed == true) {
                     UserDefaults.standard.set(control.token, forKey: silencedKey)
                     status = "System alarm ended · timer awaits Done or Restart"; return true
                 }
             }
             guard await cancelRecord() else { return false }
             guard due > Date() else { status = "Timer finished"; return false }
-            let next = Record(id: UUID(), token: control.token, title: timer.title, dueAt: due)
+            var next = Record(id: UUID(), token: control.token, title: timer.title, dueAt: due)
             // Persist the identity before scheduling so relaunch can cancel or
             // adopt an alarm even if the process exits around the API call.
             record = next
@@ -172,6 +180,7 @@ final class PhoneTimerAlarm: ObservableObject {
                 if #available(iOS 26.0, *) { try await schedule(next) }
                 else { record = nil; return false }
             }
+            next.confirmed = true; record = next
             status = "iPhone system alarm scheduled"
             return true
         } catch {

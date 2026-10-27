@@ -1,6 +1,6 @@
 # CI iteration and TestFlight delivery
 
-PRs run **Native Apple checks**: 463 core tests, all 128 iPhone UI tests across
+PRs run **Native Apple checks**: 465 core tests, all 128 iPhone UI tests across
 four shards, and all 17 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
 Native source changes must go through a PR with the full checks green. The

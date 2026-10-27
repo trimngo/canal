@@ -33,7 +33,9 @@ match the still-pending Watch request. Late replies cannot authorize a new
 handover. The phone also rejects any intervening ledger change. Only then does it atomically commit
 the phone destination and return the confirmed timer. The Watch cancels its old
 alarm when applying that state while active. Failed scheduling/readiness leaves
-the original Watch control and alarm in place; staged phone alarms are cancelled.
+the original Watch control and alarm in place; staged phone alarms are cancelled. A durable confirmation flag distinguishes a
+completed schedule from a process exit before the API confirmed it. Editing an
+expired task title leaves an already-ringing alarm in place until Stop/Restart.
 
 The Watch timer options show the outcome. **Use Watch for alerts** takes over
 locally and preserves the deadline. This explicit choice lasts for that task,

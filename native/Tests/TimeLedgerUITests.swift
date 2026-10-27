@@ -19,8 +19,10 @@ final class TimeLedgerUITests: XCTestCase {
         let settings = app.buttons["Timer settings"]; reveal(settings, in: app); settings.tap()
         let toggle = app.switches["timers.system-alarms"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); XCTAssertEqual(toggle.value as? String, "1")
-        toggle.tap(); XCTAssertEqual(toggle.value as? String, "0")
-        toggle.tap()
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 5), .completed)
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
         recordScreen("SystemAlarmTrialSettings", in: app)
@@ -32,7 +34,7 @@ final class TimeLedgerUITests: XCTestCase {
         let settings = app.buttons["Timer settings"]; reveal(settings, in: app); settings.tap()
         let toggle = app.switches["timers.system-alarms"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); XCTAssertEqual(toggle.value as? String, "0")
-        toggle.tap()
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         let status = element(app, "timers.system-alarm-settings-status")
         XCTAssertTrue(status.waitForExistence(timeout: 5)); XCTAssertTrue(status.label.contains("not allowed"))
         XCTAssertEqual(toggle.value as? String, "0")

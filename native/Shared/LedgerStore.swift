@@ -716,10 +716,15 @@ final class LedgerStore: ObservableObject {
               PhoneTimerAlarmPolicy.acceptsHandoff(ledger, expectedToken: expectedToken,
                                                    candidate: candidate, phoneWriter: writer) else {
             await alarms.abandonPreparation(proposed.token)
+            refreshTimerSupport(force: true)
             throw TimerAlarmTransferError.unavailable
         }
         do { try commit(candidate) }
-        catch { await alarms.abandonPreparation(proposed.token); throw error }
+        catch {
+            await alarms.abandonPreparation(proposed.token)
+            refreshTimerSupport(force: true)
+            throw error
+        }
         alarms.finishPreparation(proposed.token)
         await TimerLiveActivity.shared.refresh(ledger)
         await NotificationScheduler.shared.applyTimer(ledger, writer: writer)

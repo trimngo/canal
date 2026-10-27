@@ -13,6 +13,19 @@ final class PhoneTimerAlarmPolicyTests: XCTestCase {
         let settings = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
         XCTAssertFalse(settings.timerSystemAlarms)
     }
+    func testEditingAnExpiredTitleDoesNotStopItsRingingAlarm() {
+        XCTAssertTrue(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: now, savedTitle: "Old",
+            token: "same", dueAt: now, title: "Updated", now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: now.addingTimeInterval(30), savedTitle: "Old",
+            token: "same", dueAt: now.addingTimeInterval(30), title: "Updated", now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "old", savedDueAt: now, savedTitle: "Old",
+            token: "new", dueAt: now, title: "Old", now: now))
+    }
+    func testAnInterruptedSchedulingAttemptIsNotMistakenForUserStop() {
+        XCTAssertFalse(PhoneTimerAlarmPolicy.absentAlarmHasFinished(dueAt: now, schedulingConfirmed: false, now: now))
+        XCTAssertTrue(PhoneTimerAlarmPolicy.absentAlarmHasFinished(dueAt: now, schedulingConfirmed: true, now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.absentAlarmHasFinished(dueAt: now.addingTimeInterval(30), schedulingConfirmed: true, now: now))
+    }
     func testLateAndImplausiblyDatedOffersCannotCommit() {
         XCTAssertFalse(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(-1), now: now))
         XCTAssertFalse(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(0.5), now: now))

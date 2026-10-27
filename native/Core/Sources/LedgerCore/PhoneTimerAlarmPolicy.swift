@@ -9,6 +9,15 @@ public enum PhoneTimerAlarmPolicy {
         let remaining = expiresAt.timeIntervalSince(now)
         return remaining >= 1 && remaining <= offerLifetime + 1
     }
+    public static func keepsScheduledAlarm(savedToken: String, savedDueAt: Date, savedTitle: String,
+                                           token: String, dueAt: Date, title: String,
+                                           now: Date = Date()) -> Bool {
+        savedToken == token && savedDueAt == dueAt && (savedTitle == title || dueAt <= now)
+    }
+    public static func absentAlarmHasFinished(dueAt: Date, schedulingConfirmed: Bool,
+                                              now: Date = Date()) -> Bool {
+        schedulingConfirmed && dueAt <= now
+    }
 
     public static func watchCanFinishTransfer(currentToken: String, scheduledToken: String?,
                                               hasSession: Bool, isActive: Bool) -> Bool {
