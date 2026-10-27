@@ -5,39 +5,75 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
-## Active work: AlarmKit trial (2026-10-27)
+## Latest release: TestFlight 81 (2026-10-27)
 
-The user approved trying phone-primary AlarmKit with Watch fallback while keeping
-independent Watch timers and the iPhone/Mac Live Activity. Build 80 remains the
-latest release; this new work must reach a new processed/distributed TestFlight
-build. Release actions remain authorized. Preserve all uncommitted files/index.
+Release objective **COMPLETE**: TestFlight **1.0 (81)** finished Apple processing
+and was distributed to internal testers at **2026-10-27 10:12:08 UTC**. Do not
+repeat this upload. The user authorized continuing through merge and a new
+available TestFlight build; that release is now complete. Preserve local files
+and the original Git index when beginning further work.
 
-Work checkpoint: `/workspace/work/alarmkit-81/state.json`. SDK candidate
-`0441f21e280de0064454d12a21b898155b3cdf2b` on `ci/alarmkit-sdk` passed Native
-timer trial checks run `40469308688`: both apps compile and 448 legacy core tests
-pass. The latest complete trial now requires 465 core / 128 phone / 17 Watch
-tests. The focused phone run `40471490507` passed 463 core, both builds, and
-Stop/fallback UI flows; its two switch taps are being corrected without changing
-assertions. The Watch focused run is `40471493251` (six cases). Follow the
-checkpoint for the latest focused retry and full PR; do not release on focused
-checks alone. Read [native/docs/alarmkit-trial.md](native/docs/alarmkit-trial.md). Finish core/UI regressions and focused SDK/UI checks
-before opening the feature PR's full suite. Do not repeatedly cancel full CI.
+- PR #4: https://github.com/trimngo/canal/pull/4 — merged as
+  `1bfad1bd3a1cd782d44002f7e0fcca842d618289`, the build 81 app source.
+- Validated head `4bb1d1e35ebf8202faa1ec2ca16d8871c31f2868` and merge have the
+  identical tree `a559db87222ac4437c108380c5c04f3616abe997`.
+- Full CI: https://github.com/trimngo/canal/actions/runs/40478588242 — **SUCCESS**:
+  **465 core, all 128 iPhone UI, and all 17 Watch UI tests**. Source coverage was
+  checked with no omitted or duplicated UI cases. All passed on the first full
+  attempt. Focused phone (4) and Watch (6) checks also passed before the PR.
+- Delivery: https://github.com/trimngo/canal/actions/runs/40484970675 — **SUCCESS**,
+  job `122124371983`. The actual packaged build **81** was verified at 10:07:38 UTC;
+  processing and internal distribution both succeeded at 10:12:08 UTC. An accepted
+  upload alone was not used as release proof.
+- Post-merge signing checks `40484970670` passed all 23 packaging/CI tests.
+- The later diagnostics-only commit `7a6b86943816078c9607ac0a7d877ed2231cac18`
+  preserves the app's native tree `e8173430e63985dbbdae607b57cfbff52a69bb06`.
+  It does not trigger another TestFlight upload. Root handoff updates also leave
+  app source unchanged.
 
-Trial is opt-in (iPhone Timers → Timer settings → iPhone system alarms). Phone
-alarms use Stop (silence, never complete) and Restart. Watch starts locally, then
-offers phone takeover while active; the phone must actually schedule AlarmKit
-before publishing ownership. Failure leaves Watch alerts in place. Explicit
-Watch takeover stays available and persists for that task. There is no guaranteed
-background switch after a later lost connection: WatchKit cannot arm/cancel while
-inactive. A late handover can leave an old Watch alarm pending until reopening;
-do not claim perfect failover or no possible duplicate alerts. Live Activity stays
-independent of the alarm engine. Real Watch button/repeat behavior needs testing.
+Read [native/docs/alarmkit-trial.md](native/docs/alarmkit-trial.md). Enable the
+opt-in trial on an iPhone running iOS 26 or later: **Timers → Timer settings →
+iPhone system alarms (trial)**, then grant alarm permission. Existing installs
+retain their previous behavior until enabled. Test with a new phone timer.
+Phone-owned timers use a fixed AlarmKit alarm with the task title, Stop (silence
+only, never complete), and Restart. The existing iPhone/Mac ActivityKit countdown
+remains the shared display. Permission/API failure retains notification fallback.
 
-Native full checks now run on PR/manual dispatch, without a duplicate full main
-UI run competing with delivery. Merge only after all full PR checks are green
-and verify the native merge source equals the tested source. Release still runs
-core tests and app builds before archiving. Watch UI step budget is 35 minutes
-inside a 45-minute job. Focused `ci/alarmkit-ui` checks never replace the full PR.
+Watch timers first arm locally. A foreground start/restart/resume/Done & Next can
+offer phone takeover with at least 15 seconds remaining. Phone ownership is
+published only after actual scheduling and a matching, still-active Watch offer
+and cancellable session. Failed confirmation retains Watch alerts. **Use Watch
+for alerts** persists for that task; **Use iPhone system alarm** retries transfer
+in Watch timer options. Enabling the trial alone does not move an existing
+Watch-owned alarm while Watch is inactive. Open Watch to choose a destination.
+
+There is no guaranteed background switch after a later lost connection: WatchKit
+cannot arm/cancel while inactive. A late transition after readiness can leave an
+old Watch alarm pending until reopening and cause a duplicate. Do not claim
+perfect failover or instant Mac mirroring. Watch haptic presets apply to Watch
+alarms; Apple controls forwarded system alarm feedback. **Physical verification
+of forwarded Watch buttons, repeating haptics, and device-to-device timing remains
+necessary**; simulator success does not establish those behaviors.
+
+All five full-CI Macs started without a queue. Full validation took about 50
+minutes: the four phone shards spent about 26–33 minutes in UI tests plus cold
+setup/build time. Removing duplicate post-merge full UI checks let delivery get
+a Mac immediately and finish in about 13 minutes. No GitHub API throttling error
+was observed. Watch UI has a 35-minute step inside a 45-minute job; phone
+validation has a 50-minute step inside a 60-minute job. Keep every full PR test.
+
+Crash diagnostics were repaired to count an individual missing Apple crash log
+(HTTP 404) and continue checking other reports and release status. Auth, rate
+limit, and server errors still fail visibly; output remains allowlisted. All
+14 privacy tests passed locally and in run `40485421706`, job `122125879664`.
+At 10:03 UTC it found **3 submissions: two available logs from build 9 and one
+unavailable log**. The user's recent crash remains unidentified; do not attribute
+it to build 9 or treat the missing log as proof of a particular build.
+
+Detailed checkpoint: `/workspace/work/alarmkit-81/state.json`. The local branch
+still intentionally preserves uncommitted copies of published work; compare
+against current remote source before edits. Original index SHA-256:
+`665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
 
 ## Simulator test setup
 
@@ -122,11 +158,10 @@ Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
 processing/distribution even if another main commit arrives.
 
-## Release handoff snapshot: 2026-10-26
+## Previous release: build 80 (2026-10-26)
 
-Release objective **COMPLETE**: TestFlight **1.0 (80)** is processed and available
-to internal testers. The user explicitly authorized merging/uploading and asked
-for a new available build; do not repeat that upload or treat build 79 as latest.
+Historical release: TestFlight **1.0 (80)** was processed and available before
+build 81. The latest release and remaining physical checks are documented above.
 Keep existing work active when discussing new ideas.
 
 - PR #3: https://github.com/trimngo/canal/pull/3 — merged as
@@ -178,21 +213,19 @@ Deployment findings and follow-up:
 - Already changed: four complete phone shards plus Watch, no duplicate native
   feature-push run, isolated focused Watch branches, early simulator boot,
   interrupted-result export guards, and non-cancelling TestFlight delivery.
-- Remaining CI cleanup: automatic main-push full validation repeats the already
-  validated PR tree and competes with delivery. Also, the Watch's 30-minute step
-  budget can be too short for cold startup plus all 16 tests; consider 35 minutes
-  within its 40-minute job budget. These are follow-ups, not changes in build 80.
-  Keep all PR tests and assertions. Do not restart full runs to iterate on Watch.
+- Resolved in build 81: removed the redundant main-push full UI run and raised
+  Watch validation to a 35-minute step inside a 45-minute job. The full PR checks
+  remain required. Keep all tests/assertions and do not restart healthy full runs
+  to iterate on Watch.
 
 The workspace still preserves uncommitted copies of published implementation.
 Compare dirty files with current remote source before edits. Preserve local files
 and the original Git index; do not reset or discard them. The index SHA-256 at
 this handoff is `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
 
-The separate recent crash remains unidentified. The latest diagnostic run
-`40385505398` still found only two submitted reports, both from build 9; do not
-present those as evidence for a newer crash. Friend accountability sharing
-remains planning only.
+The historical successful diagnostic run `40385505398` found two build 9
+reports. The current diagnostic status is documented above; the recent user
+crash remains unidentified. Friend accountability sharing remains planning only.
 
 Refresh this snapshot when release, CI, or diagnostic status changes.
 
