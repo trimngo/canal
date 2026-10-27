@@ -6,6 +6,7 @@ import UserNotifications
 import LedgerCore
 #if os(watchOS)
 import WidgetKit
+import WatchKit
 #endif
 
 @MainActor
@@ -24,7 +25,10 @@ final class LedgerStore: ObservableObject {
     @Published var timerRequestID = UUID()
     @Published var showingTimerQueue = false
     @Published var timerDictationRequested = false
+    @Published var timerRoutingStatus = ""
+    @Published var timerRoutingBusy = false
     private var timerSupportInitialized = false
+    private var timerSupportSystemAlarms = false
     private var timerSupportControl: TimerQueueControl?
     private var timerSupportTask: QueuedTimer?
     @Published var quickReplyDraft: String?
@@ -66,6 +70,9 @@ final class LedgerStore: ObservableObject {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
+                defaults.removeObject(forKey: "timers.system-alarm.record")
+                defaults.removeObject(forKey: "timers.system-alarm.silenced")
+                defaults.removeObject(forKey: "timers.watch-override-task")
                 // Notification tests must not cover the next test's input UI.
                 UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
                 UNUserNotificationCenter.current().removeAllDeliveredNotifications()
@@ -418,8 +425,15 @@ final class LedgerStore: ObservableObject {
                             writer: writer, onWatch: Self.isWatch, now: earlier.addingTimeInterval(Double(index + 2)))
                     }
                 }
+                if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-alarmkit-") }) {
+                    fixture.settings.timerSystemAlarms = true
+                    fixture.restartTimer(writer: writer, onWatch: Self.isWatch)
+                }
                 if ProcessInfo.processInfo.arguments.contains("--ui-watch-owned-timer") {
                     fixture.moveTimerAlerts(writer: "paired-watch", onWatch: true)
+                }
+                if ProcessInfo.processInfo.arguments.contains("--ui-phone-owned-timer") {
+                    fixture.moveTimerAlerts(writer: "paired-phone", onWatch: false)
                 }
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }
@@ -618,9 +632,10 @@ final class LedgerStore: ObservableObject {
     }
     func addTimer(_ text: String) throws {
         let parsed = try TimerDraft.parse(text)
-        start(); var draft = ledger
+        start(); let previousToken = ledger.timerControl?.token; var draft = ledger
         try draft.enqueueTimer(title: parsed.title, duration: parsed.duration, writer: writer, onWatch: Self.isWatch)
         try commit(draft)
+        if draft.timerControl?.token != previousToken { offerPhoneAlarmIfPreferred() }
     }
     func changeTimer(_ action: String, expectedToken: String? = nil) throws {
         start()
@@ -636,8 +651,73 @@ final class LedgerStore: ObservableObject {
         case "here": draft.moveTimerAlerts(writer: writer, onWatch: Self.isWatch)
         default: return
         }
-        if draft != ledger { try commit(draft) }
+        if draft != ledger {
+            try commit(draft)
+            #if os(watchOS)
+            if action == "here" { UserDefaults.standard.set(draft.currentTimer?.id, forKey: "timers.watch-override-task") }
+            #endif
+            if ["start", "resume", "restart", "done"].contains(action) { offerPhoneAlarmIfPreferred() }
+        }
     }
+    private func offerPhoneAlarmIfPreferred() {
+        #if os(watchOS)
+        guard PhoneTimerAlarmPolicy.canOfferPhone(ledger, writer: writer,
+            isActive: WKApplication.shared().applicationState == .active,
+            watchOverrideTaskID: UserDefaults.standard.string(forKey: "timers.watch-override-task")) else { return }
+        usePhoneTimerAlarm(manual: false)
+        #endif
+    }
+    func usePhoneTimerAlarm(manual: Bool = true) {
+        #if os(watchOS)
+        guard !timerRoutingBusy, let token = ledger.timerControl?.token,
+              ledger.timerControl?.onWatch == true else { return }
+        timerRoutingBusy = true; timerRoutingStatus = "Checking iPhone · Watch alarm stays scheduled"
+        Task { @MainActor in
+            defer { self.timerRoutingBusy = false }
+            do {
+                guard let companion = self.companion else { throw TimerAlarmTransferError.unavailable }
+                let incoming = try await companion.requestPhoneTimerAlarm(token: token)
+                if self.ledger.timerControl?.token == token || self.ledger.timerControl == incoming.timerControl {
+                    try self.merge(incoming)
+                }
+                self.timerRoutingStatus = self.ledger.timerControl?.onWatch == false
+                    ? "iPhone system alarm confirmed"
+                    : "Watch alarm retained · timer changed during handover"
+                if manual, self.ledger.timerControl?.onWatch == false {
+                    UserDefaults.standard.removeObject(forKey: "timers.watch-override-task")
+                }
+            } catch {
+                self.timerRoutingStatus = self.ledger.timerControl?.onWatch == true
+                    ? "Watch alarm retained · iPhone could not confirm an alarm"
+                    : "Check current alert destination · iPhone reply unavailable"
+            }
+        }
+        #endif
+    }
+    #if os(iOS)
+    func acceptPhoneTimerAlarm(_ incoming: Ledger, expectedToken: String) async throws -> Ledger {
+        start(); try merge(incoming)
+        guard ledger.settings.timerSystemAlarms, ledger.timerControl?.token == expectedToken,
+              ledger.timerControl?.onWatch == true else { throw TimerAlarmTransferError.changed }
+        let base = ledger
+        var candidate = base; candidate.moveTimerAlerts(writer: writer, onWatch: false)
+        guard let proposed = candidate.timerControl else { throw TimerAlarmTransferError.changed }
+        let alarms = PhoneTimerAlarm.shared
+        let armed = try await alarms.prepare(candidate, writer: writer)
+        guard armed, alarms.preparationIsValid(proposed.token), ledger == base,
+              PhoneTimerAlarmPolicy.acceptsHandoff(ledger, expectedToken: expectedToken,
+                                                   candidate: candidate, phoneWriter: writer) else {
+            await alarms.abandonPreparation(proposed.token)
+            throw TimerAlarmTransferError.unavailable
+        }
+        do { try commit(candidate) }
+        catch { await alarms.abandonPreparation(proposed.token); throw error }
+        alarms.finishPreparation(proposed.token)
+        await TimerLiveActivity.shared.refresh(ledger)
+        await NotificationScheduler.shared.applyTimer(ledger, writer: writer)
+        return ledger
+    }
+    #endif
     func deleteTimer(_ id: String) throws {
         var draft = ledger; draft.deleteQueuedTimer(id, writer: writer, onWatch: Self.isWatch)
         if draft != ledger { try commit(draft) }
@@ -652,8 +732,10 @@ final class LedgerStore: ObservableObject {
     }
     func refreshTimerSupport(force: Bool = false) {
         let current = ledger.currentTimer, control = ledger.timerControl
-        guard force || !timerSupportInitialized || timerSupportTask != current || timerSupportControl != control else { return }
+        guard force || !timerSupportInitialized || timerSupportTask != current || timerSupportControl != control ||
+                timerSupportSystemAlarms != ledger.settings.timerSystemAlarms else { return }
         timerSupportInitialized = true; timerSupportTask = current; timerSupportControl = control
+        timerSupportSystemAlarms = ledger.settings.timerSystemAlarms
         #if os(watchOS)
         WatchTimerAlarm.shared.update(ledger: ledger, writer: writer)
         #if !targetEnvironment(simulator)

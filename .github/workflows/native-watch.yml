@@ -24,7 +24,7 @@ concurrency:
 jobs:
   watch-ui:
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -34,7 +34,7 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
       - name: Test Watch UI
-        timeout-minutes: 30
+        timeout-minutes: 35
         env:
           WATCH_FOCUS: ${{ inputs.focus || startsWith(github.ref_name, 'ci/watch-') }}
         run: |

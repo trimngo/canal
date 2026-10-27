@@ -1,0 +1,45 @@
+name: Native timer trial checks
+on:
+  push:
+    branches: ['ci/alarmkit-*']
+    paths: ['native/**', '.github/workflows/native-timer-trial.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-timer-trial-${{ github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  trial:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Build and check timer trial
+        timeout-minutes: 35
+        env:
+          RUN_UI: ${{ contains(github.ref_name, '-ui') }}
+        run: |
+          mkdir -p native/build
+          set -o pipefail
+          if [[ "$RUN_UI" == "true" ]]; then
+            LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
+              -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmTrialSchedulesRestartsAndPersistsWithoutChangingQueue \
+              -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmFailureKeepsTimerAndNotificationFallback \
+              -only-testing:TimeLedgerUITests/TimeLedgerUITests/testStoppingSystemAlarmDoesNotCompleteTask \
+              2>&1 | tee native/build/validation.log
+          else
+            bash native/scripts/validate.sh 2>&1 | tee native/build/validation.log
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-timer-trial-log
+          path: native/build/validation.log
+          retention-days: 7

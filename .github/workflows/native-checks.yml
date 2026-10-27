@@ -1,8 +1,5 @@
 name: Native Apple checks
 on:
-  push:
-    branches: [main]
-    paths: ['native/**', '.github/workflows/native-*.yml']
   pull_request:
     paths: ['native/**', '.github/workflows/native-*.yml']
   workflow_dispatch:

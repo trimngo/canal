@@ -246,6 +246,17 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     }
     private func applyTimerSerially(_ ledger: Ledger, writer: String) async {
         configureActions()
+        #if os(iOS)
+        // A delayed snapshot must not cancel a newer system alarm. Confirm the
+        // authoritative state again after the asynchronous AlarmKit operation.
+        guard ledger.timerControl == LedgerStore.shared.ledger.timerControl,
+              ledger.currentTimer == LedgerStore.shared.ledger.currentTimer,
+              ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms else { return }
+        let systemManaged = await PhoneTimerAlarm.shared.refresh(ledger, writer: writer)
+        guard ledger.timerControl == LedgerStore.shared.ledger.timerControl,
+              ledger.currentTimer == LedgerStore.shared.ledger.currentTimer,
+              ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms else { return }
+        #endif
         let pending = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("task-timer-") }
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-quiet-timer-alerts") {
@@ -269,6 +280,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
             timerStatus = ledger.currentTimer == nil ? "" : control?.pausedRemaining != nil ? "Paused" : "Timer alerts on \(control?.onWatch == true ? "Apple Watch" : "iPhone")"
             return
         }
+        #if os(iOS)
+        if systemManaged || PhoneTimerAlarm.shared.isSilenced(control.token) {
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier))
+            timerStatus = PhoneTimerAlarm.shared.status.isEmpty ? "Alarm silenced · timer awaits Done or Restart" : PhoneTimerAlarm.shared.status
+            return
+        }
+        #endif
         #if os(watchOS)
         if WatchTimerAlarm.shared.isSilenced(for: control.token) {
             center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier))

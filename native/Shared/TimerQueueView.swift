@@ -19,6 +19,7 @@ struct TimerQueueView: View {
     @ObservedObject private var notifications = NotificationScheduler.shared
     #if os(iOS)
     @State private var timerEditMode: EditMode = .inactive
+    @ObservedObject private var phoneAlarm = PhoneTimerAlarm.shared
     #endif
     #if os(watchOS)
     @ObservedObject private var alarm = WatchTimerAlarm.shared
@@ -283,6 +284,10 @@ struct TimerQueueView: View {
                         }
                         Text(control.onWatch ? "Alerts on Apple Watch" : "Alerts on iPhone")
                             .font(.caption).foregroundStyle(.secondary)
+                        if store.ledger.settings.timerSystemAlarms, !control.onWatch, !phoneAlarm.status.isEmpty {
+                            Text(phoneAlarm.status).font(.caption).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("timers.phone-alarm-status")
+                        }
                         if control.isRemoteWatchRestart {
                             Text("Open Dash on Watch once to rearm repeating haptics after restarting here. An iPhone backup alert stays scheduled.")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -441,6 +446,10 @@ private struct TimerEditorView: View {
 
 struct TimerSettingsView: View {
     @EnvironmentObject private var store: LedgerStore
+    #if os(iOS)
+    @ObservedObject private var phoneAlarm = PhoneTimerAlarm.shared
+    @State private var requestingAlarmPermission = false
+    #endif
     #if os(watchOS)
     @AppStorage("timers.haptic-pattern") private var pattern = "standard"
     @AppStorage("timers.haptic-repeat") private var interval = 3.0
@@ -448,6 +457,29 @@ struct TimerSettingsView: View {
     #endif
     var body: some View {
             Form {
+                #if os(iOS)
+                Section {
+                    Toggle("iPhone system alarms (trial)", isOn: Binding(get: { store.ledger.settings.timerSystemAlarms }, set: { enabled in
+                        guard !requestingAlarmPermission else { return }
+                        if !enabled {
+                            var settings = store.ledger.settings; settings.timerSystemAlarms = false
+                            do { try store.saveSettings(settings); store.refreshTimerSupport(force: true) } catch { store.report(error) }
+                            return
+                        }
+                        requestingAlarmPermission = true
+                        Task { @MainActor in
+                            defer { requestingAlarmPermission = false }
+                            guard await phoneAlarm.requestPermission() else { return }
+                            var settings = store.ledger.settings; settings.timerSystemAlarms = true
+                            do { try store.saveSettings(settings); store.refreshTimerSupport(force: true) } catch { store.report(error) }
+                        }
+                    })).disabled(requestingAlarmPermission || (!phoneAlarm.isSupported && !store.ledger.settings.timerSystemAlarms))
+                        .accessibilityIdentifier("timers.system-alarms")
+                    if !phoneAlarm.status.isEmpty { Text(phoneAlarm.status).font(.caption).accessibilityIdentifier("timers.system-alarm-settings-status") }
+                } footer: {
+                    Text("On iOS 26, phone timers use an alarm with the task name and Restart. Stop silences it; Done stays in Dash. A Watch-started timer keeps its own alarm until the phone confirms a system alarm. If the phone cannot confirm, Watch alerts stay in place. Mid-timer disconnection cannot automatically arm a sleeping Watch. Live Activities stay available.")
+                }
+                #endif
                 #if os(watchOS)
                 Picker("Alert pattern", selection: $pattern) {
                     Text("Standard pulse").tag("standard")
@@ -478,6 +510,10 @@ struct TimerSettingsView: View {
                 Text("To keep Dash visible longer when you raise your wrist, set Watch Settings → General → Return to Clock → Dash to After 1 hour.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Text("Double-tap restarts the timer while this app’s timer screen is open. The background alarm screen uses Apple’s gesture behavior.").font(.caption2).foregroundStyle(.secondary)
+                Text(store.ledger.settings.timerSystemAlarms
+                    ? "iPhone system alarm trial is enabled. New Watch timers try the phone while Dash is active; the local alarm stays until the phone confirms. Use Watch for alerts to take over manually. A later lost connection cannot automatically arm a sleeping Watch."
+                    : "Enable iPhone system alarms in Dash’s iPhone timer settings to try phone alarms and automatic selection when starting on Watch.")
+                    .font(.caption2)
                 #endif
             }.navigationTitle("Timer settings")
                 #if os(watchOS)

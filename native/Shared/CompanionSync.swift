@@ -5,6 +5,19 @@ import LedgerCore
 import WatchKit
 #endif
 
+enum TimerAlarmTransferError: Error { case unavailable, changed }
+
+@MainActor
+private final class TimerAlarmReply {
+    var continuation: CheckedContinuation<Data, Error>?
+    var timeout: Task<Void, Never>?
+    func finish(_ result: Result<Data, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil; timeout?.cancel(); timeout = nil
+        continuation.resume(with: result)
+    }
+}
+
 private final class CompanionWriteCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
@@ -59,6 +72,43 @@ final class CompanionSync: NSObject, WCSessionDelegate {
     }
 
     func hasReceivedSample(_ entry: CheckIn) -> Bool { quick.hasReceived(entry) }
+
+    /// This interactive offer is attempted only during a user action on Watch.
+    /// A cached reachability bit is not proof of scheduling or unavailability.
+    func requestPhoneTimerAlarm(token: String) async throws -> Ledger {
+        #if os(watchOS)
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
+            throw TimerAlarmTransferError.unavailable
+        }
+        #endif
+        guard WKApplication.shared().applicationState == .active,
+              let session, session.activationState == .activated, let store,
+              store.ledger.timerControl?.token == token,
+              let snapshot = try CompanionQuickDelivery.timerSnapshot(store.ledger) else {
+            throw TimerAlarmTransferError.unavailable
+        }
+        let data: Data = try await withCheckedThrowingContinuation { continuation in
+            let reply = TimerAlarmReply(); reply.continuation = continuation
+            reply.timeout = Task { @MainActor in
+                do { try await Task.sleep(for: .seconds(8)) } catch { return }
+                reply.finish(.failure(TimerAlarmTransferError.unavailable))
+            }
+            session.sendMessage(["timerAlarmOffer": snapshot, "token": token], replyHandler: { response in
+                let data = response["timer"] as? Data
+                Task { @MainActor in
+                    if let data, data.count <= 16_000 { reply.finish(.success(data)) }
+                    else { reply.finish(.failure(TimerAlarmTransferError.unavailable)) }
+                }
+            }, errorHandler: { _ in
+                Task { @MainActor in reply.finish(.failure(TimerAlarmTransferError.unavailable)) }
+            })
+        }
+        return try JSONDecoder().decode(CompanionQuickPacket.self, from: data).ledger
+        #else
+        throw TimerAlarmTransferError.unavailable
+        #endif
+    }
 
     private func sendLatestState() {
         guard let session, let store else { return }
@@ -286,6 +336,36 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             } catch { /* Sender retains its local save and background fallback. */ }
             replyHandler((try? JSONEncoder().encode(receipt)) ?? Data())
         }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any],
+                             replyHandler: @escaping ([String: Any]) -> Void) {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) {
+            replyHandler(["ok": false]); return
+        }
+        #endif
+        guard let data = message["timerAlarmOffer"] as? Data, data.count <= 16_000,
+              let token = message["token"] as? String, token.count <= 256 else {
+            replyHandler(["ok": false]); return
+        }
+        #if os(iOS)
+        incomingWrites.begin(); let writes = incomingWrites
+        Task { @MainActor [weak self] in
+            defer { writes.end(); self?.completeBackgroundTasksIfReady() }
+            do {
+                guard let store = self?.store else { throw TimerAlarmTransferError.unavailable }
+                let incoming = try JSONDecoder().decode(CompanionQuickPacket.self, from: data).ledger
+                let accepted = try await store.acceptPhoneTimerAlarm(incoming, expectedToken: token)
+                guard let response = try CompanionQuickDelivery.timerSnapshot(accepted) else {
+                    throw TimerAlarmTransferError.unavailable
+                }
+                replyHandler(["timer": response])
+            } catch { replyHandler(["ok": false]) }
+        }
+        #else
+        replyHandler(["ok": false])
+        #endif
     }
 
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {

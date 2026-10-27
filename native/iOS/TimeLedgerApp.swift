@@ -51,6 +51,10 @@ struct TimeLedgerApp: App {
                         do { _ = try await RestartTimerIntent(token: token).perform() }
                         catch { store.report(error) }
                     }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-system-alarm-silence"), let token = store.ledger.timerControl?.token {
+                        await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
+                        _ = try? await SilenceTimerAlarmIntent(token: token).perform()
+                    }
                     #endif
                 }
                 .onChange(of: scenePhase) { _, phase in
