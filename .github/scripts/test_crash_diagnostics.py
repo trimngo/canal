@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock
 import urllib.error
 
-from crash_diagnostics import AppleAPI, NoRedirect, collect, collect_build_status, collect_upload_status, summarize
+from crash_diagnostics import AppleAPI, AppleAPIError, NoRedirect, collect, collect_build_status, collect_upload_status, summarize
 
 
 class DiagnosticPrivacyTests(unittest.TestCase):
@@ -31,7 +31,37 @@ class DiagnosticPrivacyTests(unittest.TestCase):
     def test_empty_feedback_is_handled_without_private_metadata(self):
         api = MagicMock()
         api.get.side_effect = [{"data": [{"id": "123"}]}, {"data": []}]
-        self.assertEqual(collect(api), {"submitted_reports_checked": 0, "summaries": []})
+        self.assertEqual(collect(api), {"submitted_reports_checked": 0, "unavailable_report_logs": 0, "summaries": []})
+
+    def test_missing_log_does_not_hide_later_reports_or_private_metadata(self):
+        api = MagicMock()
+        api.get.side_effect = [
+            {"data": [{"id": "private-app"}]},
+            {"data": [{"id": "private-missing"}, {"id": "private-available"}]},
+            AppleAPIError(404),
+            {"data": {"attributes": {"logText": "Version: 1.0 (79)\nEXC_CRASH private@example.com"}}},
+        ]
+        result = collect(api)
+        self.assertEqual(result["submitted_reports_checked"], 2)
+        self.assertEqual(result["unavailable_report_logs"], 1)
+        self.assertEqual(result["summaries"], [{"exception": "EXC_CRASH", "signals": [], "version": "1.0", "build": "79"}])
+        self.assertNotIn("private", json.dumps(result))
+
+    def test_all_missing_logs_are_distinct_from_no_submitted_feedback(self):
+        api = MagicMock()
+        api.get.side_effect = [{"data": [{"id": "private-app"}]},
+                               {"data": [{"id": "private-log"}]}, AppleAPIError(404)]
+        self.assertEqual(collect(api), {"submitted_reports_checked": 1, "unavailable_report_logs": 1, "summaries": []})
+
+    def test_auth_rate_limit_and_server_errors_still_fail_the_check(self):
+        for status in (401, 403, 429, 500):
+            with self.subTest(status=status):
+                api = MagicMock()
+                api.get.side_effect = [{"data": [{"id": "private-app"}]},
+                                       {"data": [{"id": "private-log"}]}, AppleAPIError(status)]
+                with self.assertRaises(AppleAPIError) as error:
+                    collect(api)
+                self.assertEqual(error.exception.status, status)
 
     def test_collection_emits_only_allowlisted_diagnostics(self):
         api = MagicMock()

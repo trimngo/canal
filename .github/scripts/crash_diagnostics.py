@@ -60,6 +60,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+class AppleAPIError(RuntimeError):
+    def __init__(self, status):
+        self.status = status
+        super().__init__(f"Apple diagnostic request failed (HTTP {status}). No private response content was printed.")
+
+
 class AppleAPI:
     def __init__(self, token):
         self.token = token
@@ -79,7 +85,7 @@ class AppleAPI:
                     raise RuntimeError("Apple diagnostic response exceeded the size limit.")
                 return json.loads(data)
         except urllib.error.HTTPError as error:
-            raise RuntimeError(f"Apple diagnostic request failed (HTTP {error.code}). No private response content was printed.") from None
+            raise AppleAPIError(error.code) from None
         except (urllib.error.URLError, TimeoutError, ValueError):
             raise RuntimeError("Could not read Apple crash feedback. No private response content was printed.") from None
 
@@ -91,11 +97,20 @@ def collect(api):
     app_id = apps[0]["id"]
     reports = api.get(f"/v1/apps/{app_id}/betaFeedbackCrashSubmissions", {"limit": 10, "fields[betaFeedbackCrashSubmissions]": "crashLog"})["data"]
     summaries = []
+    unavailable = 0
     for report in reports:
-        crash = api.get(f"/v1/betaFeedbackCrashSubmissions/{report['id']}/crashLog", {"fields[betaCrashLogs]": "logText"})
+        try:
+            crash = api.get(f"/v1/betaFeedbackCrashSubmissions/{report['id']}/crashLog", {"fields[betaCrashLogs]": "logText"})
+        except AppleAPIError as error:
+            # Apple can list feedback whose individual log is no longer
+            # available. Keep checking other reports and release status.
+            if error.status != 404:
+                raise
+            unavailable += 1
+            continue
         log = crash.get("data", {}).get("attributes", {}).get("logText", "")
         summaries.append(summarize(log if isinstance(log, str) else ""))
-    return {"submitted_reports_checked": len(reports), "summaries": summaries}
+    return {"submitted_reports_checked": len(reports), "unavailable_report_logs": unavailable, "summaries": summaries}
 
 
 def collect_build_status(api):
@@ -172,6 +187,8 @@ def main():
             summary.write("## TestFlight diagnostic signals\n\nOnly allowlisted indicators are shown. Full reports and tester data remain private.\n\n```json\n" + output + "\n```\n")
             if not result["submitted_reports_checked"]:
                 summary.write("\nNo submitted crash feedback is available yet. This API may not include every automatically collected Apple crash.\n")
+            elif result["unavailable_report_logs"]:
+                summary.write("\nApple listed feedback with unavailable crash logs. Those missing logs cannot identify a crash; other reports and release status were still checked.\n")
 
 
 if __name__ == "__main__":
