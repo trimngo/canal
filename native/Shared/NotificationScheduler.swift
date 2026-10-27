@@ -298,8 +298,20 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
         #endif
         let permission = await center.notificationSettings().authorizationStatus
-        guard permission == .authorized || permission == .provisional else { timerStatus = "Allow notifications for timer alerts."; return }
-        guard !pending.contains(where: { $0.identifier == control.token && $0.content.title == "\(current.title) finished" }) else { timerStatus = "Timer alert scheduled"; return }
+        guard permission == .authorized || permission == .provisional else {
+            timerStatus = "Allow notifications for timer alerts."
+            #if os(iOS)
+            PhoneTimerAlarm.shared.noteNotificationFallback("allow notifications for a backup", token: control.token)
+            #endif
+            return
+        }
+        guard !pending.contains(where: { $0.identifier == control.token && $0.content.title == "\(current.title) finished" }) else {
+            timerStatus = "Timer alert scheduled"
+            #if os(iOS)
+            PhoneTimerAlarm.shared.noteNotificationFallback("notification backup scheduled", token: control.token)
+            #endif
+            return
+        }
         let key = "timers.last-notification"
         guard due > Date() || UserDefaults.standard.string(forKey: key) != control.token else { return }
         let content = UNMutableNotificationContent()
@@ -314,7 +326,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                 trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, due.timeIntervalSinceNow), repeats: false)))
             UserDefaults.standard.set(control.token, forKey: key)
             timerStatus = "Timer alert scheduled"
-        } catch { timerStatus = "Timer alert could not be scheduled. Open the timer and try again." }
+            #if os(iOS)
+            PhoneTimerAlarm.shared.noteNotificationFallback("notification backup scheduled", token: control.token)
+            #endif
+        } catch {
+            timerStatus = "Timer alert could not be scheduled. Open the timer and try again."
+            #if os(iOS)
+            PhoneTimerAlarm.shared.noteNotificationFallback("notification backup could not be scheduled", token: control.token)
+            #endif
+        }
     }
 
     func sendTest() async throws {

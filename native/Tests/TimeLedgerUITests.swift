@@ -42,10 +42,17 @@ final class TimeLedgerUITests: XCTestCase {
     }
     func testSystemAlarmFailureKeepsTimerAndNotificationFallback() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-fail", "--ui-quiet-timer-alerts"]; app.launch()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-fail"]; app.launch()
         let status = element(app, "timers.phone-alarm-status")
         XCTAssertTrue(status.waitForExistence(timeout: 20))
-        XCTAssertEqual(status.label, "System alarm unavailable · notification backup")
+        let enable = app.buttons["Enable timer notifications"]
+        if enable.waitForExistence(timeout: 2) {
+            reveal(enable, in: app); enable.tap()
+            let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+            if allow.waitForExistence(timeout: 3) { allow.tap() }
+        }
+        let fallback = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "System alarm unavailable · notification backup scheduled"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [fallback], timeout: 10), .completed)
         XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
         app.buttons["timers.restart"].tap()
         XCTAssertTrue(element(app, "timers.countdown").exists)

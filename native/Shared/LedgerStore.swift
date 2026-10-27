@@ -695,8 +695,10 @@ final class LedgerStore: ObservableObject {
         #endif
     }
     #if os(iOS)
-    func acceptPhoneTimerAlarm(_ incoming: Ledger, expectedToken: String) async throws -> Ledger {
-        start(); try merge(incoming)
+    func acceptPhoneTimerAlarm(_ incoming: Ledger, expectedToken: String, offerID: String, expiresAt: Date) async throws -> Ledger {
+        start()
+        guard PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: expiresAt) else { throw TimerAlarmTransferError.unavailable }
+        try merge(incoming)
         guard ledger.settings.timerSystemAlarms, ledger.timerControl?.token == expectedToken,
               let old = ledger.timerControl,
               PhoneTimerAlarmPolicy.canOfferPhone(ledger, writer: old.owner, isActive: true) else {
@@ -707,8 +709,10 @@ final class LedgerStore: ObservableObject {
         guard let proposed = candidate.timerControl else { throw TimerAlarmTransferError.changed }
         let alarms = PhoneTimerAlarm.shared
         let armed = try await alarms.prepare(candidate, writer: writer)
-        let watchReady = armed ? await companion?.watchCanFinishAlarmHandoff(token: expectedToken) == true : false
-        guard armed, watchReady, alarms.preparationIsValid(proposed.token), ledger == base,
+        let watchReady = armed && PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: expiresAt)
+            ? await companion?.watchCanFinishAlarmHandoff(token: expectedToken, offerID: offerID) == true : false
+        guard armed, watchReady, PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: expiresAt),
+              alarms.preparationIsValid(proposed.token), ledger == base,
               PhoneTimerAlarmPolicy.acceptsHandoff(ledger, expectedToken: expectedToken,
                                                    candidate: candidate, phoneWriter: writer) else {
             await alarms.abandonPreparation(proposed.token)
@@ -738,6 +742,9 @@ final class LedgerStore: ObservableObject {
         let current = ledger.currentTimer, control = ledger.timerControl
         guard force || !timerSupportInitialized || timerSupportTask != current || timerSupportControl != control ||
                 timerSupportSystemAlarms != ledger.settings.timerSystemAlarms else { return }
+        #if os(watchOS)
+        if !timerRoutingBusy, timerSupportControl?.token != control?.token { timerRoutingStatus = "" }
+        #endif
         timerSupportInitialized = true; timerSupportTask = current; timerSupportControl = control
         timerSupportSystemAlarms = ledger.settings.timerSystemAlarms
         #if os(watchOS)

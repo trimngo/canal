@@ -4,6 +4,11 @@ import Foundation
 /// device choice; availability alone never proves that an alarm was scheduled.
 public enum PhoneTimerAlarmPolicy {
     public static let minimumHandoffRemaining: TimeInterval = 15
+    public static let offerLifetime: TimeInterval = 10
+    public static func offerCanCommit(expiresAt: Date, now: Date = Date()) -> Bool {
+        let remaining = expiresAt.timeIntervalSince(now)
+        return remaining >= 1 && remaining <= offerLifetime + 1
+    }
 
     public static func watchCanFinishTransfer(currentToken: String, scheduledToken: String?,
                                               hasSession: Bool, isActive: Bool) -> Bool {

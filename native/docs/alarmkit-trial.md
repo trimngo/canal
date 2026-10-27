@@ -28,8 +28,9 @@ time for the handover. Merely opening the app never changes alert ownership.
 The phone merges the bounded timer snapshot, prepares a candidate without
 publishing ownership, and schedules its actual AlarmKit alarm. It then probes
 the Watch again: Dash must still be active, the timer token must still match,
-and any scheduled Watch alarm must have a cancellable session handle. The phone
-also rejects any intervening ledger change. Only then does it atomically commit
+and any scheduled Watch alarm must have a cancellable session handle. The offer also has a unique request ID and a ten-second expiry; readiness must
+match the still-pending Watch request. Late replies cannot authorize a new
+handover. The phone also rejects any intervening ledger change. Only then does it atomically commit
 the phone destination and return the confirmed timer. The Watch cancels its old
 alarm when applying that state while active. Failed scheduling/readiness leaves
 the original Watch control and alarm in place; staged phone alarms are cancelled.

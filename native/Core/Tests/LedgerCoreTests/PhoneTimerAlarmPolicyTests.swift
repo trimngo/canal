@@ -13,6 +13,15 @@ final class PhoneTimerAlarmPolicyTests: XCTestCase {
         let settings = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
         XCTAssertFalse(settings.timerSystemAlarms)
     }
+    func testLateAndImplausiblyDatedOffersCannotCommit() {
+        XCTAssertFalse(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(-1), now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(0.5), now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(120), now: now))
+    }
+    func testCurrentOfferHasTimeToPublishBeforeSenderTimeout() {
+        XCTAssertTrue(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(10), now: now))
+        XCTAssertTrue(PhoneTimerAlarmPolicy.offerCanCommit(expiresAt: now.addingTimeInterval(2), now: now))
+    }
     func testWatchCannotConfirmTransferWhileInactiveOrMissingItsSessionHandle() {
         XCTAssertFalse(PhoneTimerAlarmPolicy.watchCanFinishTransfer(currentToken: "new", scheduledToken: "new", hasSession: true, isActive: false))
         XCTAssertFalse(PhoneTimerAlarmPolicy.watchCanFinishTransfer(currentToken: "new", scheduledToken: "new", hasSession: false, isActive: true))

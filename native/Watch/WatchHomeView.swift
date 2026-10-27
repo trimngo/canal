@@ -50,7 +50,7 @@ struct WatchHomeView: View {
                         }
                         if store.ledger.settings.timerSystemAlarms, store.ledger.timerControl?.onWatch == true {
                             Button("Use iPhone system alarm") { store.usePhoneTimerAlarm() }
-                                .disabled(store.timerRoutingBusy)
+                                .disabled(store.timerRoutingBusy || (store.ledger.timerControl?.dueAt?.timeIntervalSinceNow ?? 0) < PhoneTimerAlarmPolicy.minimumHandoffRemaining)
                                 .accessibilityIdentifier("timers.use-phone-alarm")
                         }
                         if !store.timerRoutingStatus.isEmpty {

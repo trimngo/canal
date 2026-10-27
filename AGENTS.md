@@ -82,7 +82,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 461 core, 128 iPhone UI, and 17 Watch UI tests must pass.
+checks: all 463 core, 128 iPhone UI, and 17 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
@@ -172,7 +172,7 @@ build. Release actions remain authorized. Preserve all uncommitted files/index.
 Work checkpoint: `/workspace/work/alarmkit-81/state.json`. SDK candidate
 `0441f21e280de0064454d12a21b898155b3cdf2b` on `ci/alarmkit-sdk` passed Native
 timer trial checks run `40469308688`: both apps compile and 448 legacy core tests
-pass. The latest complete trial now requires 461 core / 128 phone / 17 Watch
+pass. The latest complete trial now requires 463 core / 128 phone / 17 Watch
 tests. Read [native/docs/alarmkit-trial.md](native/docs/alarmkit-trial.md). Finish core/UI regressions and focused SDK/UI checks
 before opening the feature PR's full suite. Do not repeatedly cancel full CI.
 

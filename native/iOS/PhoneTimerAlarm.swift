@@ -76,6 +76,12 @@ final class PhoneTimerAlarm: ObservableObject {
         return false
     }
     func isSilenced(_ token: String) -> Bool { UserDefaults.standard.string(forKey: silencedKey) == token }
+    func noteNotificationFallback(_ message: String, token: String) {
+        let ledger = LedgerStore.shared.ledger
+        guard ledger.timerControl?.token == token,
+              PhoneTimerAlarmPolicy.schedulesSystemAlarm(ledger, writer: LedgerStore.shared.writer) else { return }
+        status = "System alarm unavailable · " + message
+    }
 
     /// Returns true only when AlarmKit owns this exact timer or the user stopped
     /// its alert. False leaves the existing one-time notification fallback.
@@ -135,7 +141,7 @@ final class PhoneTimerAlarm: ObservableObject {
         }
         guard authorized else {
             _ = await cancelRecord()
-            status = "System alarm unavailable · notification backup"
+            status = "System alarm unavailable"
             return false
         }
         do {
@@ -159,7 +165,7 @@ final class PhoneTimerAlarm: ObservableObject {
             record = next
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-alarmkit-fail") {
-                record = nil; status = "System alarm unavailable · notification backup"; return false
+                record = nil; status = "System alarm unavailable"; return false
             }
             #endif
             if !mock {
@@ -171,7 +177,7 @@ final class PhoneTimerAlarm: ObservableObject {
         } catch {
             // Preserve an uncertain record until cancellation is confirmed.
             _ = await cancelRecord()
-            status = "System alarm unavailable · notification backup"
+            status = "System alarm unavailable"
             return false
         }
     }
