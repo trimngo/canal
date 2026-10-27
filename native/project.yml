@@ -68,6 +68,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         NSSupportsLiveActivities: true
+        NSAlarmKitUsageDescription: Dash schedules timer alarms with task names and Restart controls. Your Watch can also run its own independent alarm.
         CFBundleURLTypes:
           - CFBundleURLName: com.trimngo.TimeLedger.timers
             CFBundleURLSchemes: [canal-dash]
@@ -174,6 +175,7 @@ targets:
       - TimerWidgets
       - path: Shared/TimerLiveAttributes.swift
       - path: Shared/RestartTimerIntent.swift
+      - path: Shared/SilenceTimerAlarmIntent.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.trimngo.TimeLedger.timerwidgets

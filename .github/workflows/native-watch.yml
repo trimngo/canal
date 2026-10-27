@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       focus:
-        description: Run the five timer paging and queue regressions only
+        description: Run the six timer paging, queue, and alert-routing regressions only
         type: boolean
         default: false
         required: false
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   watch-ui:
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -34,7 +34,7 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
       - name: Test Watch UI
-        timeout-minutes: 30
+        timeout-minutes: 35
         env:
           WATCH_FOCUS: ${{ inputs.focus || startsWith(github.ref_name, 'ci/watch-') }}
         run: |
@@ -43,6 +43,7 @@ jobs:
           selection=()
           if [[ "$WATCH_FOCUS" == "true" ]]; then
             for test in \
+              testPhoneAlarmTrialCanTakeOverOnWatchAndKeepLocalAlarmWhenPhoneUnavailable \
               testFullTaskTitleWrapsWhileWaitingRunningAndPaused \
               testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes \
               testQueueCanDeleteAnyTimerAndDeletingCurrentWaitsForStart \

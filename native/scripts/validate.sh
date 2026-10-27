@@ -34,7 +34,9 @@ python3 scripts/validate-timer-support.py --apps \
 if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   # Keep a nonempty array for macOS's Bash 3.2 with nounset enabled.
   UI_TEST_SELECTION=("-only-testing:TimeLedgerUITests")
-  if [[ -n "${LEDGER_UI_TEST_SHARD:-}${LEDGER_UI_TEST_SHARDS:-}" ]]; then
+  if [[ "$#" -gt 0 ]]; then
+    UI_TEST_SELECTION=("$@")
+  elif [[ -n "${LEDGER_UI_TEST_SHARD:-}${LEDGER_UI_TEST_SHARDS:-}" ]]; then
     # Write first so a bad shard configuration fails validation rather than
     # silently falling back to the entire suite via process substitution.
     python3 scripts/select-ui-tests.py --index "${LEDGER_UI_TEST_SHARD:-}" \

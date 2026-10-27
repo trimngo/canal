@@ -13,7 +13,7 @@ class TimerPackagingTests(unittest.TestCase):
     def fixture(self):
         group = "TEAM.com.trimngo.TimeLedger.watchkitapp"
         widget = {"NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"}}
-        return {validation.PHONE: {"NSSupportsLiveActivities": True},
+        return {validation.PHONE: {"NSSupportsLiveActivities": True, "NSAlarmKitUsageDescription": "Timer alarms"},
                 validation.WATCH: {"WKRunsIndependentlyOfCompanionApp": True, "WKBackgroundModes": ["alarm"], "LedgerCaptureAccessGroup": group},
                 validation.WATCH + ".widgets": dict(copy.deepcopy(widget), LedgerCaptureAccessGroup=group),
                 validation.PHONE + ".timerwidgets": widget}
@@ -24,6 +24,11 @@ class TimerPackagingTests(unittest.TestCase):
     def test_missing_phone_extension_cannot_pass_release_validation(self):
         fixture = self.fixture(); del fixture[validation.PHONE + ".timerwidgets"]
         with self.assertRaisesRegex(ValueError, "Missing timer bundle"):
+            validation.validate(fixture)
+
+    def test_system_alarm_permission_description_is_required(self):
+        fixture = self.fixture(); del fixture[validation.PHONE]["NSAlarmKitUsageDescription"]
+        with self.assertRaisesRegex(ValueError, "explain alarm permission"):
             validation.validate(fixture)
 
     def test_phone_dependent_or_wrong_alarm_mode_fails(self):

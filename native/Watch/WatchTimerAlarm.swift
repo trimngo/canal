@@ -32,6 +32,10 @@ final class WatchTimerAlarm: NSObject, ObservableObject, WKExtendedRuntimeSessio
             && preferences.string(forKey: failedKey) != token
     }
     func isSilenced(for token: String) -> Bool { preferences.string(forKey: silencedKey) == token }
+    func canTransferToPhone(_ token: String) -> Bool {
+        PhoneTimerAlarmPolicy.watchCanFinishTransfer(currentToken: token, scheduledToken: scheduledToken,
+            hasSession: session != nil && session?.state != .invalid, isActive: isActive)
+    }
 
     private func requestedControl(_ ledger: Ledger, writer: String) -> TimerQueueControl? {
         WatchTimerAlarmPolicy.controlToSchedule(in: ledger, writer: writer,

@@ -5,6 +5,40 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active work: AlarmKit trial (2026-10-27)
+
+The user approved trying phone-primary AlarmKit with Watch fallback while keeping
+independent Watch timers and the iPhone/Mac Live Activity. Build 80 remains the
+latest release; this new work must reach a new processed/distributed TestFlight
+build. Release actions remain authorized. Preserve all uncommitted files/index.
+
+Work checkpoint: `/workspace/work/alarmkit-81/state.json`. SDK candidate
+`0441f21e280de0064454d12a21b898155b3cdf2b` on `ci/alarmkit-sdk` passed Native
+timer trial checks run `40469308688`: both apps compile and 448 legacy core tests
+pass. The latest complete trial now requires 465 core / 128 phone / 17 Watch
+tests. The focused phone run `40471490507` passed 463 core, both builds, and
+Stop/fallback UI flows; its two switch taps are being corrected without changing
+assertions. The Watch focused run is `40471493251` (six cases). Follow the
+checkpoint for the latest focused retry and full PR; do not release on focused
+checks alone. Read [native/docs/alarmkit-trial.md](native/docs/alarmkit-trial.md). Finish core/UI regressions and focused SDK/UI checks
+before opening the feature PR's full suite. Do not repeatedly cancel full CI.
+
+Trial is opt-in (iPhone Timers → Timer settings → iPhone system alarms). Phone
+alarms use Stop (silence, never complete) and Restart. Watch starts locally, then
+offers phone takeover while active; the phone must actually schedule AlarmKit
+before publishing ownership. Failure leaves Watch alerts in place. Explicit
+Watch takeover stays available and persists for that task. There is no guaranteed
+background switch after a later lost connection: WatchKit cannot arm/cancel while
+inactive. A late handover can leave an old Watch alarm pending until reopening;
+do not claim perfect failover or no possible duplicate alerts. Live Activity stays
+independent of the alarm engine. Real Watch button/repeat behavior needs testing.
+
+Native full checks now run on PR/manual dispatch, without a duplicate full main
+UI run competing with delivery. Merge only after all full PR checks are green
+and verify the native merge source equals the tested source. Release still runs
+core tests and app builds before archiving. Watch UI step budget is 35 minutes
+inside a 45-minute job. Focused `ci/alarmkit-ui` checks never replace the full PR.
+
 ## Simulator test setup
 
 Run the full iPhone UI validation on macOS with Xcode:
@@ -62,10 +96,10 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 124 iPhone UI tests run across four shards. Keep the complete test set and
+- All 128 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
-  Run all 16 Watch UI tests. Repeating WatchKit haptics still require
+  Run all 17 Watch UI tests. Repeating WatchKit haptics still require
   physical-device verification.
 - A cancelled Xcode run can leave an incomplete `.xcresult`. Skip heavy exports
   after cancellation. For completed runs, export only when `Info.plist` exists.
@@ -79,10 +113,10 @@ the resulting UI state.
 ## Faster CI iteration
 
 Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
-Use an isolated `ci/watch-*` branch for the five focused Watch paging/queue
+Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 448 core, 124 iPhone UI, and 16 Watch UI tests must pass.
+checks: all 465 core, 128 iPhone UI, and 17 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
@@ -161,3 +195,4 @@ present those as evidence for a newer crash. Friend accountability sharing
 remains planning only.
 
 Refresh this snapshot when release, CI, or diagnostic status changes.
+

@@ -48,6 +48,15 @@ struct WatchHomeView: View {
                                 do { try store.changeTimer("here") } catch { store.report(error) }
                             }
                         }
+                        if store.ledger.settings.timerSystemAlarms, store.ledger.timerControl?.onWatch == true {
+                            Button("Use iPhone system alarm") { store.usePhoneTimerAlarm() }
+                                .disabled(store.timerRoutingBusy || (store.ledger.timerControl?.dueAt?.timeIntervalSinceNow ?? 0) < PhoneTimerAlarmPolicy.minimumHandoffRemaining)
+                                .accessibilityIdentifier("timers.use-phone-alarm")
+                        }
+                        if !store.timerRoutingStatus.isEmpty {
+                            Text(store.timerRoutingStatus).font(.caption)
+                                .accessibilityIdentifier("timers.routing-status")
+                        }
                         Button("Watch Home") { timerOptions = false; store.showingTimerQueue = false }
                     }.navigationTitle("Timer options")
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { timerOptions = false } } }
