@@ -12,6 +12,75 @@ final class PhoneTimerAlarmPolicyTests: XCTestCase {
     func testLegacySettingsDoNotOptIntoSystemAlarms() throws {
         let settings = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
         XCTAssertFalse(settings.timerSystemAlarms)
+        XCTAssertFalse(settings.timerSystemAlarmSilent)
+        XCTAssertFalse(settings.timerSystemAlarmStopCompletes)
+    }
+    func testSoundPreferenceChangesReplaceFutureAlarmWithoutChangingDeadline() {
+        let due = now.addingTimeInterval(60)
+        XCTAssertFalse(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: due, savedTitle: "Guitar",
+            token: "same", dueAt: due, title: "Guitar", savedSilent: false, silent: true, now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: due, savedTitle: "Guitar",
+            token: "same", dueAt: due, title: "Guitar", savedSilent: true, silent: false, now: now))
+        XCTAssertTrue(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: due, savedTitle: "Guitar",
+            token: "same", dueAt: due, title: "Guitar", savedSilent: true, silent: true, now: now))
+    }
+    func testSoundChangeDoesNotCancelAnAlarmAlreadyRinging() {
+        XCTAssertTrue(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: now, savedTitle: "Guitar",
+            token: "same", dueAt: now, title: "Guitar", savedSilent: false, silent: true, now: now))
+        XCTAssertFalse(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: now, savedTitle: "Guitar",
+            token: "restart", dueAt: now, title: "Guitar", savedSilent: false, silent: true, now: now))
+    }
+    func testSystemStopDoesNotCompleteWithoutExplicitPreference() throws {
+        var ledger = try watchTimer(); ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        let before = ledger
+        ledger.completeStoppedSystemAlarm(expectedToken: ledger.timerControl!.token, writer: "phone", now: now.addingTimeInterval(301))
+        XCTAssertEqual(ledger, before)
+    }
+    func testOptedInSystemStopStartsNextTimerOnPhoneWithoutWatchForeground() throws {
+        var ledger = try watchTimer(); ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        ledger.settings.timerSystemAlarmStopCompletes = true
+        let stoppedAt = now.addingTimeInterval(301)
+        ledger.completeStoppedSystemAlarm(expectedToken: ledger.timerControl!.token, writer: "phone", now: stoppedAt)
+        XCTAssertEqual(ledger.currentTimer?.id, "two")
+        XCTAssertEqual(ledger.timerControl?.owner, "phone"); XCTAssertEqual(ledger.timerControl?.onWatch, false)
+        XCTAssertEqual(ledger.timerControl?.dueAt, stoppedAt.addingTimeInterval(600))
+        XCTAssertEqual(ledger.queuedTimers?.first(where: { $0.id == "one" })?.completedAt, stoppedAt)
+        XCTAssertTrue(PhoneTimerAlarmPolicy.schedulesSystemAlarm(ledger, writer: "phone"))
+    }
+    func testRepeatedStopCannotCompleteTheNextTask() throws {
+        var ledger = try watchTimer(); ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        ledger.settings.timerSystemAlarmStopCompletes = true
+        let oldToken = ledger.timerControl!.token, stoppedAt = now.addingTimeInterval(301)
+        ledger.completeStoppedSystemAlarm(expectedToken: oldToken, writer: "phone", now: stoppedAt)
+        let next = ledger
+        ledger.completeStoppedSystemAlarm(expectedToken: oldToken, writer: "phone", now: stoppedAt.addingTimeInterval(1000))
+        XCTAssertEqual(ledger, next)
+    }
+    func testSystemStopHonorsManualStartNextPreference() throws {
+        var ledger = try watchTimer(); ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        ledger.settings.timerSystemAlarmStopCompletes = true; ledger.settings.timerAutoStartNext = false
+        ledger.completeStoppedSystemAlarm(expectedToken: ledger.timerControl!.token, writer: "phone", now: now.addingTimeInterval(301))
+        XCTAssertNil(ledger.currentTimer); XCTAssertNil(ledger.timerControl?.dueAt)
+        XCTAssertEqual(ledger.waitingTimers.map(\.id), ["two"])
+    }
+    func testEarlyOrWatchOwnedStopCannotCompleteTask() throws {
+        var ledger = try watchTimer(); ledger.settings.timerSystemAlarmStopCompletes = true
+        let watch = ledger
+        ledger.completeStoppedSystemAlarm(expectedToken: ledger.timerControl!.token, writer: "phone", now: now.addingTimeInterval(301))
+        XCTAssertEqual(ledger, watch)
+        ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        let beforeExpiry = ledger
+        ledger.completeStoppedSystemAlarm(expectedToken: ledger.timerControl!.token, writer: "phone", now: now)
+        XCTAssertEqual(ledger, beforeExpiry)
+    }
+    func testStaleStopAfterRestartCannotCompleteNewTimer() throws {
+        var ledger = try watchTimer(); ledger.moveTimerAlerts(writer: "phone", onWatch: false)
+        ledger.settings.timerSystemAlarmStopCompletes = true
+        let oldToken = ledger.timerControl!.token
+        ledger.restartTimer(writer: "phone", onWatch: false, now: now.addingTimeInterval(301))
+        let restarted = ledger
+        ledger.completeStoppedSystemAlarm(expectedToken: oldToken, writer: "phone", now: now.addingTimeInterval(1000))
+        XCTAssertEqual(ledger, restarted)
     }
     func testEditingAnExpiredTitleDoesNotStopItsRingingAlarm() {
         XCTAssertTrue(PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: "same", savedDueAt: now, savedTitle: "Old",
@@ -46,11 +115,17 @@ final class PhoneTimerAlarmPolicyTests: XCTestCase {
     }
     func testTrialPreferenceSurvivesBackupAndSettingsSync() throws {
         var ledger = try watchTimer()
+        ledger.settings.timerSystemAlarmSilent = true
+        ledger.settings.timerSystemAlarmStopCompletes = true
         ledger.settings.revision = ledger.nextRevision(writer: "phone")
         let restored = try LedgerBackup.decode(LedgerBackup(ledger: ledger).encoded()).ledger
         XCTAssertTrue(restored.settings.timerSystemAlarms)
+        XCTAssertTrue(restored.settings.timerSystemAlarmSilent)
+        XCTAssertTrue(restored.settings.timerSystemAlarmStopCompletes)
         var receiver = Ledger(); receiver.merge(ledger)
         XCTAssertTrue(receiver.settings.timerSystemAlarms)
+        XCTAssertTrue(receiver.settings.timerSystemAlarmSilent)
+        XCTAssertTrue(receiver.settings.timerSystemAlarmStopCompletes)
     }
     func testWatchOffersOnlyAnActiveLocalFutureTimer() throws {
         var ledger = try watchTimer()

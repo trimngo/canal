@@ -25,6 +25,8 @@ final class PhoneTimerAlarm: ObservableObject {
         var title: String
         var dueAt: Date
         var confirmed: Bool? = nil
+        // Missing in build 81 records: those used the default system sound.
+        var silent: Bool? = nil
     }
     private var record: Record? {
         get { UserDefaults.standard.data(forKey: recordKey).flatMap { try? JSONDecoder().decode(Record.self, from: $0) } }
@@ -97,7 +99,8 @@ final class PhoneTimerAlarm: ObservableObject {
             guard self.preparing == nil,
                   ledger.timerControl == LedgerStore.shared.ledger.timerControl,
                   ledger.currentTimer == LedgerStore.shared.ledger.currentTimer,
-                  ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms else { return false }
+                  ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms,
+                  ledger.settings.timerSystemAlarmSilent == LedgerStore.shared.ledger.settings.timerSystemAlarmSilent else { return false }
             return await self.apply(ledger, writer: writer)
         }
         work = task; let result = await task.value
@@ -152,11 +155,12 @@ final class PhoneTimerAlarm: ObservableObject {
         do {
             if let old = record, PhoneTimerAlarmPolicy.keepsScheduledAlarm(savedToken: old.token,
                 savedDueAt: old.dueAt, savedTitle: old.title, token: control.token,
-                dueAt: due, title: timer.title) {
-                if mock { status = "iPhone system alarm scheduled"; return true }
+                dueAt: due, title: timer.title, savedSilent: old.silent ?? false,
+                silent: ledger.settings.timerSystemAlarmSilent) {
+                if mock { status = scheduledStatus(old); return true }
                 if #available(iOS 26.0, *), try AlarmManager.shared.alarms.contains(where: { $0.id == old.id }) {
                     if old.confirmed != true { var adopted = old; adopted.confirmed = true; record = adopted }
-                    status = "iPhone system alarm scheduled"; return true
+                    status = scheduledStatus(old); return true
                 }
                 // Once a scheduled alarm has disappeared at/after its deadline,
                 // reopening must not recreate it or turn user Stop into an alert.
@@ -167,7 +171,8 @@ final class PhoneTimerAlarm: ObservableObject {
             }
             guard await cancelRecord() else { return false }
             guard due > Date() else { status = "Timer finished"; return false }
-            var next = Record(id: UUID(), token: control.token, title: timer.title, dueAt: due)
+            var next = Record(id: UUID(), token: control.token, title: timer.title, dueAt: due,
+                              silent: ledger.settings.timerSystemAlarmSilent)
             // Persist the identity before scheduling so relaunch can cancel or
             // adopt an alarm even if the process exits around the API call.
             record = next
@@ -181,7 +186,7 @@ final class PhoneTimerAlarm: ObservableObject {
                 else { record = nil; return false }
             }
             next.confirmed = true; record = next
-            status = "iPhone system alarm scheduled"
+            status = scheduledStatus(next)
             return true
         } catch {
             // Preserve an uncertain record until cancellation is confirmed.
@@ -189,6 +194,9 @@ final class PhoneTimerAlarm: ObservableObject {
             status = "System alarm unavailable"
             return false
         }
+    }
+    private func scheduledStatus(_ value: Record) -> String {
+        value.silent == true ? "iPhone system alarm scheduled · haptics only (trial)" : "iPhone system alarm scheduled"
     }
     private func cancelRecord() async -> Bool {
         guard let old = record else { return true }
@@ -218,7 +226,8 @@ final class PhoneTimerAlarm: ObservableObject {
             metadata: DashAlarmMetadata(token: next.token), tintColor: .mint)
         let configuration = AlarmManager.AlarmConfiguration<DashAlarmMetadata>.alarm(
             schedule: .fixed(next.dueAt), attributes: attributes,
-            stopIntent: SilenceTimerAlarmIntent(token: next.token), secondaryIntent: RestartTimerIntent(token: next.token))
+            stopIntent: SilenceTimerAlarmIntent(token: next.token), secondaryIntent: RestartTimerIntent(token: next.token),
+            sound: next.silent == true ? .named(PhoneTimerAlarmPolicy.silentSoundName) : .default)
         _ = try await AlarmManager.shared.schedule(id: next.id, configuration: configuration)
     }
 }

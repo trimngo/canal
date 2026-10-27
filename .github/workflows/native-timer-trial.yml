@@ -30,6 +30,8 @@ jobs:
           set -o pipefail
           if [[ "$RUN_UI" == "true" ]]; then
             LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
+              -only-testing:TimeLedgerUITests/TimeLedgerUITests/testHapticsOnlySystemAlarmSettingPersistsWithoutRearmingStoppedAlarm \
+              -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmStopCanCompleteAndStartNextWithoutOpeningWatch \
               -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmTrialSchedulesRestartsAndPersistsWithoutChangingQueue \
               -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmFailureKeepsTimerAndNotificationFallback \
               -only-testing:TimeLedgerUITests/TimeLedgerUITests/testStoppingSystemAlarmDoesNotCompleteTask \

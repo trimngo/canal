@@ -251,11 +251,13 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         // authoritative state again after the asynchronous AlarmKit operation.
         guard ledger.timerControl == LedgerStore.shared.ledger.timerControl,
               ledger.currentTimer == LedgerStore.shared.ledger.currentTimer,
-              ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms else { return }
+              ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms,
+              ledger.settings.timerSystemAlarmSilent == LedgerStore.shared.ledger.settings.timerSystemAlarmSilent else { return }
         let systemManaged = await PhoneTimerAlarm.shared.refresh(ledger, writer: writer)
         guard ledger.timerControl == LedgerStore.shared.ledger.timerControl,
               ledger.currentTimer == LedgerStore.shared.ledger.currentTimer,
-              ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms else { return }
+              ledger.settings.timerSystemAlarms == LedgerStore.shared.ledger.settings.timerSystemAlarms,
+              ledger.settings.timerSystemAlarmSilent == LedgerStore.shared.ledger.settings.timerSystemAlarmSilent else { return }
         #endif
         let pending = await center.pendingNotificationRequests().filter { $0.identifier.hasPrefix("task-timer-") }
         #if DEBUG

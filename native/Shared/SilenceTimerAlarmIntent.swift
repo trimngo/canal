@@ -1,7 +1,8 @@
 #if os(iOS)
 import AppIntents
 
-/// Stopping a system alarm only silences it. Task completion stays explicit.
+/// Stop silences the alarm. Completion is a separate, explicit preference;
+/// the matching expired token protects the next timer from repeated callbacks.
 struct SilenceTimerAlarmIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Silence timer alarm"
     static var openAppWhenRun = false
@@ -14,6 +15,8 @@ struct SilenceTimerAlarmIntent: LiveActivityIntent {
         #if !LEDGER_WIDGETS_EXTENSION
         let store = LedgerStore.shared; store.start()
         await PhoneTimerAlarm.shared.silence(token)
+        try store.completeStoppedSystemAlarm(expectedToken: token)
+        await TimerLiveActivity.shared.refresh(store.ledger)
         await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
         #endif
         return .result()

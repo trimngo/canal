@@ -30,6 +30,8 @@ python3 scripts/validate-healthkit.py --app \
 python3 scripts/validate-timer-support.py --apps \
   build/Build/Products/Debug-iphonesimulator/TimeLedger.app \
   build/Build/Products/Debug-watchsimulator/TimeLedgerWatch.app
+# Check the same bundled CAF with Apple's decoder as well as the package parser.
+afinfo build/Build/Products/Debug-iphonesimulator/TimeLedger.app/DashSilent.caf
 
 if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   # Keep a nonempty array for macOS's Bash 3.2 with nounset enabled.
