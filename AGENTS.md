@@ -75,6 +75,23 @@ still intentionally preserves uncommitted copies of published work; compare
 against current remote source before edits. Original index SHA-256:
 `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
 
+## Device follow-up: Watch handoff (2026-10-27)
+
+The user initially suspected a Watch-started timer was not accepted by iPhone,
+then clarified that Watch showed **iPhone system alarm confirmed**. After checking,
+the user reported that it works properly. Basic handoff is therefore confirmed
+on their devices; the cause of the earlier one-off observation remains unknown.
+No app code has been changed for this report. Do not present a speculative timing
+race as its established cause or repeat the already-complete build 81 release.
+
+The user also asked about haptic-only AlarmKit alerts. Apple's documented sound
+API exposes default/custom audio, with no direct haptic-only or independent
+Watch-sound setting. A silent bundled sound is only a possible workaround and
+needs physical verification of retained/repeating Watch haptics. The scope question
+(Watch only versus both iPhone and Watch) is still pending. Keep this preference
+active without changing existing alarm behavior on an assumption. Investigation
+notes: `/workspace/work/alarmkit-82/state.json`; no build 82 has been started.
+
 ## Simulator test setup
 
 Run the full iPhone UI validation on macOS with Xcode:
