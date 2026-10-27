@@ -6,7 +6,9 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-available", "--ui-phone-owned-timer", "--ui-quiet-timer-alerts"]
         app.launch()
         XCTAssertTrue(app.staticTexts["timers.current"].waitForExistence(timeout: 30))
-        app.buttons["timers.options"].tap()
+        let options = app.buttons["timers.options"].firstMatch
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let takeover = app.buttons["Use Watch for alerts"]
         XCTAssertTrue(takeover.waitForExistence(timeout: 5)); takeover.tap()
         let phone = app.buttons["timers.use-phone-alarm"]
@@ -16,7 +18,7 @@ final class WatchQuickLogUITests: XCTestCase {
         let retained = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Watch alarm retained"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [retained], timeout: 5), .completed)
         XCTAssertFalse(takeover.exists)
-        app.buttons["Close"].tap()
+        app.buttons["Close"].firstMatch.tap()
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
         app.buttons["timers.restart"].tap()
         XCTAssertEqual(app.staticTexts["timers.current"].label, "Practice guitar")
