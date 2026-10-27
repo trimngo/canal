@@ -55,6 +55,13 @@ struct TimeLedgerApp: App {
                         await NotificationScheduler.shared.applyTimer(store.ledger, writer: store.writer)
                         _ = try? await SilenceTimerAlarmIntent(token: token).perform()
                     }
+                    if ProcessInfo.processInfo.arguments.contains("--ui-system-alarm-expired"), let token = store.ledger.timerControl?.token {
+                        do {
+                            try store.expireSystemAlarmForUITest()
+                            _ = try await SilenceTimerAlarmIntent(token: token).perform()
+                            _ = try await SilenceTimerAlarmIntent(token: token).perform()
+                        } catch { store.report(error) }
+                    }
                     #endif
                 }
                 .onChange(of: scenePhase) { _, phase in

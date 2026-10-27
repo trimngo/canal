@@ -3,6 +3,7 @@ import Foundation
 /// The timer remains one shared task. Alert delivery is a separate, confirmed
 /// device choice; availability alone never proves that an alarm was scheduled.
 public enum PhoneTimerAlarmPolicy {
+    public static let silentSoundName = "DashSilent.caf"
     public static let minimumHandoffRemaining: TimeInterval = 15
     public static let offerLifetime: TimeInterval = 10
     public static func offerCanCommit(expiresAt: Date, now: Date = Date()) -> Bool {
@@ -11,8 +12,10 @@ public enum PhoneTimerAlarmPolicy {
     }
     public static func keepsScheduledAlarm(savedToken: String, savedDueAt: Date, savedTitle: String,
                                            token: String, dueAt: Date, title: String,
+                                           savedSilent: Bool = false, silent: Bool = false,
                                            now: Date = Date()) -> Bool {
-        savedToken == token && savedDueAt == dueAt && (savedTitle == title || dueAt <= now)
+        savedToken == token && savedDueAt == dueAt &&
+            ((savedTitle == title && savedSilent == silent) || dueAt <= now)
     }
     public static func absentAlarmHasFinished(dueAt: Date, schedulingConfirmed: Bool,
                                               now: Date = Date()) -> Bool {

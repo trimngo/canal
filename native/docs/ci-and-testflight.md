@@ -1,6 +1,6 @@
 # CI iteration and TestFlight delivery
 
-PRs run **Native Apple checks**: 465 core tests, all 128 iPhone UI tests across
+PRs run **Native Apple checks**: 473 core tests, all 130 iPhone UI tests across
 four shards, and all 17 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
 Native source changes must go through a PR with the full checks green. The
@@ -13,13 +13,17 @@ Feature branch pushes do not duplicate the PR workflow.
 ## AlarmKit trial checks
 
 Use `ci/alarmkit-sdk` for core/packaging and both app builds. Use
-`ci/alarmkit-ui` for the four focused iPhone trial flows: schedule/restart/persist,
-API failure fallback, Stop without task completion, and permission denial.
+`ci/alarmkit-ui` for six focused iPhone trial flows: schedule/restart/persist,
+API failure fallback, default Stop without task completion, permission denial,
+saved haptics-only preference, and opted-in Stop completion/automatic next.
 These use a DEBUG mock at the system API boundary; production never uses it.
 Real Watch forwarding, buttons, and repeating haptics need physical testing.
-Focused checks never replace all 128 iPhone and 17 Watch tests before release.
+Focused checks never replace all 130 iPhone and 17 Watch tests before release.
 The full Watch step has 35 minutes within its 45-minute job; a cold 17-minute
 setup plus the full UI suite exceeded the previous 30-minute step budget.
+Phone validation has 55 minutes within a 65-minute job: build 81 needed up to
+about 49 minutes including cold setup and 32 UI cases; retain margin for the
+additional preference/Stop regressions. Every case is still required.
 
 ## Iterate on Watch without restarting phone validation
 

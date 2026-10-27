@@ -477,7 +477,25 @@ struct TimerSettingsView: View {
                         .accessibilityIdentifier("timers.system-alarms")
                     if !phoneAlarm.status.isEmpty { Text(phoneAlarm.status).font(.caption).accessibilityIdentifier("timers.system-alarm-settings-status") }
                 } footer: {
-                    Text("On iOS 26, phone timers use an alarm with the task name and Restart. Stop silences it; Done stays in Dash. A Watch-started timer keeps its own alarm until the phone confirms a system alarm. If the phone cannot confirm, Watch alerts stay in place. Mid-timer disconnection cannot automatically arm a sleeping Watch. Live Activities stay available.")
+                    Text("On iOS 26, phone timers use an alarm with the task name and Restart. Stop silences it unless Stop completes task is enabled. A Watch-started timer keeps its own alarm until the phone confirms a system alarm. If the phone cannot confirm, Watch alerts stay in place. Mid-timer disconnection cannot automatically arm a sleeping Watch. Live Activities stay available.")
+                }
+                if store.ledger.settings.timerSystemAlarms {
+                    Section {
+                        Toggle("Haptics only (trial)", isOn: Binding(get: { store.ledger.settings.timerSystemAlarmSilent }, set: { enabled in
+                            var settings = store.ledger.settings; settings.timerSystemAlarmSilent = enabled
+                            do { try store.saveSettings(settings) } catch { store.report(error) }
+                        })).accessibilityIdentifier("timers.system-alarm-silent")
+                    } footer: {
+                        Text("Requests silent system alarms on iPhone and its paired Watch. Apple controls vibration; test both devices after enabling. Changes to an alarm already ringing take effect after Restart. Watch-owned alarms and notification backups keep their existing sound settings.")
+                    }
+                    Section {
+                        Toggle("Stop completes task", isOn: Binding(get: { store.ledger.settings.timerSystemAlarmStopCompletes }, set: { enabled in
+                            var settings = store.ledger.settings; settings.timerSystemAlarmStopCompletes = enabled
+                            do { try store.saveSettings(settings) } catch { store.report(error) }
+                        })).accessibilityIdentifier("timers.system-alarm-stop-completes")
+                    } footer: {
+                        Text("After expiry, Stop on the iPhone or forwarded Watch alarm completes the current task. Hardware-button dismissals can also complete it. Start next after Done controls whether the next timer starts automatically. Restart repeats the current task.")
+                    }
                 }
                 #endif
                 #if os(watchOS)

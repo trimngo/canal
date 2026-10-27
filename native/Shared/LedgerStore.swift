@@ -29,6 +29,7 @@ final class LedgerStore: ObservableObject {
     @Published var timerRoutingBusy = false
     private var timerSupportInitialized = false
     private var timerSupportSystemAlarms = false
+    private var timerSupportSystemAlarmSilent = false
     private var timerSupportControl: TimerQueueControl?
     private var timerSupportTask: QueuedTimer?
     @Published var quickReplyDraft: String?
@@ -659,6 +660,18 @@ final class LedgerStore: ObservableObject {
             if ["start", "resume", "restart", "done"].contains(action) { offerPhoneAlarmIfPreferred() }
         }
     }
+    func completeStoppedSystemAlarm(expectedToken: String) throws {
+        var draft = ledger
+        draft.completeStoppedSystemAlarm(expectedToken: expectedToken, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
+    #if DEBUG && os(iOS)
+    func expireSystemAlarmForUITest() throws {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-system-alarm-expired") else { return }
+        var draft = ledger; draft.timerControl?.dueAt = Date().addingTimeInterval(-1)
+        try commit(draft)
+    }
+    #endif
     private func offerPhoneAlarmIfPreferred() {
         #if os(watchOS)
         guard PhoneTimerAlarmPolicy.canOfferPhone(ledger, writer: writer,
@@ -746,12 +759,14 @@ final class LedgerStore: ObservableObject {
     func refreshTimerSupport(force: Bool = false) {
         let current = ledger.currentTimer, control = ledger.timerControl
         guard force || !timerSupportInitialized || timerSupportTask != current || timerSupportControl != control ||
-                timerSupportSystemAlarms != ledger.settings.timerSystemAlarms else { return }
+                timerSupportSystemAlarms != ledger.settings.timerSystemAlarms ||
+                timerSupportSystemAlarmSilent != ledger.settings.timerSystemAlarmSilent else { return }
         #if os(watchOS)
         if !timerRoutingBusy, timerSupportControl?.token != control?.token { timerRoutingStatus = "" }
         #endif
         timerSupportInitialized = true; timerSupportTask = current; timerSupportControl = control
         timerSupportSystemAlarms = ledger.settings.timerSystemAlarms
+        timerSupportSystemAlarmSilent = ledger.settings.timerSystemAlarmSilent
         #if os(watchOS)
         WatchTimerAlarm.shared.update(ledger: ledger, writer: writer)
         #if !targetEnvironment(simulator)

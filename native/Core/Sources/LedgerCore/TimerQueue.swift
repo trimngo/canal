@@ -220,6 +220,14 @@ extension Ledger {
             timerControl = TimerQueueControl(taskID: nil, dueAt: nil, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
         }
     }
+    /// A dismissal can arrive twice or after a restart. Only the opted-in,
+    /// expired phone alarm may complete its matching task; Watch alerts stay local.
+    public mutating func completeStoppedSystemAlarm(expectedToken: String, writer: String, now: Date = Date()) {
+        guard settings.timerSystemAlarms, settings.timerSystemAlarmStopCompletes,
+              let control = timerControl, control.token == expectedToken,
+              control.owner == writer, !control.onWatch, control.isFinished(at: now) else { return }
+        finishTimer(expectedToken: expectedToken, writer: writer, onWatch: false, now: now)
+    }
     public mutating func restartTimer(expectedToken: String? = nil, writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, let previous = timerControl, expectedToken == nil || previous.token == expectedToken else { return }
         let keepWatch = !onWatch && previous.onWatch

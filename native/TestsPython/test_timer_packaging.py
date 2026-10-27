@@ -21,6 +21,16 @@ class TimerPackagingTests(unittest.TestCase):
     def test_complete_phone_and_standalone_watch_timer_package(self):
         validation.validate(self.fixture())
 
+    def test_bundled_alarm_sound_is_valid_pcm_and_entirely_silent(self):
+        validation.validate_silent_sound((ROOT / "iOS" / validation.SILENT_SOUND).read_bytes())
+
+    def test_audible_or_damaged_sound_cannot_pass_release_validation(self):
+        sound = (ROOT / "iOS" / validation.SILENT_SOUND).read_bytes()
+        audible = bytearray(sound); audible[-1] = 1
+        for bad in [bytes(audible), sound[:-1], b"not-a-sound"]:
+            with self.subTest(length=len(bad)), self.assertRaises(ValueError):
+                validation.validate_silent_sound(bad)
+
     def test_missing_phone_extension_cannot_pass_release_validation(self):
         fixture = self.fixture(); del fixture[validation.PHONE + ".timerwidgets"]
         with self.assertRaisesRegex(ValueError, "Missing timer bundle"):

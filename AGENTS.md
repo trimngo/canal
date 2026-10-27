@@ -5,6 +5,32 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active work: optional AlarmKit feedback and Stop settings (build 82)
+
+The user confirmed basic Watch → iPhone AlarmKit handoff works in build 81; the
+earlier one-off cause remains unknown. They then requested haptic-only alarms
+on **both iPhone and Watch**, specifically as a setting, and reported that Stop
+on the forwarded Watch alarm should be able to start the next timer without
+opening Dash. Continue through full CI, merge, and a new processed/internally
+distributed TestFlight build. Release actions remain authorized; preserve all
+local files and the original index. No sub-agents.
+
+Two opt-in switches under iPhone Timers → Timer settings (after enabling the
+system-alarm trial): **Haptics only (trial)** and **Stop completes task**. Both
+default off. The first uses a bundled silent CAF; Apple still controls physical
+haptics and mirroring, so this needs device checks. The second completes only
+the matching expired phone alarm and follows Start next after Done; this keeps
+Restart and duplicate/stale callbacks safe. Hardware dismissals can invoke Stop.
+Watch-owned fallback alarms and notification backups keep existing sound rules.
+
+Checkpoint: `/workspace/work/alarmkit-82/state.json`. Expected full validation:
+473 core / 130 iPhone UI / 17 Watch UI tests, plus 25 packaging/CI tests. The
+six-flow focused phone check includes both new settings before the full PR.
+Native source stays frozen while a healthy full run finishes. Phone validation
+has a 55-minute step inside a 65-minute job; build 81 approached its previous
+50-minute limit. Do not drop tests or treat accepted upload as release complete.
+Read native/docs/alarmkit-trial.md for scope and device verification.
+
 ## Latest release: TestFlight 81 (2026-10-27)
 
 Release objective **COMPLETE**: TestFlight **1.0 (81)** finished Apple processing
@@ -87,10 +113,8 @@ race as its established cause or repeat the already-complete build 81 release.
 The user also asked about haptic-only AlarmKit alerts. Apple's documented sound
 API exposes default/custom audio, with no direct haptic-only or independent
 Watch-sound setting. A silent bundled sound is only a possible workaround and
-needs physical verification of retained/repeating Watch haptics. The scope question
-(Watch only versus both iPhone and Watch) is still pending. Keep this preference
-active without changing existing alarm behavior on an assumption. Investigation
-notes: `/workspace/work/alarmkit-82/state.json`; no build 82 has been started.
+needs physical verification of retained/repeating Watch haptics. The user chose both iPhone and Watch and requested a setting. See the active
+build 82 work above; the basic handoff report itself did not require a fix.
 
 ## Simulator test setup
 
@@ -149,7 +173,7 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 128 iPhone UI tests run across four shards. Keep the complete test set and
+- All 130 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
   Run all 17 Watch UI tests. Repeating WatchKit haptics still require
@@ -169,7 +193,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 465 core, 128 iPhone UI, and 17 Watch UI tests must pass.
+checks: all 473 core, 130 iPhone UI, and 17 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish

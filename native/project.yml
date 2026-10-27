@@ -24,7 +24,10 @@ targets:
     type: application
     platform: iOS
     sources:
-      - iOS
+      - path: iOS
+        excludes: [DashSilent.caf]
+      - path: iOS/DashSilent.caf
+        buildPhase: resources
       - Shared
       - path: SiriResources
         buildPhase: resources

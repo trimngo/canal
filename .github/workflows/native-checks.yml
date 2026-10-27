@@ -17,7 +17,7 @@ jobs:
     runs-on: macos-15
     # Four phone shards plus Watch fit the observed five-Mac concurrency.
     # Keep every UI test; extra shards create a second simulator-boot wave.
-    timeout-minutes: 60
+    timeout-minutes: 65
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -38,7 +38,7 @@ jobs:
           python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
       - name: Test core and build iPhone and Watch apps
         # Cold simulator startup has taken 11 minutes before tests begin.
-        timeout-minutes: 50
+        timeout-minutes: 55
         env:
           LEDGER_UI_TESTS: '1'
           LEDGER_UI_TEST_SHARD: ${{ matrix.shard }}

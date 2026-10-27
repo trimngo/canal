@@ -145,6 +145,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var timerAutoStartNext = true
     /// Opt-in trial. Legacy devices keep their existing Watch/local alerts.
     public var timerSystemAlarms = false
+    /// Optional silent audio for AlarmKit; the system controls haptics.
+    public var timerSystemAlarmSilent = false
+    /// Explicit opt-in: a stopped, expired system alarm completes its task.
+    public var timerSystemAlarmStopCompletes = false
     public var urgencyPhrases: [String]?
     public var categoryMatchRules: [CategoryMatchRule]?
     public var categoryMatching: CategoryMatching?
@@ -167,12 +171,14 @@ public struct Settings: Codable, Equatable, Sendable {
         case notificationsAllDay, notificationsEnabled, startMinute, endMinute, use24HourTime, inferenceMethod, revision
         case notificationTiming, notificationDelivery, regularNotificationInterval, randomizedNotificationInterval
         case urgencyPhrases, categoryMatchRules, categoryMatching
-        case timerAutoStartNext, timerSystemAlarms
+        case timerAutoStartNext, timerSystemAlarms, timerSystemAlarmSilent, timerSystemAlarmStopCompletes
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         timerAutoStartNext = try values.decodeIfPresent(Bool.self, forKey: .timerAutoStartNext) ?? true
         timerSystemAlarms = try values.decodeIfPresent(Bool.self, forKey: .timerSystemAlarms) ?? false
+        timerSystemAlarmSilent = try values.decodeIfPresent(Bool.self, forKey: .timerSystemAlarmSilent) ?? false
+        timerSystemAlarmStopCompletes = try values.decodeIfPresent(Bool.self, forKey: .timerSystemAlarmStopCompletes) ?? false
         urgencyPhrases = try values.decodeIfPresent([String].self, forKey: .urgencyPhrases)
         categoryMatchRules = try values.decodeIfPresent([CategoryMatchRule].self, forKey: .categoryMatchRules)
         categoryMatching = try values.decodeIfPresent(CategoryMatching.self, forKey: .categoryMatching)

@@ -1,6 +1,71 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testHapticsOnlySystemAlarmSettingPersistsWithoutRearmingStoppedAlarm() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-available", "--ui-quiet-timer-alerts"]
+        app.launch()
+        let status = element(app, "timers.phone-alarm-status")
+        XCTAssertTrue(status.waitForExistence(timeout: 20)); XCTAssertEqual(status.label, "iPhone system alarm scheduled")
+        let settings = app.buttons["Timer settings"]; reveal(settings, in: app); settings.tap()
+        let toggle = app.switches["timers.system-alarm-silent"]
+        reveal(toggle, in: app); XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let settingsStatus = element(app, "timers.system-alarm-settings-status")
+        let quiet = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "haptics only"), object: settingsStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [quiet], timeout: 10), .completed)
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["timers.restart"].tap()
+        XCTAssertTrue(status.label.contains("haptics only"))
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-alarmkit-available", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(status.waitForExistence(timeout: 20)); XCTAssertTrue(status.label.contains("haptics only"))
+        reveal(settings, in: app); settings.tap(); reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let normal = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "iPhone system alarm scheduled"), object: settingsStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [normal], timeout: 10), .completed)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-alarmkit-available", "--ui-system-alarm-silence", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(status.waitForExistence(timeout: 20))
+        let silenced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "silenced"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [silenced], timeout: 10), .completed)
+        reveal(settings, in: app); settings.tap(); reveal(toggle, in: app)
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        XCTAssertTrue(settingsStatus.label.contains("silenced"))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertEqual(element(app, "timers.current").label, "Practice guitar")
+        app.buttons["timers.restart"].tap()
+        let restarted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "haptics only"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [restarted], timeout: 10), .completed)
+        let email = element(app, "timers.waiting.timer-email"); reveal(email, in: app); XCTAssertTrue(email.exists)
+        recordScreen("SystemAlarmHapticsOnlySetting", in: app)
+    }
+    func testSystemAlarmStopCanCompleteAndStartNextWithoutOpeningWatch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-available", "--ui-quiet-timer-alerts"]
+        app.launch()
+        XCTAssertTrue(element(app, "timers.current").waitForExistence(timeout: 20))
+        let settings = app.buttons["Timer settings"]; reveal(settings, in: app); settings.tap()
+        let toggle = app.switches["timers.system-alarm-stop-completes"]
+        reveal(toggle, in: app); XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-alarmkit-available", "--ui-system-alarm-expired", "--ui-quiet-timer-alerts"]; app.launch()
+        let current = element(app, "timers.current")
+        XCTAssertTrue(current.waitForExistence(timeout: 20))
+        let next = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Answer email"), object: current)
+        XCTAssertEqual(XCTWaiter.wait(for: [next], timeout: 10), .completed)
+        XCTAssertTrue(element(app, "timers.countdown").exists)
+        let status = element(app, "timers.phone-alarm-status")
+        XCTAssertTrue(status.waitForExistence(timeout: 10)); XCTAssertEqual(status.label, "iPhone system alarm scheduled")
+        XCTAssertFalse(element(app, "timers.waiting.timer-guitar").exists)
+        let walk = element(app, "timers.waiting.timer-walk"); reveal(walk, in: app); XCTAssertTrue(walk.exists)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-alarmkit-available", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(current.waitForExistence(timeout: 20)); XCTAssertEqual(current.label, "Answer email")
+        reveal(settings, in: app); settings.tap(); reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "1")
+        recordScreen("SystemAlarmStopStartsNext", in: app)
+    }
     func testSystemAlarmTrialSchedulesRestartsAndPersistsWithoutChangingQueue() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-available", "--ui-live-timer-restart", "--ui-quiet-timer-alerts"]
