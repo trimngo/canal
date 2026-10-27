@@ -8,10 +8,10 @@ import WatchKit
 enum TimerAlarmTransferError: Error { case unavailable, changed }
 
 @MainActor
-private final class TimerAlarmReply {
-    var continuation: CheckedContinuation<Data, Error>?
+private final class TimerAlarmReply<Value> {
+    var continuation: CheckedContinuation<Value, Error>?
     var timeout: Task<Void, Never>?
-    func finish(_ result: Result<Data, Error>) {
+    func finish(_ result: Result<Value, Error>) {
         guard let continuation else { return }
         self.continuation = nil; timeout?.cancel(); timeout = nil
         continuation.resume(with: result)
@@ -89,7 +89,7 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             throw TimerAlarmTransferError.unavailable
         }
         let data: Data = try await withCheckedThrowingContinuation { continuation in
-            let reply = TimerAlarmReply(); reply.continuation = continuation
+            let reply = TimerAlarmReply<Data>(); reply.continuation = continuation
             reply.timeout = Task { @MainActor in
                 do { try await Task.sleep(for: .seconds(8)) } catch { return }
                 reply.finish(.failure(TimerAlarmTransferError.unavailable))
@@ -107,6 +107,27 @@ final class CompanionSync: NSObject, WCSessionDelegate {
         return try JSONDecoder().decode(CompanionQuickPacket.self, from: data).ledger
         #else
         throw TimerAlarmTransferError.unavailable
+        #endif
+    }
+
+    func watchCanFinishAlarmHandoff(token: String) async -> Bool {
+        #if os(iOS)
+        guard let session, session.isReachable else { return false }
+        do {
+            return try await withCheckedThrowingContinuation { continuation in
+                let reply = TimerAlarmReply<Bool>(); reply.continuation = continuation
+                reply.timeout = Task { @MainActor in
+                    do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                    reply.finish(.success(false))
+                }
+                session.sendMessage(["timerAlarmReady": token], replyHandler: { response in
+                    let ready = response["ready"] as? Bool ?? false
+                    Task { @MainActor in reply.finish(.success(ready)) }
+                }, errorHandler: { _ in Task { @MainActor in reply.finish(.success(false)) } })
+            }
+        } catch { return false }
+        #else
+        return false
         #endif
     }
 
@@ -345,6 +366,20 @@ final class CompanionSync: NSObject, WCSessionDelegate {
             replyHandler(["ok": false]); return
         }
         #endif
+        if let token = message["timerAlarmReady"] as? String, token.count <= 256 {
+            #if os(watchOS)
+            Task { @MainActor [weak self] in
+                let ready = WKApplication.shared().applicationState == .active &&
+                    self?.store?.ledger.timerControl?.token == token &&
+                    self?.store?.ledger.timerControl?.onWatch == true &&
+                    WatchTimerAlarm.shared.canTransferToPhone(token)
+                replyHandler(["ready": ready])
+            }
+            #else
+            replyHandler(["ready": false])
+            #endif
+            return
+        }
         guard let data = message["timerAlarmOffer"] as? Data, data.count <= 16_000,
               let token = message["token"] as? String, token.count <= 256 else {
             replyHandler(["ok": false]); return

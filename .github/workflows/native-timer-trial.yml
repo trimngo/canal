@@ -33,6 +33,7 @@ jobs:
               -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmTrialSchedulesRestartsAndPersistsWithoutChangingQueue \
               -only-testing:TimeLedgerUITests/TimeLedgerUITests/testSystemAlarmFailureKeepsTimerAndNotificationFallback \
               -only-testing:TimeLedgerUITests/TimeLedgerUITests/testStoppingSystemAlarmDoesNotCompleteTask \
+              -only-testing:TimeLedgerUITests/TimeLedgerUITests/testDeniedSystemAlarmPermissionKeepsExistingTimer \
               2>&1 | tee native/build/validation.log
           else
             bash native/scripts/validate.sh 2>&1 | tee native/build/validation.log

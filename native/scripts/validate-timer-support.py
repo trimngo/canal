@@ -16,6 +16,8 @@ def validate(infos):
             raise ValueError(f"Missing timer bundle: {identifier}")
     if infos[PHONE].get("NSSupportsLiveActivities") is not True:
         raise ValueError("The iPhone app must support Live Activities")
+    if not infos[PHONE].get("NSAlarmKitUsageDescription", "").strip():
+        raise ValueError("The iPhone system alarm trial must explain alarm permission")
     if infos[WATCH].get("WKRunsIndependentlyOfCompanionApp") is not True:
         raise ValueError("The Watch app must run independently of the phone")
     if "alarm" not in infos[WATCH].get("WKBackgroundModes", []):

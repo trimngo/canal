@@ -34,7 +34,14 @@ final class PhoneTimerAlarm: ObservableObject {
     private var mock: Bool {
         #if DEBUG
         return ProcessInfo.processInfo.arguments.contains("--ui-alarmkit-available") ||
-            ProcessInfo.processInfo.arguments.contains("--ui-alarmkit-fail")
+            ProcessInfo.processInfo.arguments.contains("--ui-alarmkit-fail") || mockDenied
+        #else
+        return false
+        #endif
+    }
+    private var mockDenied: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("--ui-alarmkit-denied")
         #else
         return false
         #endif
@@ -49,6 +56,7 @@ final class PhoneTimerAlarm: ObservableObject {
         #endif
     }
     func requestPermission() async -> Bool {
+        if mockDenied { status = "System alarms are not allowed · existing alerts stay enabled"; return false }
         if mock { return true }
         guard isSupported else { status = "System alarms require iOS 26 on an iPhone"; return false }
         if #available(iOS 26.0, *) {
@@ -61,6 +69,7 @@ final class PhoneTimerAlarm: ObservableObject {
         return false
     }
     private var authorized: Bool {
+        if mockDenied { return false }
         if mock { return true }
         guard isSupported else { return false }
         if #available(iOS 26.0, *) { return AlarmManager.shared.authorizationState == .authorized }

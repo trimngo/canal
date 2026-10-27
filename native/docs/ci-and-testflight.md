@@ -1,16 +1,31 @@
 # CI iteration and TestFlight delivery
 
-PRs run **Native Apple checks**: 448 core tests, all 124 iPhone UI tests across
-four shards, and all 16 Watch UI tests. The sharding unit test reads the actual
+PRs run **Native Apple checks**: 461 core tests, all 128 iPhone UI tests across
+four shards, and all 17 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
-Pushes to `main` also validate. Feature branch pushes do not create a second,
-immediately cancelled copy of the PR workflow.
+Native source changes must go through a PR with the full checks green. The
+release merge must contain the validated native source. Main does not repeat
+the full UI suite: build 80's redundant main checks occupied all five Mac slots
+and queued delivery for about 32 minutes. TestFlight still validates core and
+builds both apps before its signed archive. Manual full checks remain available.
+Feature branch pushes do not duplicate the PR workflow.
+
+## AlarmKit trial checks
+
+Use `ci/alarmkit-sdk` for core/packaging and both app builds. Use
+`ci/alarmkit-ui` for the four focused iPhone trial flows: schedule/restart/persist,
+API failure fallback, Stop without task completion, and permission denial.
+These use a DEBUG mock at the system API boundary; production never uses it.
+Real Watch forwarding, buttons, and repeating haptics need physical testing.
+Focused checks never replace all 128 iPhone and 17 Watch tests before release.
+The full Watch step has 35 minutes within its 45-minute job; a cold 17-minute
+setup plus the full UI suite exceeded the previous 30-minute step budget.
 
 ## Iterate on Watch without restarting phone validation
 
 Use an isolated branch named `ci/watch-<description>` for a Watch fix. Push the
 candidate code there before updating the feature PR. **Native Watch UI checks**
-runs five focused regressions covering full titles, single-swipe navigation,
+runs six focused regressions covering full titles, single-swipe navigation,
 dictation, three visible rows, scrolling, return navigation, deletion, and native
 reordering. Its concurrency group is independent of the feature PR's full run.
 There is no need to open a PR for this temporary check branch.

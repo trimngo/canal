@@ -184,7 +184,7 @@ bash native/scripts/validate.sh
 LEDGER_UI_TESTS=1 bash native/scripts/validate.sh
 ```
 
-CI partitions the complete iPhone UI suite across six jobs, with up to three
+CI partitions the complete iPhone UI suite across four jobs, with up to four
 running at once. To run one partition locally, add `LEDGER_UI_TEST_SHARD=0` and
 `LEDGER_UI_TEST_SHARDS=4` to the UI validation command (indices are zero-based).
 Without these variables, local UI validation runs the entire suite. Each CI
@@ -227,3 +227,6 @@ are never printed or uploaded as artifacts. This feedback API may not expose all
 automatically collected Apple crash reports, and new reports may be delayed.
 
 CI iteration, runner scheduling, and TestFlight completion checks are documented in [docs/ci-and-testflight.md](docs/ci-and-testflight.md).
+
+The optional iOS 26 phone system alarm trial, confirmed Watch handover, and
+physical-device checks are documented in [docs/alarmkit-trial.md](docs/alarmkit-trial.md).

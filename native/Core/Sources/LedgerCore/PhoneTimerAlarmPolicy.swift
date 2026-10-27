@@ -3,13 +3,20 @@ import Foundation
 /// The timer remains one shared task. Alert delivery is a separate, confirmed
 /// device choice; availability alone never proves that an alarm was scheduled.
 public enum PhoneTimerAlarmPolicy {
+    public static let minimumHandoffRemaining: TimeInterval = 15
+
+    public static func watchCanFinishTransfer(currentToken: String, scheduledToken: String?,
+                                              hasSession: Bool, isActive: Bool) -> Bool {
+        guard isActive else { return false }
+        return scheduledToken == nil || (scheduledToken == currentToken && hasSession)
+    }
     public static func canOfferPhone(_ ledger: Ledger, writer: String, isActive: Bool,
                                      watchOverrideTaskID: String? = nil,
                                      now: Date = Date()) -> Bool {
         guard ledger.settings.timerSystemAlarms, isActive, ledger.currentTimer != nil,
               let control = ledger.timerControl, control.owner == writer, control.onWatch,
               ledger.currentTimer?.id != watchOverrideTaskID,
-              let due = control.dueAt, due > now else { return false }
+              let due = control.dueAt, due.timeIntervalSince(now) >= minimumHandoffRemaining else { return false }
         return true
     }
 

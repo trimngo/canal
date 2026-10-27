@@ -426,7 +426,7 @@ final class LedgerStore: ObservableObject {
                     }
                 }
                 if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-alarmkit-") }) {
-                    fixture.settings.timerSystemAlarms = true
+                    fixture.settings.timerSystemAlarms = !ProcessInfo.processInfo.arguments.contains("--ui-alarmkit-denied")
                     fixture.restartTimer(writer: writer, onWatch: Self.isWatch)
                 }
                 if ProcessInfo.processInfo.arguments.contains("--ui-watch-owned-timer") {
@@ -698,13 +698,17 @@ final class LedgerStore: ObservableObject {
     func acceptPhoneTimerAlarm(_ incoming: Ledger, expectedToken: String) async throws -> Ledger {
         start(); try merge(incoming)
         guard ledger.settings.timerSystemAlarms, ledger.timerControl?.token == expectedToken,
-              ledger.timerControl?.onWatch == true else { throw TimerAlarmTransferError.changed }
+              let old = ledger.timerControl,
+              PhoneTimerAlarmPolicy.canOfferPhone(ledger, writer: old.owner, isActive: true) else {
+            throw TimerAlarmTransferError.changed
+        }
         let base = ledger
         var candidate = base; candidate.moveTimerAlerts(writer: writer, onWatch: false)
         guard let proposed = candidate.timerControl else { throw TimerAlarmTransferError.changed }
         let alarms = PhoneTimerAlarm.shared
         let armed = try await alarms.prepare(candidate, writer: writer)
-        guard armed, alarms.preparationIsValid(proposed.token), ledger == base,
+        let watchReady = armed ? await companion?.watchCanFinishAlarmHandoff(token: expectedToken) == true : false
+        guard armed, watchReady, alarms.preparationIsValid(proposed.token), ledger == base,
               PhoneTimerAlarmPolicy.acceptsHandoff(ledger, expectedToken: expectedToken,
                                                    candidate: candidate, phoneWriter: writer) else {
             await alarms.abandonPreparation(proposed.token)

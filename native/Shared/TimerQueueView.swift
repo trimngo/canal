@@ -503,6 +503,8 @@ struct TimerSettingsView: View {
                 if !alarm.status.isEmpty { Text(alarm.status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("timers.alarm-status") }
                 Text("Alarm sound follows your Watch’s system settings. Repeating haptics use the Watch’s system alarm, limited to about 30 minutes.")
                     .font(.caption2).foregroundStyle(.secondary)
+                Text("These haptic presets apply to Watch-owned alarms. Forwarded iPhone system alarms use Apple’s alarm feedback.")
+                    .font(.caption2).foregroundStyle(.secondary)
                 Text("Stop silences the system alarm. Open shows the timer controls and applies any synced changes. The Watch runs the timer without your phone.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Text("After changing a timer on iPhone, reopen Dash on Watch to update its repeating alarm. Until then, the previous Watch alarm can still ring at its original time.")

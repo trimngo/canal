@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       focus:
-        description: Run the five timer paging and queue regressions only
+        description: Run the six timer paging, queue, and alert-routing regressions only
         type: boolean
         default: false
         required: false
@@ -43,6 +43,7 @@ jobs:
           selection=()
           if [[ "$WATCH_FOCUS" == "true" ]]; then
             for test in \
+              testPhoneAlarmTrialCanTakeOverOnWatchAndKeepLocalAlarmWhenPhoneUnavailable \
               testFullTaskTitleWrapsWhileWaitingRunningAndPaused \
               testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes \
               testQueueCanDeleteAnyTimerAndDeletingCurrentWaitsForStart \
