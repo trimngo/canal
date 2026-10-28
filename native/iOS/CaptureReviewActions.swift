@@ -12,8 +12,11 @@ struct CaptureReviewActions: View {
     var onSnooze: ((Capture) -> Void)? = nil
     var body: some View {
         HStack(spacing: 12) {
-            Button(capture.isDone ? "Reopen" : "Mark done", systemImage: capture.isDone ? "arrow.uturn.backward" : "checkmark.circle") {
+            Button {
                 do { try beforeChange?(); try store.setCaptureDone(capture, done: !capture.isDone); onHandled() } catch { store.report(error) }
+            } label: {
+                Label(capture.isDone ? "Reopen" : "Mark done", systemImage: capture.isDone ? "arrow.uturn.backward" : "checkmark.circle")
+                    .frame(minHeight: 44).contentShape(Rectangle())
             }.accessibilityIdentifier("\(identifier).done")
             Spacer(minLength: 0)
             if let onDetails {

@@ -10,6 +10,11 @@ and queued delivery for about 32 minutes. TestFlight still validates core and
 builds both apps before its signed archive. Manual full checks remain available.
 Feature branch pushes do not duplicate the PR workflow.
 
+Simulator builds and UI test bundles use the Mac runner's architecture through
+`ARCHS` and `ONLY_ACTIVE_ARCH`. Generic simulator destinations otherwise compile
+both arm64 and x86_64 even though tests execute on one host. These arguments stay
+inside the simulator scripts; signed archives retain their own build settings.
+
 ## AlarmKit trial checks
 
 Use `ci/alarmkit-sdk` for core/packaging and both app builds. Use
@@ -103,3 +108,21 @@ calendar category regressions plus existing calendar period/goal accounting.
 These exercise the real shared matcher, including a DEBUG-only async delay that
 checks manual choices against late results. Read [calendar-categorization.md](calendar-categorization.md).
 Full release checks still require every one of the 135 phone and 18 Watch UI cases.
+
+## Notification and review-control recovery checks
+
+Push `ci/notification-ui-*` to repeat the Watch automatic-delivery, Cancel/no-log,
+and one-tap Home timer-input flows twice. This is separate from the six timer
+regressions, so notification-test iteration does not restart a healthy full run.
+Carousel can expose a notification before its Dash/Dismiss contents exist and
+can deliver it after the preceding test ends. The UI harness waits for that
+specific notification and clears it before input; its interruption handler also
+catches a later arrival. Permission prompts retain their explicit test actions.
+Wait for a hittable Watch control before its first tap on a cold simulator.
+
+The `ci/inbox-review-regression` branch repeats the phone category-review flow
+five times with core tests and both builds. Keep its exact next-item, notes,
+delete/undo, and persistence assertions. Review's Mark done/Reopen label has a
+44-point rectangular touch target; use a hittable semantic tap and record the
+actual review position and hierarchy if advancement fails. Focused checks never
+replace all 135 phone and 18 Watch tests on the final release candidate.
