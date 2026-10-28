@@ -71,6 +71,7 @@ final class LedgerStore: ObservableObject {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
+                defaults.removeObject(forKey: "notifications.urgent-history.v1")
                 defaults.removeObject(forKey: "timers.system-alarm.record")
                 defaults.removeObject(forKey: "timers.system-alarm.silenced")
                 defaults.removeObject(forKey: "timers.watch-override-task")
@@ -253,6 +254,25 @@ final class LedgerStore: ObservableObject {
                 var settings = fixture.settings
                 settings.notificationTiming = .randomized; settings.notificationsAllDay = true; settings.notificationsEnabled = true
                 settings.notificationDelivery = ProcessInfo.processInfo.arguments.contains("--ui-watch-automatic-notification-ledger") ? .automatic : .watch
+                try fixture.saveSettings(settings, writer: "fixture")
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-urgent-checkins") {
+                var fixture = Ledger()
+                for (id, text) in [("checkin-class", "Reschedule the class"), ("checkin-rent", "Pay rent"),
+                                   ("checkin-reply", "Reply to Jo"), ("ordinary", "Practice scales")] {
+                    try fixture.addCapture(text: text, id: id, writer: "fixture")
+                }
+                try fixture.setCaptureTiming("checkin-rent", timing: .due(Date().addingTimeInterval(-3600)), writer: "fixture")
+                try fixture.setCaptureTiming("checkin-class", timing: .due(Date().addingTimeInterval(3600)), writer: "fixture")
+                var settings = fixture.settings
+                settings.notificationsEnabled = true; settings.notificationsAllDay = false
+                // Keep real notifications away from UI interactions, at least
+                // 90 minutes ahead, without replacing the actual scheduler.
+                let clock = Calendar.current.component(.hour, from: Date()) * 60 + Calendar.current.component(.minute, from: Date())
+                settings.startMinute = ((clock / 30 + 4) % 46) * 30
+                settings.endMinute = settings.startMinute + 60
+                settings.regularNotificationInterval = 30
                 try fixture.saveSettings(settings, writer: "fixture")
                 try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
             }

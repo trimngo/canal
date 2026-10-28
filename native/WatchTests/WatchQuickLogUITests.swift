@@ -1,6 +1,20 @@
 import XCTest
 
 final class WatchQuickLogUITests: XCTestCase {
+    func testUrgentTaskAppearsAlongsideWatchCheckInWithoutBlockingQuickReply() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-watch-urgent-checkin"]
+        app.launch()
+        let task = app.staticTexts["watch.reply.urgent"]
+        XCTAssertTrue(task.waitForExistence(timeout: 30))
+        XCTAssertEqual(task.label, "Urgent: Reschedule the class I missed when I was sick")
+        let dictate = app.buttons["watch.reply.dictate"]
+        XCTAssertTrue(dictate.isHittable)
+        record("WatchCheckInUrgentTask", app)
+        dictate.tap()
+        XCTAssertTrue(app.staticTexts["watch.reply.saved"].waitForExistence(timeout: 5))
+        XCTAssertFalse(task.exists)
+    }
     func testPhoneAlarmTrialCanTakeOverOnWatchAndKeepLocalAlarmWhenPhoneUnavailable() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-available", "--ui-phone-owned-timer", "--ui-quiet-timer-alerts"]

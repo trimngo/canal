@@ -1,0 +1,40 @@
+name: Native check-in checks
+on:
+  push:
+    branches: ['ci/checkin-*']
+    paths: ['native/**', '.github/workflows/native-checkin.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-checkin-${{ github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  checkin:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Test core, build both apps, and check notifications
+        timeout-minutes: 35
+        run: |
+          mkdir -p native/build
+          set -o pipefail
+          LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentTasksRotateInRepeatingCheckInsAndCompletedTasksDisappear \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentCheckInRandomQueueKeepsItsTimesAndContentAfterRelaunch \
+            2>&1 | tee native/build/validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-checkin-validation
+          path: |
+            native/build/validation.log
+            native/build/UITests.xcresult
+          retention-days: 7

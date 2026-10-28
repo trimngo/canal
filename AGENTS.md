@@ -5,6 +5,24 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active work: urgent tasks in check-ins (2026-10-28)
+
+The user approved a narrow change: one urgent Inbox task in each existing
+check-in, selected using deadline and time since appearance. Preserve quick
+logging, existing timing/delivery, and ordinary prompts when none qualify.
+Ignore the accidental Watch trial-status reply; no alarm handoff change is
+requested. Reminders date/alert preservation and other organizational ideas
+remain proposals. Friend accountability sharing remains planning only.
+
+Read [native/docs/check-in-urgent-tasks.md](native/docs/check-in-urgent-tasks.md).
+Implementation/validation/release are active; build 82 remains the latest
+available release until a new build finishes Apple processing/distribution.
+Checkpoint: `/workspace/work/checkin-urgent-83/state.json`; original files/index
+are backed up there. Full checks now contain 486 core, 132 phone UI, and 18 Watch
+UI cases. Continue through a PR, green full checks, merge, and processed/internal
+TestFlight delivery under the user's standing authorization. Do not overwrite
+local uncommitted copies or use the original index to publish.
+
 ## Latest release: TestFlight 82 (2026-10-27)
 
 Release objective **COMPLETE**: TestFlight **1.0 (82)** finished Apple processing

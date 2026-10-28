@@ -28,6 +28,8 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
     private var lastConfiguration: Data?
     private var lastChecked = Date.distantPast
     private var lastUsedQueue = false
+    private var lastUrgentTasks: [CheckInUrgentTask]?
+    private let urgentHistoryKey = "notifications.urgent-history.v1"
     private static var isWatch: Bool {
         #if os(watchOS)
         return true
@@ -103,18 +105,28 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         let configuration = Configuration(settings: settings, timeZone: calendar.timeZone.identifier)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let encoded = try encoder.encode(configuration)
+        let candidates = CheckInUrgentTask.candidates(in: LedgerStore.shared.ledger)
         // Ranking and log edits invoke save observers too. Most saves need no
         // notification I/O; queued schedules need at most one refill per minute.
-        if !force, lastConfiguration == encoded,
-           !lastUsedQueue || Date().timeIntervalSince(lastChecked) < 60 { return }
+        if !force, lastConfiguration == encoded, lastUrgentTasks == candidates,
+           (!lastUsedQueue && candidates.isEmpty) || Date().timeIntervalSince(lastChecked) < 60 { return }
         configureActions(); await refreshStatus()
         let pending = await center.pendingNotificationRequests()
         let checkIns = pending.filter { $0.identifier.hasPrefix("checkin-") }
         let changed = UserDefaults.standard.data(forKey: configurationKey) != encoded
+        let now = Date()
+        var history = UserDefaults.standard.data(forKey: urgentHistoryKey)
+            .flatMap { try? JSONDecoder().decode(CheckInUrgentHistory.self, from: $0) } ?? CheckInUrgentHistory()
+        history.reconcile(at: now, calendar: calendar)
+        // Persist successful assignments even if a later notification add fails.
+        defer {
+            if let data = try? JSONEncoder().encode(history) { UserDefaults.standard.set(data, forKey: urgentHistoryKey) }
+        }
         let permission = await center.notificationSettings().authorizationStatus
         let runsHere = settings.notificationDelivery.schedulesLocally(onWatch: Self.isWatch)
         guard settings.notificationsEnabled, runsHere, permission == .authorized || permission == .provisional else {
             center.removePendingNotificationRequests(withIdentifiers: checkIns.map(\.identifier))
+            history.retainRequests([])
             UserDefaults.standard.removeObject(forKey: configurationKey)
             cancelBackgroundRefresh()
             if !settings.notificationsEnabled { scheduleStatus = "Check-ins are off." }
@@ -122,7 +134,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                 scheduleStatus = Self.isWatch ? "Automatic: iPhone schedules check-ins. Apple routes each alert to your phone or Watch."
                     : "Check-ins are assigned to Apple Watch. Open Dash on your Watch to check notification permission."
             } else { scheduleStatus = "No check-ins scheduled. Allow notifications on this device to start." }
-            lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = false
+            lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = false; lastUrgentTasks = candidates
             await refreshStatus()
             return
         }
@@ -132,10 +144,28 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         let repeating = try settings.notificationSchedule()
         let queued = settings.usesQueuedNotifications || repeating.count > capacity
         let reusable = !changed && checkIns.allSatisfy { ($0.trigger?.repeats ?? false) != queued }
-        if !reusable { center.removePendingNotificationRequests(withIdentifiers: checkIns.map(\.identifier)) }
+        if !reusable {
+            center.removePendingNotificationRequests(withIdentifiers: checkIns.map(\.identifier))
+            history.retainRequests([])
+        }
+        var projected = history.lastShown
+        var retained = Set<String>()
+        let existingRequests = reusable ? Dictionary(checkIns.map { ($0.identifier, $0) }, uniquingKeysWith: { a, _ in a }) : [:]
+        func schedule(_ id: String, date: Date, trigger: UNNotificationTrigger, repetition: CheckInUrgentHistory.Repetition?) async throws {
+            let task = CheckInUrgentTask.next(from: candidates, lastShown: projected, at: date)
+            let message = content(task: task)
+            if repetition == nil { message.userInfo["scheduledAt"] = date.timeIntervalSince1970 }
+            let old = existingRequests[id]
+            if old == nil || old?.content.body != message.body ||
+                old?.content.userInfo["urgentTaskID"] as? String != task?.id {
+                try await center.add(UNNotificationRequest(identifier: id, content: message, trigger: trigger))
+            }
+            history.schedule(requestID: id, taskID: task?.id, at: date, repetition: repetition)
+            retained.insert(id)
+            if let task { projected[task.id] = date }
+        }
         do {
             if queued {
-                let now = Date()
                 // Store the absolute date explicitly: a relative trigger's
                 // nextTriggerDate must not slide forward on every refill.
                 let kept = reusable ? checkIns.compactMap { request -> Date? in
@@ -143,13 +173,15 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                     return Date(timeIntervalSince1970: stamp)
                 }.filter { $0 > now }.sorted() : []
                 let dates = try settings.notificationQueue(existing: kept, now: now, capacity: min(60, capacity), calendar: calendar)
-                let existing = Set(kept)
-                for date in dates where !existing.contains(date) {
+                let idsByDate = Dictionary(checkIns.compactMap { request -> (Date, String)? in
+                    guard reusable, let stamp = request.content.userInfo["scheduledAt"] as? Double else { return nil }
+                    return (Date(timeIntervalSince1970: stamp), request.identifier)
+                }, uniquingKeysWith: { a, _ in a })
+                for date in dates {
                     // Absolute intervals keep the chosen random gaps intact over
                     // DST. On a time-zone change we rebuild for the new window.
                     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)
-                    let message = content(); message.userInfo["scheduledAt"] = date.timeIntervalSince1970
-                    try await center.add(UNNotificationRequest(identifier: "checkin-once-\(UUID().uuidString)", content: message, trigger: trigger))
+                    try await schedule(idsByDate[date] ?? "checkin-once-\(UUID().uuidString)", date: date, trigger: trigger, repetition: nil)
                 }
                 if let through = dates.last {
                     let formatter = DateFormatter(); formatter.dateStyle = .medium; formatter.timeStyle = .short
@@ -157,17 +189,20 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
                 } else { scheduleStatus = "No check-ins scheduled. Open Dash to try again." }
                 scheduleBackgroundRefresh()
             } else {
-                let existing = reusable ? Set(checkIns.map(\.identifier)) : []
-                for time in repeating where !existing.contains(time.id) {
+                let slots = repeating.compactMap { time -> (String, UNCalendarNotificationTrigger, Date, CheckInUrgentHistory.Repetition)? in
                     var components = DateComponents(); components.hour = time.hour; components.minute = time.minute; components.second = 0
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-                    try await center.add(UNNotificationRequest(identifier: time.id, content: content(), trigger: trigger))
+                    return trigger.nextTriggerDate().map { (time.id, trigger, $0, time.hour == nil ? .hourly : .daily) }
+                }.sorted { $0.2 < $1.2 }
+                for (id, trigger, date, repetition) in slots {
+                    try await schedule(id, date: date, trigger: trigger, repetition: repetition)
                 }
                 scheduleStatus = "Repeats automatically until turned off."
-                cancelBackgroundRefresh()
+                if candidates.isEmpty { cancelBackgroundRefresh() } else { scheduleBackgroundRefresh() }
             }
+            history.retainRequests(retained)
             UserDefaults.standard.set(encoded, forKey: configurationKey)
-            lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = queued
+            lastConfiguration = encoded; lastChecked = Date(); lastUsedQueue = queued; lastUrgentTasks = candidates
             await refreshStatus()
         } catch {
             // Keep successfully queued alerts. A later refill reconciles them;
@@ -177,9 +212,14 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         }
     }
 
-    private func content() -> UNMutableNotificationContent {
+    private func content(task: CheckInUrgentTask? = nil) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "What are you doing right now?"; content.body = promptBody
+        if let task {
+            content.body += "\n\nUrgent: " + task.preview
+            content.userInfo["urgentTaskID"] = task.id
+            content.userInfo["urgentTaskText"] = task.preview
+        }
         content.sound = .default; content.categoryIdentifier = "CHECKIN"
         content.interruptionLevel = .active
         return content

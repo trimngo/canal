@@ -14,11 +14,13 @@ struct TimeLedgerWatchApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if let request = quickLog {
-                    WatchQuickLogView(id: request.id) { quickLog = nil }
-                } else {
-                    WatchHomeView()
-                }
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--ui-watch-urgent-checkin") {
+                    WatchUrgentCheckInFixture()
+                } else { appContent }
+                #else
+                appContent
+                #endif
             }.environmentObject(store).tint(.mint)
                 .task {
                     store.start()
@@ -52,6 +54,11 @@ struct TimeLedgerWatchApp: App {
         }
         WKNotificationScene(controller: CheckInNotificationController.self, category: "CHECKIN")
     }
+    @ViewBuilder private var appContent: some View {
+        if let request = quickLog {
+            WatchQuickLogView(id: request.id) { quickLog = nil }
+        } else { WatchHomeView() }
+    }
     private func openQuickLog(_ url: URL) {
         if TimerQueueShortcut.matches(url) {
             quickLog = nil; store.openTimers(dictate: url.host?.lowercased() == "queue-timer"); return
@@ -60,3 +67,19 @@ struct TimeLedgerWatchApp: App {
         store.start(); quickLog = WatchQuickLogRequest()
     }
 }
+
+#if DEBUG
+private struct WatchUrgentCheckInFixture: View {
+    @StateObject private var reply = WatchReplyState()
+    var body: some View {
+        ScrollView {
+            WatchPromptView(reply: reply) {
+                do {
+                    try LedgerStore.shared.saveQuickSample("Urgent check-in quick reply", id: "ui-urgent-checkin-reply")
+                    reply.saved = true
+                } catch { reply.error = error.localizedDescription }
+            }
+        }.onAppear { reply.urgentTaskText = "Reschedule the class I missed when I was sick" }
+    }
+}
+#endif

@@ -7,6 +7,7 @@ final class WatchReplyState: ObservableObject {
     @Published var inputOpen = false
     @Published var saved = false
     @Published var error: String?
+    @Published var urgentTaskText: String?
     var pendingText: String?
     var responseTime: Date?
     var sampleID: String?
@@ -26,6 +27,7 @@ final class CheckInNotificationController: WKUserNotificationHostingController<W
         notificationActions = []
         deliveryID = NotificationScheduler.replyID(for: notification)
         reply.sampleID = deliveryID
+        reply.urgentTaskText = notification.request.content.userInfo["urgentTaskText"] as? String
         reply.inputOpen = false; reply.saved = false; reply.error = nil
         reply.pendingText = nil; reply.responseTime = nil
         LedgerStore.shared.start()
@@ -80,6 +82,10 @@ struct WatchPromptView: View {
             } else {
                 Text("What are you doing now?").font(.headline)
                 dictateButton
+                if let task = reply.urgentTaskText {
+                    Text("Urgent: " + task).font(.caption).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("watch.reply.urgent")
+                }
                 if let error = reply.error {
                     Text("Not saved. \(error)").font(.caption).foregroundStyle(.red)
                 }
