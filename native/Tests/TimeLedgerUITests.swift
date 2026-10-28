@@ -79,7 +79,11 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func refreshCheckInInspector(_ app: XCUIApplication) {
-        let refresh = app.buttons["checkins.inspect.refresh"]; reveal(refresh, in: app); refresh.tap()
+        let refresh = app.buttons["checkins.inspect.refresh"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: refresh)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        refresh.tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: refresh)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
     }

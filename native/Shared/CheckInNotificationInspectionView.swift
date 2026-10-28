@@ -10,8 +10,6 @@ struct CheckInNotificationInspectionView: View {
     @State private var error: String?
     var body: some View {
         List {
-            Button("Refresh scheduled check-ins") { refreshing = true; Task { await refresh() } }
-                .accessibilityIdentifier("checkins.inspect.refresh").disabled(refreshing)
             Text("\(requests.count) check-ins").accessibilityIdentifier("checkins.inspect.count")
             Text(replyAction).accessibilityIdentifier("checkins.inspect.action")
             ForEach(Array(requests.prefix(3).enumerated()), id: \.offset) { index, request in
@@ -26,7 +24,14 @@ struct CheckInNotificationInspectionView: View {
                 }
             }
             if let error { Text(error) }
-        }.navigationTitle("Scheduled check-ins").task { await refresh() }
+        }.navigationTitle("Scheduled check-ins")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Refresh") { refreshing = true; Task { await refresh() } }
+                        .accessibilityIdentifier("checkins.inspect.refresh").disabled(refreshing)
+                }
+            }
+            .task { await refresh() }
     }
     private func date(for request: UNNotificationRequest) -> Date {
         if let stamp = request.content.userInfo["scheduledAt"] as? Double { return Date(timeIntervalSince1970: stamp) }
