@@ -76,15 +76,17 @@ The timer originally alerted using the Watch mechanism, not phone AlarmKit.
 Installed phone/Watch build numbers remain unverified; do not infer the cause
 from unrelated reports or assume the phone-owned AlarmKit Stop path was used.
 
-Apple diagnostics were refreshed again in run `40614417738`, attempt 5, job
-`122874910830`, at 2026-10-28T14:21:33.3258316Z. Build 83 was independently confirmed
+Apple diagnostics were refreshed after that confirmation in run `40614417738`,
+attempt 6, job `122910746670`, at 2026-10-28T15:22:05.6916663Z. Build 83 was independently confirmed
 VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple still listed three
 submitted reports: two available logs from build 9 and one unavailable log (404). No current
 matching crash was found. Read-only code review covered WatchConnectivity receive/
 merge and reply paths, serialized ActivityKit refresh/background time, timer
 notification scheduling, and optional alarm takeover; no reproducible fault or
 established cause was found. No speculative crash fix was included in PR #7.
-An optional question asks whether the user sent the report through TestFlight.
+The user confirmed on 2026-10-28 that they sent this crash report through
+TestFlight. Do not ask them to submit it again. Apple has not yet exposed a
+matching current log through this API; a device .ips report can bypass that gap.
 A separate diagnostic-only simulator branch `ci/crash-repro-watch-restart`
 (head `37cbd5579bdb7937207c0bccdd706cefd2422f5c`) exercises real nonisolated
 WatchConnectivity receive callbacks on a background queue, atomic commit/receipt,
