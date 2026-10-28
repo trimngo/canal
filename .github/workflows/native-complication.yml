@@ -1,0 +1,35 @@
+name: Native complication checks
+on:
+  push:
+    branches: ['ci/complication-*']
+    paths: ['native/**', '.github/workflows/native-complication.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-complication-${{ github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  complication:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Test core and build both apps and complication
+        timeout-minutes: 25
+        run: |
+          mkdir -p native/build
+          set -o pipefail
+          bash native/scripts/validate.sh 2>&1 | tee native/build/complication-validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-complication-validation
+          path: native/build/complication-validation.log
+          retention-days: 7

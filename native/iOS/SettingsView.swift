@@ -26,6 +26,12 @@ struct SettingsView: View {
                 NavigationLink("Calendars") { CalendarConnectionView() }.accessibilityIdentifier("settings.calendars")
                 NavigationLink("Automatic matching") { AutomaticMatchingView() }.accessibilityIdentifier("settings.matching")
                 NavigationLink("Timers") { TimerSettingsView() }.accessibilityIdentifier("settings.timers")
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--ui-inspect-checkins") {
+                    NavigationLink("Inspect scheduled check-ins") { CheckInNotificationInspectionView() }
+                        .accessibilityIdentifier("settings.checkin-preview")
+                }
+                #endif
                 NavigationLink("Siri via Reminders") { ReminderInboxSetupView() }
                     .accessibilityIdentifier("settings.reminders")
             } footer: {

@@ -1,6 +1,92 @@
 import XCTest
 
 final class TimeLedgerUITests: XCTestCase {
+    func testUrgentTasksRotateInRepeatingCheckInsAndCompletedTasksDisappear() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-urgent-checkins", "--ui-inspect-checkins"]
+        app.launch(); openCheckInInspector(app)
+        let expected = ["Pay rent", "Reschedule the class", "Reply to Jo"]
+        for (index, title) in expected.enumerated() {
+            let body = element(app, "checkins.inspect.body.\(index)"); reveal(body, in: app)
+            XCTAssertTrue(body.label.contains("Tap to type or dictate"))
+            XCTAssertTrue(body.label.hasPrefix("Urgent: " + title))
+            let payload = element(app, "checkins.inspect.task.\(index)"); reveal(payload, in: app)
+            XCTAssertEqual(payload.label, title)
+        }
+        let kind = element(app, "checkins.inspect.kind.0"); reveal(kind, in: app)
+        XCTAssertEqual(kind.label, "CHECKIN · repeating")
+        let action = element(app, "checkins.inspect.action"); reveal(action, in: app)
+        XCTAssertEqual(action.label, "QUICK_LOG")
+        let count = element(app, "checkins.inspect.count"); reveal(count, in: app)
+        XCTAssertEqual(count.label, "3 check-ins")
+        let date = element(app, "checkins.inspect.date.0"); reveal(date, in: app)
+        let originalDate = date.label
+        refreshCheckInInspector(app)
+        reveal(date, in: app); XCTAssertEqual(date.label, originalDate)
+        recordScreen("UrgentTaskInScheduledCheckIn", in: app)
+        app.tabBars.buttons["Today"].tap()
+        for id in ["checkin-rent", "checkin-class", "checkin-reply"] {
+            let done = app.buttons["today.urgent-complete.uncategorized.\(id)"]
+            reveal(done, in: app); XCTAssertTrue(done.isHittable); done.tap()
+        }
+        app.tabBars.buttons["Settings"].tap(); refreshCheckInInspector(app)
+        let body = element(app, "checkins.inspect.body.0"); reveal(body, in: app)
+        let plain = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Tap to type or dictate what you’re doing now."), object: body)
+        XCTAssertEqual(XCTWaiter.wait(for: [plain], timeout: 10), .completed)
+        reveal(count, in: app); XCTAssertEqual(count.label, "3 check-ins")
+    }
+
+    func testUrgentCheckInRandomQueueKeepsItsTimesAndContentAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-urgent-checkins", "--ui-inspect-checkins"]
+        app.launch(); openCheckInInspector(app)
+        app.navigationBars.buttons.firstMatch.tap()
+        let timing = element(app, "settings.notification-timing"); reveal(timing, in: app)
+        timing.tap(); app.buttons["Randomized"].tap()
+        let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 15), .completed)
+        let inspect = app.buttons["settings.checkin-preview"]; reveal(inspect, in: app); inspect.tap()
+        let count = element(app, "checkins.inspect.count")
+        let queued = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "60 check-ins"), object: count)
+        XCTAssertEqual(XCTWaiter.wait(for: [queued], timeout: 10), .completed)
+        let kind = element(app, "checkins.inspect.kind.0"); reveal(kind, in: app)
+        XCTAssertEqual(kind.label, "CHECKIN · queued")
+        let body = element(app, "checkins.inspect.body.0"); reveal(body, in: app)
+        XCTAssertTrue(body.label.contains("Urgent: Pay rent"))
+        let originalBody = body.label
+        let date = element(app, "checkins.inspect.date.0"); reveal(date, in: app)
+        let originalDate = date.label
+        refreshCheckInInspector(app)
+        reveal(date, in: app); XCTAssertEqual(date.label, originalDate)
+        app.terminate(); app.launchArguments = ["--ui-inspect-checkins"]; app.launch(); openCheckInInspector(app)
+        reveal(date, in: app); XCTAssertEqual(date.label, originalDate)
+        reveal(body, in: app); XCTAssertEqual(body.label, originalBody)
+        recordScreen("UrgentTaskRandomQueueAfterRelaunch", in: app)
+    }
+
+    private func openCheckInInspector(_ app: XCUIApplication) {
+        app.tabBars.buttons["Settings"].tap()
+        let inspect = app.buttons["settings.checkin-preview"]
+        reveal(inspect, in: app); inspect.tap()
+        let allow = app.alerts.buttons["Allow"]
+        if allow.waitForExistence(timeout: 2) { allow.tap() }
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if springboard.alerts.buttons["Allow"].waitForExistence(timeout: 2) { springboard.alerts.buttons["Allow"].tap() }
+        let count = element(app, "checkins.inspect.count")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", "0 check-ins"), object: count)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+    }
+
+    private func refreshCheckInInspector(_ app: XCUIApplication) {
+        let refresh = app.buttons["checkins.inspect.refresh"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: refresh)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        refresh.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: refresh)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+    }
     func testHapticsOnlySystemAlarmSettingPersistsWithoutRearmingStoppedAlarm() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-alarmkit-available", "--ui-quiet-timer-alerts"]

@@ -5,6 +5,39 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active work: urgent check-ins and complication refresh (2026-10-28)
+
+The user approved one urgent Inbox task in each existing check-in, chosen by
+its deadline and elapsed appearance history. Keep the notification cadence,
+quick logging, and ordinary prompts when no item qualifies. Reminders date/
+alert import and other organizational ideas remain proposals. Ignore the
+accidental Watch trial-status reply; no alarm handoff change is requested.
+
+The user then reported a Watch complication stuck on Finished while the app
+shows a running timer, even after opening it. The combined next release also
+retries complication reload on foreground and timer URL launch when the shared
+snapshot is unchanged, provides finite timeline recovery, and labels waiting
+timers Ready. WidgetKit controls actual face refresh timing; verify on hardware.
+Read [native/docs/watch-complication-refresh.md](native/docs/watch-complication-refresh.md)
+and [native/docs/check-in-urgent-tasks.md](native/docs/check-in-urgent-tasks.md).
+
+Keep existing work active: PR #6's full run `40641800079` continues unchanged.
+Its two focused phone cases, 486 core tests, both app builds, and all 18 Watch
+UI cases passed; full phone validation remains active. The combined feature PR
+must pass all 493 core, 132 phone UI, and 18 Watch UI cases before merging.
+Isolated complication SDK checks `40643861526`, job `122668016143`, passed all
+493 core tests and both app builds. These focused results never replace full CI.
+
+Build 82 remains the latest available release until the combined build finishes
+Apple processing and internal distribution. Continue through full checks,
+merge, and TestFlight delivery under the user's standing authorization. Do not
+use the original index to publish or overwrite local uncommitted work. Original
+index SHA-256: `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+Checkpoints: `/workspace/work/checkin-urgent-83/state.json` and
+`/workspace/work/complication-refresh-84/state.json` (the latter directory name
+was provisional; both changes are now planned for one combined release).
+The isolated worktree is `/workspace/canal-complication`.
+
 ## Latest release: TestFlight 82 (2026-10-27)
 
 Release objective **COMPLETE**: TestFlight **1.0 (82)** finished Apple processing
