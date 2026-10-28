@@ -9,21 +9,29 @@ struct CheckInNotificationInspectionView: View {
     @State private var refreshing = false
     @State private var error: String?
     var body: some View {
-        List {
-            Text("\(requests.count) check-ins").accessibilityIdentifier("checkins.inspect.count")
-            Text(replyAction).accessibilityIdentifier("checkins.inspect.action")
-            ForEach(Array(requests.prefix(3).enumerated()), id: \.offset) { index, request in
-                Section {
-                    Text(request.content.body).accessibilityIdentifier("checkins.inspect.body.\(index)")
-                    Text(request.content.userInfo["urgentTaskText"] as? String ?? "No task")
-                        .accessibilityIdentifier("checkins.inspect.task.\(index)")
-                    Text(request.content.categoryIdentifier + (request.trigger?.repeats == true ? " · repeating" : " · queued"))
-                        .accessibilityIdentifier("checkins.inspect.kind.\(index)")
-                    Text("\(date(for: request).timeIntervalSince1970)")
-                        .accessibilityIdentifier("checkins.inspect.date.\(index)")
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("\(requests.count) check-ins").accessibilityIdentifier("checkins.inspect.count")
+                Spacer()
+                Text(replyAction).accessibilityIdentifier("checkins.inspect.action")
+            }.font(.caption).padding(.horizontal)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(requests.prefix(3).enumerated()), id: \.offset) { index, request in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(request.content.body).accessibilityIdentifier("checkins.inspect.body.\(index)")
+                            Text(request.content.userInfo["urgentTaskText"] as? String ?? "No task")
+                                .accessibilityIdentifier("checkins.inspect.task.\(index)")
+                            Text(request.content.categoryIdentifier + (request.trigger?.repeats == true ? " · repeating" : " · queued"))
+                                .accessibilityIdentifier("checkins.inspect.kind.\(index)")
+                            Text("\(date(for: request).timeIntervalSince1970)")
+                                .accessibilityIdentifier("checkins.inspect.date.\(index)")
+                        }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
+                        Divider()
+                    }
+                    if let error { Text(error) }
+                }.padding()
             }
-            if let error { Text(error) }
         }.navigationTitle("Scheduled check-ins")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
