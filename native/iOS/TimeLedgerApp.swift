@@ -10,6 +10,13 @@ struct TimeLedgerApp: App {
     var body: some Scene {
         WindowGroup {
             RootView().environmentObject(store).tint(Color(red: 0.13, green: 0.43, blue: 0.38))
+                #if DEBUG
+                .overlay(alignment: .top) {
+                    if ProcessInfo.processInfo.arguments.contains("--ui-watch-restart-repro") {
+                        WatchRestartReproductionView().environmentObject(store)
+                    }
+                }
+                #endif
                 .task {
                     store.start(); LedgerShortcuts.updateAppShortcutParameters()
                     do { try await NotificationScheduler.shared.apply(store.ledger.settings, force: true) } catch { store.report(error) }
