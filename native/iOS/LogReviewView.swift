@@ -63,6 +63,7 @@ struct LogReviewView: View {
                 if let entry = current {
                     CategorySelectionList(selection: categorySelection, activity: event == nil ? entry.activity : calendarActivityText, timestamp: entry.end, mood: $mood,
                         saveActivity: {
+                            guard current?.id == entry.id else { return }
                             if event == nil { try store.updateLogActivity(id: entry.id, activity: $0) }
                             else { calendarActivityText = $0 }
                         },
