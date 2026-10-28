@@ -425,7 +425,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-watch-notification-ledger"]
         app.launch()
         let alerts = app.buttons["watch.notifications"]
-        waitForInputButton(alerts); alerts.tap()
+        revealWatchControl(alerts, in: app); waitForInputButton(alerts); alerts.tap()
         let enable = app.buttons["watch.notifications.enable"]
         if enable.waitForExistence(timeout: 3) { enable.tap() }
         if app.alerts.buttons["Allow"].waitForExistence(timeout: 3) { app.alerts.buttons["Allow"].tap() }
@@ -453,7 +453,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-watch-automatic-notification-ledger"]
         app.launch()
         let alerts = app.buttons["watch.notifications"]
-        waitForInputButton(alerts); alerts.tap()
+        revealWatchControl(alerts, in: app); waitForInputButton(alerts); alerts.tap()
         let mode = app.staticTexts["watch.notifications.delivery-mode"]
         XCTAssertTrue(mode.waitForExistence(timeout: 10)); XCTAssertEqual(mode.label, "Delivery: Automatic")
         XCTAssertFalse(app.buttons["watch.notifications.enable"].exists)
@@ -488,7 +488,7 @@ final class WatchQuickLogUITests: XCTestCase {
     func testWatchCanSwitchSharedDeliveryAndShowItsOwnSchedule() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-watch-automatic-notification-ledger"]; app.launch()
         let alerts = app.buttons["watch.notifications"]
-        waitForInputButton(alerts); alerts.tap()
+        revealWatchControl(alerts, in: app); waitForInputButton(alerts); alerts.tap()
         let useWatch = app.buttons["watch.notifications.use-watch"]
         for _ in 0..<5 { if useWatch.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(useWatch.exists); useWatch.tap()
