@@ -1,7 +1,7 @@
 name: Watch notification isolation checks
 on:
   push:
-    branches: ['ci/watch-recovery-*']
+    branches: ['ci/notification-ui-*']
     paths: ['native/**', '.github/workflows/native-watch-recovery.yml']
 permissions:
   contents: read
