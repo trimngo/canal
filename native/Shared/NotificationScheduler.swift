@@ -216,7 +216,7 @@ final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate, O
         let content = UNMutableNotificationContent()
         content.title = "What are you doing right now?"; content.body = promptBody
         if let task {
-            content.body += "\n\nUrgent: " + task.preview
+            content.body = "Urgent: " + task.preview + "\n\n" + promptBody
             content.userInfo["urgentTaskID"] = task.id
             content.userInfo["urgentTaskText"] = task.preview
         }

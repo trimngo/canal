@@ -9,7 +9,7 @@ final class TimeLedgerUITests: XCTestCase {
         for (index, title) in expected.enumerated() {
             let body = element(app, "checkins.inspect.body.\(index)"); reveal(body, in: app)
             XCTAssertTrue(body.label.contains("Tap to type or dictate"))
-            XCTAssertTrue(body.label.contains("Urgent: " + title))
+            XCTAssertTrue(body.label.hasPrefix("Urgent: " + title))
             let payload = element(app, "checkins.inspect.task.\(index)"); reveal(payload, in: app)
             XCTAssertEqual(payload.label, title)
         }
