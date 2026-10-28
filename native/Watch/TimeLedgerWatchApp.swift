@@ -61,7 +61,10 @@ struct TimeLedgerWatchApp: App {
     }
     private func openQuickLog(_ url: URL) {
         if TimerQueueShortcut.matches(url) {
-            quickLog = nil; store.openTimers(dictate: url.host?.lowercased() == "queue-timer"); return
+            quickLog = nil; store.openTimers(dictate: url.host?.lowercased() == "queue-timer")
+            // A complication tap can reuse an already-active scene.
+            store.refreshTimerSupport(force: true)
+            return
         }
         guard WatchLogShortcut.matches(url), quickLog == nil else { return }
         store.start(); quickLog = WatchQuickLogRequest()

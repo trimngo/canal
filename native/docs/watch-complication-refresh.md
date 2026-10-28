@@ -6,8 +6,9 @@ shared Keychain summary was unchanged. An earlier reload could have been
 deferred while an old timeline still contained its Finished entry. The timer
 provider's `.never` policy offered no independent recovery request.
 
-Foreground refresh now requests a current-timer timeline reload even when the
-saved summary is already correct. Ordinary saves still request a reload only
+Foreground refresh and the complication's timer launch route now request a
+current-timer timeline reload even when the saved summary is already correct,
+including when the scene is already active. Ordinary saves still request a reload only
 when their timer snapshot changes. The running countdown and explicit expiry
 entry are retained. The current-timer provider also requests recovery within
 15 minutes while running and 30 minutes for other states; imminent expiry can
