@@ -1,6 +1,6 @@
 # CI iteration and TestFlight delivery
 
-PRs run **Native Apple checks**: 486 core tests, all 132 iPhone UI tests across
+PRs run **Native Apple checks**: 493 core tests, all 132 iPhone UI tests across
 four shards, and all 18 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
 Native source changes must go through a PR with the full checks green. The
@@ -88,3 +88,10 @@ for all core tests, both simulator builds, and the two focused phone checks of
 real scheduled content, completion removal, stable dates, and relaunch. The
 Watch prompt regression runs in the complete PR Watch suite. Keep every full
 release check; focused success alone never authorizes a release.
+
+## Complication refresh checks
+
+Use `ci/complication-*` for all 493 core tests, packaging checks, and both app
+builds. Read [watch-complication-refresh.md](watch-complication-refresh.md).
+These checks do not replace all 132 phone and 18 Watch UI cases before release.
+WidgetKit face refresh timing still needs a physical Watch check.

@@ -7,6 +7,7 @@ private struct TimerEntry: TimelineEntry {
     var current: TimerWidgetSnapshot?
 }
 private struct TimerProvider: TimelineProvider {
+    var showsCurrent = true
     func placeholder(in context: Context) -> TimerEntry {
         TimerEntry(date: Date(), current: TimerWidgetSnapshot(title: "Practice guitar", duration: 1200, dueAt: Date().addingTimeInterval(600), pausedRemaining: nil))
     }
@@ -14,10 +15,13 @@ private struct TimerProvider: TimelineProvider {
         completion(context.isPreview ? placeholder(in: context) : TimerEntry(date: Date(), current: TimerWidgetStore.read()))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<TimerEntry>) -> Void) {
+        guard showsCurrent else {
+            completion(Timeline(entries: [TimerEntry(date: Date(), current: nil)], policy: .never)); return
+        }
         let now = Date(), current = TimerWidgetStore.read()
         var entries = [TimerEntry(date: now, current: current)]
         if let due = current?.dueAt, due > now { entries.append(TimerEntry(date: due.addingTimeInterval(1), current: current)) }
-        completion(Timeline(entries: entries, policy: .never))
+        completion(Timeline(entries: entries, policy: .after(TimerWidgetRefreshPolicy.nextRefresh(snapshot: current, at: now))))
     }
 }
 private struct TimerComplication: View {
@@ -31,10 +35,16 @@ private struct TimerComplication: View {
     }
     @ViewBuilder private var countdown: some View {
         if let current = entry.current {
-            if let paused = current.pausedRemaining { Text("Paused · \(Int(ceil(paused / 60)))m") }
-            else if let due = current.dueAt, due > entry.date {
-                Text(timerInterval: due.addingTimeInterval(-current.duration)...due, countsDown: true).monospacedDigit()
-            } else { Text("Finished") }
+            switch current.displayState(at: entry.date) {
+            case .paused:
+                Text("Paused · \(Int(ceil((current.pausedRemaining ?? 0) / 60)))m")
+            case .running:
+                if let due = current.dueAt {
+                    Text(timerInterval: due.addingTimeInterval(-current.duration)...due, countsDown: true).monospacedDigit()
+                }
+            case .finished: Text("Finished")
+            case .ready: Text("Ready")
+            }
         } else { Text("No timer") }
     }
     @ViewBuilder private var content: some View {
@@ -65,7 +75,7 @@ private struct TimerComplication: View {
 }
 struct DashAddTimerWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "DashAddTimer", provider: TimerProvider()) { TimerComplication(entry: $0, adding: true) }
+        StaticConfiguration(kind: "DashAddTimer", provider: TimerProvider(showsCurrent: false)) { TimerComplication(entry: $0, adding: true) }
             .configurationDisplayName("Timers").description("Open your current timer. Tap + to dictate another task; swipe up to see the queue.")
             .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryRectangular, .accessoryInline])
     }

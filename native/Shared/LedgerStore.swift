@@ -791,7 +791,10 @@ final class LedgerStore: ObservableObject {
         WatchTimerAlarm.shared.update(ledger: ledger, writer: writer)
         #if !targetEnvironment(simulator)
         let snapshot = current.map { TimerWidgetSnapshot(title: $0.title, duration: $0.duration, dueAt: control?.dueAt, pausedRemaining: control?.pausedRemaining) }
-        if (try? TimerWidgetStore.write(snapshot)) == true { WidgetCenter.shared.reloadTimelines(ofKind: "DashCurrentTimer") }
+        let widgetChanged = (try? TimerWidgetStore.write(snapshot)) == true
+        // The shared value can already be correct while WidgetKit is displaying
+        // a stale timeline. Foreground refresh must retry that reload too.
+        if force || widgetChanged { WidgetCenter.shared.reloadTimelines(ofKind: "DashCurrentTimer") }
         #endif
         #endif
         Task { @MainActor [weak self] in
