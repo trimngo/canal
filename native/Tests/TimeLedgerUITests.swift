@@ -3299,6 +3299,7 @@ final class TimeLedgerUITests: XCTestCase {
         let done = app.buttons["idea-review.done"]; reveal(done, in: app)
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: done)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        XCTAssertGreaterThanOrEqual(done.frame.height, 44)
         done.tap()
         let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "3 of 6"), object: element(app, "idea-review.position"))
         let result = XCTWaiter.wait(for: [advanced], timeout: 10)

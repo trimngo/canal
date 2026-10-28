@@ -2,7 +2,7 @@ name: iPhone category review stability checks
 on:
   push:
     branches: ['ci/inbox-review-regression']
-    paths: ['.github/workflows/native-inbox-review.yml']
+    paths: ['native/**', '.github/workflows/native-inbox-review.yml']
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
-      - name: Repeat the unchanged Inbox review flow five times
+      - name: Repeat the Inbox review action five times
         timeout-minutes: 45
         run: |
           mkdir -p native/build
