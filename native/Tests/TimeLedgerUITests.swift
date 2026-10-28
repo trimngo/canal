@@ -3142,6 +3142,71 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertFalse(sdes.label.contains("0m /"))
     }
 
+    func testCalendarReviewUsesPhraseRulesAndKeepsCategoriesAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-matching"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]
+        XCTAssertTrue(review.waitForExistence(timeout: 20)); review.tap()
+        XCTAssertTrue(element(app, "log-review.calendar-period").waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["category-tag.guitar"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["category-tag.work"].exists)
+        XCTAssertFalse(app.buttons["category-tag.music"].exists)
+        XCTAssertTrue(element(app, "log-review.suggestion").label.contains("Your phrase rule"))
+        recordScreen("CalendarUsesSharedPhraseRules", in: app)
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+        app.terminate(); app.launchArguments = []; app.launch()
+        openLogs(app)
+        let entry = element(app, "logs.entry.calendar-ui-matching")
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        app.buttons["Edit time and categories"].firstMatch.tap()
+        let categories = element(app, "edit.category")
+        XCTAssertTrue(categories.waitForExistence(timeout: 10))
+        XCTAssertTrue(categories.label.contains("Guitar"), categories.label)
+        XCTAssertTrue(categories.label.contains("Work"), categories.label)
+    }
+
+    func testCalendarReviewUsesLearnedMatchesFromConfirmedLogs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-matching", "--ui-calendar-learned"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]
+        XCTAssertTrue(review.waitForExistence(timeout: 20)); review.tap()
+        XCTAssertTrue(app.buttons["category-tag.music"].waitForExistence(timeout: 15))
+        let suggestion = element(app, "log-review.suggestion")
+        XCTAssertTrue(suggestion.label.contains("Matched confirmed word: cello"), suggestion.label)
+        XCTAssertFalse(app.buttons["category-tag.work"].exists)
+        recordScreen("CalendarLearnsFromConfirmedLogs", in: app)
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+    }
+
+    func testCalendarUncategorizedChoiceSurvivesLateMatchAndEditedTitle() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-matching", "--ui-calendar-matching-delay"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]
+        XCTAssertTrue(review.waitForExistence(timeout: 20)); review.tap()
+        XCTAssertTrue(element(app, "log-review.calendar-period").waitForExistence(timeout: 10))
+        app.buttons["Uncategorized"].tap()
+        editInline("category-context.activity", adding: " solo", in: app)
+        let suggestion = element(app, "log-review.suggestion")
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", "solo"), object: suggestion)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 20), .completed)
+        for id in ["music", "guitar", "work", "personal"] { XCTAssertFalse(app.buttons["category-tag.\(id)"].exists) }
+        recordScreen("CalendarKeepsExplicitUncategorized", in: app)
+        app.buttons["log-review.save-next"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+        // Normal launch runs the production background classifier too: the
+        // user's explicit empty choice must stay confirmed after it runs.
+        app.terminate(); app.launchArguments = []; app.launch()
+        openLogs(app)
+        XCTAssertTrue(element(app, "logs.entry.calendar-ui-matching").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "logs.entry.calendar-ui-matching").label.contains("solo"))
+        app.buttons["Edit time and categories"].firstMatch.tap()
+        let categories = element(app, "edit.category")
+        XCTAssertTrue(categories.waitForExistence(timeout: 10))
+        XCTAssertTrue(categories.label.contains("Uncategorized"), categories.label)
+    }
+
     func testCalendarConfirmationRecordsFullPeriodAndUpdatesGoal() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-dated-goals-fixture"]; app.launch()
         app.buttons["dashboard.review.uncategorized"].tap()

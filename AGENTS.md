@@ -5,6 +5,33 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active work: calendar event categorization (2026-10-28)
+
+The user asked for calendar-derived events in logs to use the same categorization
+rules as other logs. Calendar review previously used the old single-category
+matcher. The candidate routes it through AutomaticCategories, sharing phrase
+rules, child-category precedence, multiple matches, confirmed examples, the
+selected matching coverage, and optional offline sentence embeddings. Calendar
+confirmation and original event periods remain intact; no wire/schema change.
+
+Edits reclassify the calendar title, but late results preserve manual selections.
+Confirming a review explicitly confirms even Uncategorized, so the background
+classifier cannot replace that choice. Three new phone UI regressions cover
+phrase rules/persistence, learned matches, and an edited title with delayed
+classification plus a saved empty choice. The delay is DEBUG-only and does not
+mock the classifier. Existing calendar period/goal accounting is also focused.
+
+Worktree: `/workspace/canal-calendar`; checkpoint and backups:
+`/workspace/work/calendar-categories-84/state.json`. Preserve original uncommitted
+files/index. All 25 local packaging/CI tests passed. Next: focused macOS checks
+on `ci/calendar-*`, then a PR with all 493 core, 135 phone UI, and 18 Watch UI
+cases green. Continue through merge and processed/internal TestFlight delivery
+under the user's standing authorization. Build 83 remains the latest available
+until the new build completes Apple processing/distribution. The separate crash
+investigation stays open; the user already confirmed sending its TestFlight
+report. Friend accountability sharing remains planning only.
+Read [native/docs/calendar-categorization.md](native/docs/calendar-categorization.md).
+
 ## Latest release: TestFlight 83 (2026-10-28)
 
 Release objective **COMPLETE**: TestFlight **1.0 (83)** finished Apple processing
@@ -317,7 +344,7 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 132 iPhone UI tests run across four shards. Keep the complete test set and
+- All 135 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
   Run all 18 Watch UI tests. Repeating WatchKit haptics still require
@@ -337,7 +364,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 493 core, 132 iPhone UI, and 18 Watch UI tests must pass.
+checks: all 493 core, 135 iPhone UI, and 18 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
