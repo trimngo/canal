@@ -5,40 +5,102 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
-## Active work: urgent check-ins and complication refresh (2026-10-28)
+## Latest release: TestFlight 83 (2026-10-28)
 
-The user approved one urgent Inbox task in each existing check-in, chosen by
-its deadline and elapsed appearance history. Keep the notification cadence,
-quick logging, and ordinary prompts when no item qualifies. Reminders date/
-alert import and other organizational ideas remain proposals. Ignore the
-accidental Watch trial-status reply; no alarm handoff change is requested.
+Release objective **COMPLETE**: TestFlight **1.0 (83)** finished Apple processing
+and was distributed internally at **2026-10-28 14:19:05 UTC**. Do not repeat this
+upload. Keep the separate iPhone crash investigation below active. Preserve
+uncommitted work and the original index before further changes.
 
-The user then reported a Watch complication stuck on Finished while the app
-shows a running timer, even after opening it. The combined next release also
-retries complication reload on foreground and timer URL launch when the shared
-snapshot is unchanged, provides finite timeline recovery, and labels waiting
-timers Ready. WidgetKit controls actual face refresh timing; verify on hardware.
-Read [native/docs/watch-complication-refresh.md](native/docs/watch-complication-refresh.md)
-and [native/docs/check-in-urgent-tasks.md](native/docs/check-in-urgent-tasks.md).
+- PR #7: https://github.com/trimngo/canal/pull/7 — merged as
+  `1a5575d59bd0d319ce3cdcb225bb75bb291266ae`, the build 83 application source.
+- Validated head `ee58c13bb5f7927a3a7db568346671ec683bb9b6` and merge share the
+  complete tree `dbb83da845852d15e99c57debd89440d1362ffa0`. Native subtree:
+  `32abc8dd43261ac69b9187987d047a42e02418c8`. This final root-only handoff
+  update leaves app source unchanged and does not trigger another upload.
+- Full CI: https://github.com/trimngo/canal/actions/runs/40645207614 — **SUCCESS**
+  (attempt 3): **493 core, all 132 iPhone UI, and all 18 Watch UI tests**.
+  UI coverage was compared with source: no missing or duplicated cases. The
+  successful phone results were retained; final Watch job `122850086412` passed.
+- Focused complication checks `40643861526`, job `122668016143`, passed all core
+  tests and both app builds. All **25 local packaging/CI tests** passed.
+  PR #6 was closed as covered; do not merge it separately. Its full run
+  `40641800079` also passed 486 core, 132 phone UI, and 18 Watch UI cases.
+- Delivery: https://github.com/trimngo/canal/actions/runs/40701754693 — **SUCCESS**,
+  job `122863127982`. Actual packaged build **83** verified at 14:10:12 UTC;
+  upload accepted at 14:10:53 UTC; processing and internal distribution both
+  succeeded at **14:19:05 UTC**. Delivery also passed all 493 core tests and
+  signed-package checks. Upload acceptance alone was not release proof.
+- Initial Watch validation passed its 18 cases but reached the 35-minute step
+  limit during result finalization. Retry `122841096893` never acquired a runner:
+  GitHub annotations reported macOS ARM capacity constraints and an internal
+  server error. The next Watch-only retry passed. No API rate-limit or billing
+  error was observed. Delivery took about 19 minutes, including about eight
+  minutes waiting for Apple's build listing/processing. Keep all full tests.
 
-Keep existing work active: PR #6's full run `40641800079` continues unchanged.
-Its two focused phone cases, 486 core tests, both app builds, and all 18 Watch
-UI cases passed; full phone validation remains active. The combined feature PR
-must pass all 493 core, 132 phone UI, and 18 Watch UI cases before merging.
-Isolated complication SDK checks `40643861526`, job `122668016143`, passed all
-493 core tests and both app builds. These focused results never replace full CI.
+Implemented in build 83:
 
-Build 82 remains the latest available release until the combined build finishes
-Apple processing and internal distribution. Continue through full checks,
-merge, and TestFlight delivery under the user's standing authorization. Do not
-use the original index to publish or overwrite local uncommitted work. Original
-index SHA-256: `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+- Each existing check-in can show one unfinished urgent Inbox task, selected by
+  deadline and elapsed appearance history. Preserve cadence, quick logging,
+  and ordinary prompts when none qualify. Completed/snoozed tasks leave upcoming
+  prompts. The Watch displays the same hint beside logging. Scheduling history
+  does not prove a notification was read; OS background refresh is best effort.
+  Reminders date/alert import and broader organizational ideas remain planning
+  only. Ignore the accidental Watch trial-status reply. Read
+  [native/docs/check-in-urgent-tasks.md](native/docs/check-in-urgent-tasks.md).
+- Foreground refresh and timer-complication launch retry WidgetKit reload even
+  when the shared snapshot is unchanged. Current-timer timelines request bounded
+  recovery refreshes; waiting timers show Ready. Actual face refresh timing is
+  controlled by WidgetKit and still needs hardware verification. No alarm owner
+  or transport protocol changed. Read
+  [native/docs/watch-complication-refresh.md](native/docs/watch-complication-refresh.md).
+
+Update **both phone and Watch** to 83 and open Dash on each once. Check that an
+urgent prompt still allows quick logging, and the Watch complication reflects
+running/restarted timers and Ready waiting tasks. The separately reported iPhone
+crash was not reproduced or fixed by this release.
+
 Checkpoints: `/workspace/work/checkin-urgent-83/state.json` and
-`/workspace/work/complication-refresh-84/state.json` (the latter directory name
-was provisional; both changes are now planned for one combined release).
-The isolated worktree is `/workspace/canal-complication`.
+`/workspace/work/complication-refresh-84/state.json`. The latter name was
+provisional: both features shipped in build 83. Isolated worktree:
+`/workspace/canal-complication`. Original uncommitted copies were preserved and
+updated only after target-file hash checks. The local original branch still
+intentionally stays at its old HEAD with uncommitted copies of published work;
+do not reset it or use its index to publish. Original index SHA-256 remains
+`665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
 
-## Latest release: TestFlight 82 (2026-10-27)
+## Active incident: iPhone crash after Watch restart (2026-10-28)
+
+The user reported that iPhone crashed while restarting a timer on Apple Watch.
+The timer originally alerted using the Watch mechanism, not phone AlarmKit.
+Installed phone/Watch build numbers remain unverified; do not infer the cause
+from unrelated reports or assume the phone-owned AlarmKit Stop path was used.
+
+Apple diagnostics were refreshed again in run `40614417738`, attempt 5, job
+`122874910830`, at 2026-10-28T14:21:33.3258316Z. Build 83 was independently confirmed
+VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple still listed three
+submitted reports: two available logs from build 9 and one unavailable log (404). No current
+matching crash was found. Read-only code review covered WatchConnectivity receive/
+merge and reply paths, serialized ActivityKit refresh/background time, timer
+notification scheduling, and optional alarm takeover; no reproducible fault or
+established cause was found. No speculative crash fix was included in PR #7.
+An optional question asks whether the user sent the report through TestFlight.
+A separate diagnostic-only simulator branch `ci/crash-repro-watch-restart`
+(head `37cbd5579bdb7937207c0bccdd706cefd2422f5c`) exercises real nonisolated
+WatchConnectivity receive callbacks on a background queue, atomic commit/receipt,
+ActivityKit update, duplicate/older contexts, repeated restart, and relaunch.
+It uses a Watch-owned fixture with the phone alarm trial off. It bypasses radio
+transport and cannot establish physical background wake, WatchKit expiry, or
+optional AlarmKit handoff behavior. Focused run `40699031896`, job
+`122853494797`, passed all 493 core tests,
+both app builds, and its actual receipt/relaunch UI case (three restarts). It did
+not reproduce the reported crash. It is not in the release merge. Checkpoint:
+`/workspace/work/crash-restart-repro/state.json`; worktree `/workspace/canal-crash-repro`.
+Keep this incident active after the completed release. The feedback
+API may lag or omit automatically collected crashes; a matching current report
+or reproduction is needed for a targeted fix.
+
+## Previous release: TestFlight 82 (2026-10-27)
 
 Release objective **COMPLETE**: TestFlight **1.0 (82)** finished Apple processing
 and was distributed to internal testers at **2026-10-27 13:20:16 UTC**. Do not
@@ -253,10 +315,10 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 130 iPhone UI tests run across four shards. Keep the complete test set and
+- All 132 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
-  Run all 17 Watch UI tests. Repeating WatchKit haptics still require
+  Run all 18 Watch UI tests. Repeating WatchKit haptics still require
   physical-device verification.
 - A cancelled Xcode run can leave an incomplete `.xcresult`. Skip heavy exports
   after cancellation. For completed runs, export only when `Info.plist` exists.
@@ -273,7 +335,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 473 core, 130 iPhone UI, and 17 Watch UI tests must pass.
+checks: all 493 core, 132 iPhone UI, and 18 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
