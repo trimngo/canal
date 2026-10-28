@@ -17,13 +17,13 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
-      - name: Repeat the unchanged Inbox review flow three times
+      - name: Repeat the unchanged Inbox review flow five times
         timeout-minutes: 45
         run: |
           mkdir -p native/build
           set -o pipefail
           LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
-            -test-iterations 3 \
+            -test-iterations 5 \
             -only-testing:TimeLedgerUITests/TimeLedgerUITests/testIdeaCategorizationHasInlineDetailsDoneDeleteAndUndo \
             2>&1 | tee native/build/validation.log
       - uses: actions/upload-artifact@v4
