@@ -17,3 +17,9 @@ Push an isolated `ci/calendar-*` branch for all 493 core tests, both simulator
 app builds, and four focused phone cases (three new regressions plus existing
 calendar period/goal accounting). Full PR checks still require all 135 phone UI
 and 18 Watch UI cases. See [ci-and-testflight.md](ci-and-testflight.md).
+
+Review logs intentionally hides the shared keyboard Done toolbar. UI tests that
+edit a review title should use Save & next / Confirm & next with the keyboard
+open, preserving the typed draft, category choices, and one-tap review flow.
+The suggestion exposes its full reason to accessibility, with its icon treated
+as decoration.

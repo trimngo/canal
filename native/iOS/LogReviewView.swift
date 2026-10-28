@@ -25,6 +25,7 @@ struct LogReviewView: View {
     @State private var mood: Int?
     @State private var goalID: String?
     @State private var activityDraft = ""
+    @State private var calendarActivityText = ""
     @State private var error: String?
     @State private var calendarSuggestion: CategorySuggestion?
     @State private var matchingCalendar = false
@@ -60,8 +61,11 @@ struct LogReviewView: View {
         NavigationStack {
             Group {
                 if let entry = current {
-                    CategorySelectionList(selection: categorySelection, activity: event == nil ? entry.activity : activityDraft, timestamp: entry.end, mood: $mood,
-                        saveActivity: { if event == nil { try store.updateLogActivity(id: entry.id, activity: $0) } },
+                    CategorySelectionList(selection: categorySelection, activity: event == nil ? entry.activity : calendarActivityText, timestamp: entry.end, mood: $mood,
+                        saveActivity: {
+                            if event == nil { try store.updateLogActivity(id: entry.id, activity: $0) }
+                            else { calendarActivityText = $0 }
+                        },
                         activityDraft: Binding(get: { activityDraft }, set: { if current?.id == entry.id { activityDraft = $0 } }), showsKeyboardDone: false)
                         .safeAreaInset(edge: .top, spacing: 0) {
                             VStack(alignment: .leading, spacing: 6) {
@@ -75,6 +79,8 @@ struct LogReviewView: View {
                                 }
                                 if let suggestion = event == nil ? entry.categorySuggestion : calendarSuggestion {
                                     Label("Suggested · \(suggestion.reason)", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel("Suggested · \(suggestion.reason)")
                                         .accessibilityIdentifier("log-review.suggestion")
                                 }
                                 LogTaskPicker(goalID: $goalID, categoryIDs: categorySelection)
@@ -143,7 +149,7 @@ struct LogReviewView: View {
         guard let entry = current else { if loaded { dismiss() }; return }
         categories = store.ledger.effectiveCategoryIDs(for: entry)
         calendarSuggestion = nil; matchingCalendar = event != nil; categoriesWereEdited = false
-        mood = entry.mood; goalID = entry.goalID; activityDraft = entry.activity; error = nil
+        mood = entry.mood; goalID = entry.goalID; activityDraft = entry.activity; calendarActivityText = entry.activity; error = nil
     }
     private func saveAndAdvance(skip: Bool = false) {
         guard let entry = current else { return }
