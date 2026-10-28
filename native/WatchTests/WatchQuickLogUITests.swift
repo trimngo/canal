@@ -3,6 +3,7 @@ import XCTest
 final class WatchQuickLogUITests: XCTestCase {
     private var notificationMonitor: NSObjectProtocol?
     override func setUpWithError() throws {
+        continueAfterFailure = false
         // A delivered alert can outlive the preceding notification test and
         // cover this test's first tap, even after pending requests are cleared.
         // Handle only Dash's dismissible notification; preserve permissions and
@@ -322,7 +323,6 @@ final class WatchQuickLogUITests: XCTestCase {
         XCTAssertEqual(current.label, title)
         record("WatchFullPausedTaskTitle", app)
     }
-    override func setUpWithError() throws { continueAfterFailure = false }
     private func scrollLongTimerTitle(in app: XCUIApplication) {
         // Scroll within the current page before swiping past its bottom.
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8))

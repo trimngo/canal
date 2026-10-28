@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Simulator checks execute on this Mac; signed archives use their own settings.
+DASH_SIMULATOR_ARCH=$(uname -m)
 xcodegen generate
 if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   # Overlap cold simulator startup with core tests and app compilation.
@@ -12,10 +14,10 @@ python3 -m unittest discover -s TestsPython -p 'test_ui_sharding.py' -v
 swift test --package-path Core
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
   -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
-  CODE_SIGNING_ALLOWED=NO build
+  ARCHS="$DASH_SIMULATOR_ARCH" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
 xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedgerWatch \
   -destination 'generic/platform=watchOS Simulator' -derivedDataPath build \
-  CODE_SIGNING_ALLOWED=NO build
+  ARCHS="$DASH_SIMULATOR_ARCH" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
 
 python3 scripts/validate-siri-support.py --apps \
   build/Build/Products/Debug-iphonesimulator/TimeLedger.app \
@@ -57,6 +59,7 @@ if [[ "${LEDGER_UI_TESTS:-0}" == "1" ]]; then
   xcodebuild -project TimeLedger.xcodeproj -scheme TimeLedger \
     -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath build \
     -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO \
+    ARCHS="$DASH_SIMULATOR_ARCH" ONLY_ACTIVE_ARCH=YES \
     -parallel-testing-enabled NO -test-timeouts-enabled YES \
     -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600 \
     "${UI_TEST_SELECTION[@]}" test
