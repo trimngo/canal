@@ -1,6 +1,25 @@
 import XCTest
 
 final class WatchQuickLogUITests: XCTestCase {
+    private var notificationMonitor: NSObjectProtocol?
+    override func setUpWithError() throws {
+        // A delivered alert can outlive the preceding notification test and
+        // cover this test's first tap, even after pending requests are cleared.
+        // Handle only Dash's dismissible notification; preserve permissions and
+        // other system sheets so their own tests still exercise those controls.
+        notificationMonitor = addUIInterruptionMonitor(withDescription: "Dismiss an earlier Dash test notification") { alert in
+            guard alert.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Dash")).firstMatch.exists,
+                  alert.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Dismiss")).firstMatch.exists else { return false }
+            for _ in 0..<3 {
+                if !alert.exists { return true }
+                let dismiss = alert.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Dismiss"))
+                    .allElementsBoundByIndex.last(where: { $0.isHittable })
+                if let dismiss { dismiss.tap() } else { alert.swipeUp() }
+                if alert.waitForNonExistence(timeout: 2) { return true }
+            }
+            return false
+        }
+    }
     func testUrgentTaskAppearsAlongsideWatchCheckInWithoutBlockingQuickReply() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-watch-urgent-checkin"]
@@ -218,7 +237,7 @@ final class WatchQuickLogUITests: XCTestCase {
         app.launchArguments = ["--ui-empty-ledger", "--ui-timer-system-input"]
         app.launch()
         let add = app.buttons["watch.timer-add"]
-        XCTAssertTrue(add.waitForExistence(timeout: 30)); add.tap()
+        waitForInputButton(add, timeout: 30); add.tap()
         let suggestion = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Stretch")).firstMatch
         XCTAssertTrue(suggestion.waitForExistence(timeout: 10)); suggestion.tap()
         allowTimerNotifications(app)
@@ -352,6 +371,10 @@ final class WatchQuickLogUITests: XCTestCase {
         if app.alerts.buttons["Allow"].waitForExistence(timeout: 1) { app.alerts.buttons["Allow"].tap() }
     }
     override func tearDownWithError() throws {
+        defer {
+            if let notificationMonitor { removeUIInterruptionMonitor(notificationMonitor) }
+            notificationMonitor = nil
+        }
         if (testRun?.totalFailureCount ?? 0) > 0 {
             let app = XCUIApplication()
             record("WatchQuickLogFailure", app)
@@ -477,8 +500,8 @@ final class WatchQuickLogUITests: XCTestCase {
         record("WatchDirectDeliverySchedule", app)
     }
 
-    private func waitForInputButton(_ button: XCUIElement) {
-        XCTAssertTrue(button.waitForExistence(timeout: 15))
+    private func waitForInputButton(_ button: XCUIElement, timeout: TimeInterval = 15) {
+        XCTAssertTrue(button.waitForExistence(timeout: timeout))
         // A cold simulator can publish the button before its window accepts
         // taps; XCTest then computes {-1, -1} and never presses the control.
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: button)

@@ -1,0 +1,37 @@
+name: Watch notification isolation checks
+on:
+  push:
+    branches: ['ci/watch-recovery-*']
+    paths: ['native/**', '.github/workflows/native-watch-recovery.yml']
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: macos-15
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Exercise notification then Cancel and one-tap timer input twice
+        timeout-minutes: 45
+        run: |
+          mkdir -p native/build
+          set -o pipefail
+          bash native/scripts/test-watch-ui.sh -test-iterations 2 \
+            -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testAutomaticDeliveryHasNoModeSwitchAndWatchTestKeepsItAutomatic \
+            -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testCancelCreatesNoSampleAndNormalIconDoesNotStartInput \
+            -only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/testWatchHomeCanAddATimerInOneTap \
+            2>&1 | tee native/build/watch-validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: watch-recovery-results
+          path: |
+            native/build/watch-validation.log
+            native/build/WatchUITests.xcresult
+          retention-days: 7
