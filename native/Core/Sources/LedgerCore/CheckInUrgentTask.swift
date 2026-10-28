@@ -22,8 +22,14 @@ public struct CheckInUrgentTask: Codable, Equatable, Sendable {
     /// Never show the same task consecutively when another is available.
     public static func next(from candidates: [Self], lastShown: [String: Date], at date: Date) -> Self? {
         let available = candidates.filter { $0.availableAt.map { $0 <= date } ?? true }
-        let mostRecent = available.compactMap { task in lastShown[task.id].map { (task.id, $0) } }
-            .max { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 < $1.1 }?.0
+        var mostRecent: String?
+        var latest = Date.distantPast
+        for task in available {
+            guard let shown = lastShown[task.id] else { continue }
+            if shown > latest || (shown == latest && task.id > (mostRecent ?? "")) {
+                mostRecent = task.id; latest = shown
+            }
+        }
         let eligible = available.count > 1 ? available.filter { $0.id != mostRecent } : available
         return eligible.sorted { a, b in
             let aLast = lastShown[a.id], bLast = lastShown[b.id]
