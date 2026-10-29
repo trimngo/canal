@@ -25,7 +25,8 @@ struct CalendarForecastListView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             Label("Planned · needs confirmation after it ends", systemImage: "calendar")
                                 .font(.caption).foregroundStyle(.secondary)
-                        }.padding(.vertical, 4).accessibilityIdentifier("forecast.event.\(event.id)")
+                        }.padding(.vertical, 4).accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("forecast.event.\(event.id)")
                     }
                 } header: { Text("Remaining timed events") } footer: {
                     Text("This is a preview of selected calendars. Overlapping events share their time. All-day, free and declined events are excluded. Ended events go to Review logs and become recorded time only after you confirm them.")

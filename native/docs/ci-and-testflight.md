@@ -104,6 +104,9 @@ build is actually processed and available.
 
 ## Automatic handoff
 
+Read [build-platform-options.md](build-platform-options.md) for the dedicated Mac
+and managed-service benchmark options; no provider migration is configured.
+
 At the 2026-10-29 inspection, repository auto-merge was disabled and `main` was
 unprotected. CI success therefore did not merge a PR or start delivery. The
 connected GitHub tools can enable auto-merge per PR, but cannot change repository
@@ -131,16 +134,18 @@ release check; focused success alone never authorizes a release.
 
 Use `ci/complication-*` for all 501 core tests, packaging checks, and both app
 builds. Read [watch-complication-refresh.md](watch-complication-refresh.md).
-These checks do not replace all 135 phone and 18 Watch UI cases before release.
+These checks do not replace all 138 phone and 18 Watch UI cases before release.
 WidgetKit face refresh timing still needs a physical Watch check.
 
 ## Calendar categorization checks
 
-Push `ci/calendar-*` for all 501 core tests, both app builds, and the three new
-calendar category regressions plus existing calendar period/goal accounting.
-These exercise the real shared matcher, including a DEBUG-only async delay that
-checks manual choices against late results. Read [calendar-categorization.md](calendar-categorization.md).
-Full release checks still require every one of the 135 phone and 18 Watch UI cases.
+Push `ci/calendar-*` for all 501 core tests, both app builds, three calendar-plan
+regressions, the existing calendar category/period/goal cases, and the notification
+queue case. These exercise the real shared matcher and forecast accounting;
+calendar review includes a DEBUG-only async delay that checks manual choices
+against late results. Read [calendar-plan-preview.md](calendar-plan-preview.md)
+and [calendar-categorization.md](calendar-categorization.md).
+Full release checks still require every one of the 138 phone and 18 Watch UI cases.
 
 ## Notification and review-control recovery checks
 
@@ -172,4 +177,4 @@ five times with core tests and both builds. Keep its exact next-item, notes,
 delete/undo, and persistence assertions. Review's Mark done/Reopen label has a
 44-point rectangular touch target; use a hittable semantic tap and record the
 actual review position and hierarchy if advancement fails. Focused checks never
-replace all 135 phone and 18 Watch tests on the final release candidate.
+replace all 138 phone and 18 Watch tests on the final release candidate.

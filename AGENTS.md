@@ -79,12 +79,13 @@ target, and test-isolation problems. An introduced duplicate XCTest setup overri
 also cost a diagnostic iteration and was corrected before the final candidate.
 No API rate-limit or billing failure was observed. Delivery itself took 12 minutes.
 
-The user asked on 2026-10-29 to simplify the process. Pipeline-only work is prepared
+The user asked on 2026-10-29 to simplify the process. Pipeline preparation began
 in `/workspace/canal-ci-speed`, checkpoint `/workspace/work/ci-speedup/state.json`:
 balance the complete phone suite using passing timings, and avoid automatic
 TestFlight uploads for commits that change only test/docs/validation paths.
-All 28 local checks pass; full PR validation and merge are still pending.
-This work changes no application runtime source and should not upload build 85.
+That work is now included in the active calendar-plan candidate above. Its
+standalone PR #9 remains unmerged pending the replacement feature PR. Pipeline-only
+changes require no app upload; the new calendar feature does require a release.
 Do not start a broad app rewrite or remove tests/features to chase build time.
 
 Release checkpoint and backups: `/workspace/work/calendar-categories-84/state.json`.
@@ -167,10 +168,10 @@ The timer originally alerted using the Watch mechanism, not phone AlarmKit.
 Installed phone/Watch build numbers remain unverified; do not infer the cause
 from unrelated reports or assume the phone-owned AlarmKit Stop path was used.
 
-Apple diagnostics were most recently refreshed in run `40721752796`,
-job `123124473273`, at 2026-10-28T21:54:37.0631636Z. Build 83 was independently confirmed
-VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple still listed three
-submitted reports: two available logs from build 9 and one unavailable log (404). No current
+Apple diagnostics were most recently refreshed in run `40797102750`,
+job `123641218756`, at 2026-10-29T18:13:44.9551247Z. Build 84 was independently confirmed
+VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple listed four
+submitted reports: two available logs from build 9 and two unavailable logs. No current
 matching crash was found. Read-only code review covered WatchConnectivity receive/
 merge and reply paths, serialized ActivityKit refresh/background time, timer
 notification scheduling, and optional alarm takeover; no reproducible fault or
