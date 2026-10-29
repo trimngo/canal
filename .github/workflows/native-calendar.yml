@@ -1,42 +1,16 @@
-name: Input setup and Reminders checks
+name: Focused input checks superseded by full validation
 on:
   push:
-    branches: ['ci/calendar-*']
-    paths: ['native/**', '.github/workflows/native-calendar.yml']
+    branches: ['ci/calendar-input-setup']
+    paths: ['.github/workflows/native-calendar.yml']
 permissions:
   contents: read
 concurrency:
   group: native-calendar-${{ github.ref_name }}
   cancel-in-progress: true
 jobs:
-  calendar:
-    runs-on: macos-15
-    timeout-minutes: 45
+  superseded:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-      - name: Install project generator
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-        run: brew install xcodegen
-      - name: Check input completion, review, and real Reminders transfer
-        timeout-minutes: 35
-        run: |
-          mkdir -p native/build
-          set -o pipefail
-          LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testTargetsAreAccessibleAndPersist \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testNestedCalculatedGoalsAndDirectRowsHaveNoEditableTarget \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testIdeaCategorizationHasInlineDetailsDoneDeleteAndUndo \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRemindersImportUsesSelectedListAndKeepsDeletedIdeasDeletedAfterRelaunch \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testInboxAutoFocusesCaptureAndSavingNeverOpensRanking \
-            2>&1 | tee native/build/validation.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: input-setup-reminders-checks
-          path: |
-            native/build/validation.log
-            native/build/UITests.xcresult
-          retention-days: 7
+      - name: Use the complete release validation
+        run: echo 'No focused test result is claimed. Complete source validation runs at https://github.com/trimngo/canal/actions/runs/40947104076; its full suite includes all five focused cases.'
