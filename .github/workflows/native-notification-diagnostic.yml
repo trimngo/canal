@@ -25,6 +25,7 @@ jobs:
           LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
             -test-iterations 3 \
             -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarOpensOnASeparateScreen \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRandomNotificationsQueueAndSwitchBackToRepeating \
             -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentCheckInRandomQueueKeepsItsTimesAndContentAfterRelaunch \
             2>&1 | tee native/build/validation.log
       - uses: actions/upload-artifact@v4

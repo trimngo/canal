@@ -595,8 +595,8 @@ final class TimeLedgerUITests: XCTestCase {
             // Toolbar controls sit outside the scrollable content bounds.
             // Scrolling the page cannot reveal them any further.
             if target.exists, !frame.isEmpty, target.isHittable,
-               navigation?.intersects(frame) == true || tabs?.intersects(frame) == true { return }
-            if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
+               navigation?.contains(frame) == true || tabs?.contains(frame) == true { return }
+            if target.exists, !frame.isEmpty, target.isHittable, frame.minY >= top, frame.maxY <= bottom - 8 { return }
             // Short drags keep lazy Form rows from being skipped by momentum.
             let height = max(100, bottom - top)
             let origin = app.coordinate(withNormalizedOffset: .zero)
@@ -1625,10 +1625,12 @@ final class TimeLedgerUITests: XCTestCase {
         element(app, "settings.notification-timing").tap(); app.buttons["Randomized"].tap()
         let allDay = app.switches["settings.notifications-all-day"]
         reveal(allDay, in: app)
-        allDay.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        allDay.switches.firstMatch.tap()
+        XCTAssertEqual(allDay.value as? String, "1")
         let enabled = app.switches["settings.notifications-enabled"]
         reveal(enabled, in: app)
-        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        enabled.switches.firstMatch.tap()
+        XCTAssertEqual(enabled.value as? String, "1")
         let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
         let allow = app.alerts.buttons["Allow"]
         if allow.waitForExistence(timeout: 3) { allow.tap() }
@@ -1660,7 +1662,8 @@ final class TimeLedgerUITests: XCTestCase {
         let repeating = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Repeats automatically"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [repeating], timeout: 10), .completed)
         let off = app.switches["settings.notifications-enabled"]; reveal(off, in: app)
-        off.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        off.switches.firstMatch.tap()
+        XCTAssertEqual(off.value as? String, "0")
         reveal(save, in: app); save.tap(); waitForSave()
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
