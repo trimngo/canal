@@ -160,6 +160,13 @@ queued/repeating/off assertions and the unchanged-queue refill assertion. A stat
 timeout alone cannot establish an app scheduling fault; capture the actual status
 and save state on failure.
 
+The phone reveal helper recognizes hittable navigation/tab-bar controls without
+scrolling the page beneath them. Such controls sit outside the body viewport;
+body scrolling cannot improve their visibility. When a lazy row is absent, the
+backward search covers the forward travel plus rows preceding the starting
+position. A symmetric forward/back count can finish near its starting point and
+miss an earlier Settings row. Keep destination and persistence assertions.
+
 The `ci/inbox-review-regression` branch repeats the phone category-review flow
 five times with core tests and both builds. Keep its exact next-item, notes,
 delete/undo, and persistence assertions. Review's Mark done/Reopen label has a

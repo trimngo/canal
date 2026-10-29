@@ -570,9 +570,10 @@ final class TimeLedgerUITests: XCTestCase {
             let frame = bar.frame
             return usable(frame) && frame.intersects(bounds) ? frame : nil
         }
-        // Lazy lists omit offscreen rows from accessibility. Search later rows
-        // first, then earlier rows if the target has not been materialized.
-        for attempt in 0..<20 {
+        // Lazy lists omit offscreen rows from accessibility. After searching
+        // forward, search twice as far back to cover rows before the start.
+        let forwardAttempts = 10
+        for attempt in 0..<(forwardAttempts * 3) {
             let bounds = app.frame
             guard usable(bounds) else { XCTFail("App has no visible bounds"); return }
             // Dismissed sheets can leave offscreen bars with CGRect.null frames.
@@ -591,17 +592,21 @@ final class TimeLedgerUITests: XCTestCase {
             }
             let proposed = target.exists ? target.frame : .zero
             let frame = usable(proposed) ? proposed : .zero
+            // Toolbar controls sit outside the scrollable content bounds.
+            // Scrolling the page cannot reveal them any further.
+            if target.exists, !frame.isEmpty, target.isHittable,
+               navigation?.intersects(frame) == true || tabs?.intersects(frame) == true { return }
             if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
             // Short drags keep lazy Form rows from being skipped by momentum.
             let height = max(100, bottom - top)
             let origin = app.coordinate(withNormalizedOffset: .zero)
             let high = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.3))
             let low = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.75))
-            if (!frame.isEmpty && frame.maxY < top) || (frame.isEmpty && attempt >= 10) { high.press(forDuration: 0.01, thenDragTo: low) }
+            if (!frame.isEmpty && frame.maxY < top) || (frame.isEmpty && attempt >= forwardAttempts) { high.press(forDuration: 0.01, thenDragTo: low) }
             else { low.press(forDuration: 0.01, thenDragTo: high) }
 
         }
-        XCTAssertTrue(target.waitForExistence(timeout: 5))
+        XCTAssertTrue(target.waitForExistence(timeout: 5), "Could not reveal the target.\n\(app.debugDescription)")
     }
 
     private func log(_ text: String, in app: XCUIApplication, confirmSuggestion: Bool = false) {
