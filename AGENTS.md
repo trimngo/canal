@@ -5,57 +5,76 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
-## Active work: calendar categorization and release validation (2026-10-28)
+## Latest release: TestFlight 84 (2026-10-29)
 
-The user's calendar request is implemented: Review logs uses the same offline
-AutomaticCategories actor as ordinary logs and Inbox ideas, including custom
-phrase rules, multiple categories, child precedence, confirmed examples, matching
-coverage, and optional sentence embeddings. Late matches preserve manual choices,
-including Uncategorized. Confirmation and original event periods remain intact.
-Read [native/docs/calendar-categorization.md](native/docs/calendar-categorization.md).
+Release objective **COMPLETE**: TestFlight **1.0 (84)** finished Apple processing
+and was distributed internally at **2026-10-29 06:58:14 UTC** (07:58 Berlin).
+Do not repeat this upload. Preserve uncommitted files and the original index.
+Keep the separate iPhone crash investigation open and existing work active.
 
-PR #8: https://github.com/trimngo/canal/pull/8. The earlier calendar source
-`45ebc04540888a726861d5960f2fcd97cde888e0` passed all focused calendar checks,
-and every calendar regression passed in full iPhone runs. Full run `40743216270`
-was delayed by cold setup/timeouts and explicit GitHub macOS ARM capacity. Its
-final attempt had three green phone shards (102 tests), one phone review-action
-failure (32 passed), and 16/18 Watch tests. Those partial results do not complete
-the final release gate. Keep every assertion and run all 493 core, 135 phone UI,
-and 18 Watch UI cases on the final candidate before merge and delivery.
+- PR #8: https://github.com/trimngo/canal/pull/8 — merged as
+  `64d953f7ccc0d6b62b2b65b32db87b59f21d1ee3`, the build 84 application source.
+- Validated head `074f7644b176de66e3d6f54b2348f189e32e53a1` and merge share
+  complete tree `d3bf091b826cf0f5bcff7c8d0f0ba6b93ccde829`. Native subtree:
+  `a9add92190fb6eb72e8fb09790923ba1cabdc8d2`. This root-only handoff leaves
+  application source unchanged and does not trigger another upload.
+- Full CI: https://github.com/trimngo/canal/actions/runs/40780444339 — **SUCCESS**,
+  first complete attempt on final source: **493 core, all 135 iPhone UI, and all
+  18 Watch UI tests**. Coverage was compared with source, with no missing or
+  duplicated cases. All 25 local packaging/CI tests passed.
+- Focused calendar run `40740399679` passed 493 core, both builds, and four cases.
+  Phone review run `40773007096`, job `123114890781`, passed all core/builds and
+  five review-action repetitions. Watch run `40777796685`, job `123131483870`,
+  passed notification settings, Cancel/no-log, and one-tap Home timer input twice.
+  Six focused timer regressions also passed in `40771490706`, job `123109984950`.
+- Delivery: https://github.com/trimngo/canal/actions/runs/40831279483 — **SUCCESS**,
+  job `123305823568`. Packaged build **84** verified at 06:53:34 UTC; upload
+  accepted at 06:54:10 UTC; processing and internal distribution succeeded at
+  **06:58:14 UTC**. Delivery passed all 493 core tests and signed-package checks.
+  Accepted upload alone was not used as release proof.
 
-The candidate also fixes the phone review Mark done/Reopen label's 18-point touch
-area with a 44-point rectangular target. All five focused repetitions passed on
-`b6fd443a54b445fbb9cb9104b1930aec69fd5c7d`, run `40773007096`, job
-`123114890781`, alongside 493 core tests and both builds. The Watch test harness
-clears a prior Dash notification only after its actual contents load, waits for
-hittable controls, and preserves permission interactions. The one-tap Home timer
-flow passed twice; the revised notification-isolation sequence passed all three
-flows twice on `b24ae57f23a5da6b969fd3b8eb865892eef78759`, run `40777796685`,
-job `123131483870`.
-Six timer regressions passed on `cc49c55efbd8094c7bfa14364d8d3d9d9af4b147` in
-run `40771490706`, job `123109984950`. No Watch production code changed.
+Implemented in build 84:
 
-Simulator validation compiles only the host architecture; archive settings stay
-separate. All 25 local packaging/CI checks passed after that change. Read
-[native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md) for the focused
-notification and review workflows and the required full release checks.
+- Calendar events in Review logs now use the same offline AutomaticCategories
+  service as logs and Inbox ideas: phrase rules, multiple categories, child
+  precedence, confirmed examples, matching coverage, and optional embeddings.
+  Edited titles get a new match. Late results preserve manual choices, including
+  Uncategorized; confirming an empty choice protects it from background matching.
+  Event confirmation and original periods remain intact. No schema or permissions
+  changed. Read [native/docs/calendar-categorization.md](native/docs/calendar-categorization.md).
+- Review Mark done/Reopen has a 44-point rectangular touch target. Five focused
+  repetitions preserved one-tap advance, notes, delete/undo, and persistence.
+- Simulator validation builds only the runner's architecture; signed archive
+  settings stay separate. Watch automation waits for actual notification contents,
+  clears only recognized prior Dash/Dismiss alerts, and reveals controls before
+  waiting for hittability. Permission interactions and all release tests remain.
+  Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 
-Checkpoint, exact candidate identities, results, and backups:
-`/workspace/work/calendar-categories-84/state.json`. Combined worktree:
-`/workspace/canal-calendar-release`; isolated source worktrees:
-`/workspace/canal-watch-recovery` and `/workspace/canal-inbox-recovery`.
-Focused checks are green. Publish the combined candidate for the complete PR
-checks; never cancel healthy checks to iterate.
-Preserve original uncommitted files and index. Continue through processed and
-internal TestFlight delivery under the user's standing authorization; build 83
-remains latest until the new build actually completes. Planned build 84 must be
-verified from the package and Apple processing, not assumed from the plan.
+The final full run took 52 minutes. Its phone UI shards spent approximately
+25.5, 38.2, 26.3, and 29.2 minutes executing tests. Earlier iterations were delayed
+by cold setup, explicit GitHub macOS ARM capacity constraints, a small real touch
+target, and test-isolation problems. An introduced duplicate XCTest setup override
+also cost a diagnostic iteration and was corrected before the final candidate.
+No API rate-limit or billing failure was observed. Delivery itself took 12 minutes.
 
-The separate iPhone crash remains open; the user already sent its TestFlight
-report. Friend accountability sharing remains planning only. Keep existing work
-active when discussing new ideas.
+The user asked on 2026-10-29 to simplify the process. Pipeline-only work is prepared
+in `/workspace/canal-ci-speed`, checkpoint `/workspace/work/ci-speedup/state.json`:
+balance the complete phone suite using passing timings, and avoid automatic
+TestFlight uploads for commits that change only test/docs/validation paths.
+All 28 local checks pass; full PR validation and merge are still pending.
+This work changes no application runtime source and should not upload build 85.
+Do not start a broad app rewrite or remove tests/features to chase build time.
 
-## Latest release: TestFlight 83 (2026-10-28)
+Release checkpoint and backups: `/workspace/work/calendar-categories-84/state.json`.
+Combined source worktree: `/workspace/canal-calendar-release`. Original copies
+were updated after full-tree guards; the original branch intentionally stays at
+its old HEAD with uncommitted copies of published work. Never reset it or use its
+index to publish. Original index SHA-256 remains
+`665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+Friend accountability sharing remains planning only. Build 84 does not claim to
+fix the separately reported iPhone crash after a Watch-owned timer restart.
+
+## Previous release: TestFlight 83 (2026-10-28)
 
 Release objective **COMPLETE**: TestFlight **1.0 (83)** finished Apple processing
 and was distributed internally at **2026-10-28 14:19:05 UTC**. Do not repeat this
