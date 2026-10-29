@@ -153,6 +153,13 @@ specific notification and clears it before input; its interruption handler also
 catches a later arrival. Permission prompts retain their explicit test actions.
 Wait for a hittable Watch control before its first tap on a cold simulator.
 
+On iPhone, notification permission dismissal does not finish the asynchronous
+Save operation. Wait until Save is enabled again before inspecting the resulting
+schedule, and reveal the status row in the lazy Form before reading it. Keep the
+queued/repeating/off assertions and the unchanged-queue refill assertion. A status
+timeout alone cannot establish an app scheduling fault; capture the actual status
+and save state on failure.
+
 The `ci/inbox-review-regression` branch repeats the phone category-review flow
 five times with core tests and both builds. Keep its exact next-item, notes,
 delete/undo, and persistence assertions. Review's Mark done/Reopen label has a

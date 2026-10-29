@@ -1629,22 +1629,34 @@ final class TimeLedgerUITests: XCTestCase {
         if allow.waitForExistence(timeout: 3) { allow.tap() }
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         if springboard.alerts.buttons["Allow"].waitForExistence(timeout: 2) { springboard.alerts.buttons["Allow"].tap() }
+        func waitForSave() {
+            // Permission dismissal and scheduling are asynchronous. Wait for
+            // the save transaction before inspecting its resulting schedule.
+            let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
+            XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 15), .completed, "Notification save did not finish: \(save.label)")
+        }
+        waitForSave()
         let status = element(app, "settings.notification-schedule-status")
+        reveal(status, in: app)
         XCTAssertTrue(status.waitForExistence(timeout: 10))
         let scheduled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Scheduled through"), object: status)
-        XCTAssertEqual(XCTWaiter.wait(for: [scheduled], timeout: 10), .completed)
+        let result = XCTWaiter.wait(for: [scheduled], timeout: 10)
+        if result != .completed {
+            print("Random queue failure hierarchy:\n\(app.debugDescription)")
+        }
+        XCTAssertEqual(result, .completed, "Status: \(status.label); save: \(save.label); enabled: \(save.isEnabled)")
         let queued = status.label
-        reveal(save, in: app); save.tap()
+        reveal(save, in: app); save.tap(); waitForSave()
         XCTAssertEqual(status.label, queued) // refilling does not postpone scheduled prompts
         recordScreen("RandomNotificationQueue", in: app)
         let timing = element(app, "settings.notification-timing"); reveal(timing, in: app); timing.tap()
-        app.buttons["Regular"].tap(); reveal(save, in: app); save.tap()
+        app.buttons["Regular"].tap(); reveal(save, in: app); save.tap(); waitForSave()
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         let repeating = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Repeats automatically"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [repeating], timeout: 10), .completed)
         let off = app.switches["settings.notifications-enabled"]; reveal(off, in: app)
         off.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
-        reveal(save, in: app); save.tap()
+        reveal(save, in: app); save.tap(); waitForSave()
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
     }
