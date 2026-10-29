@@ -17,15 +17,15 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install xcodegen
-      - name: Reproduce first-permission scheduling with failure diagnostics
+      - name: Repeat toolbar navigation and lazy Settings scrolling
         timeout-minutes: 30
         run: |
           mkdir -p native/build
           set -o pipefail
           LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
             -test-iterations 3 \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testPhoneRestartRetainsWatchAlertsAndOffersExplicitPhoneTakeover \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRandomNotificationsQueueAndSwitchBackToRepeating \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarOpensOnASeparateScreen \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentCheckInRandomQueueKeepsItsTimesAndContentAfterRelaunch \
             2>&1 | tee native/build/validation.log
       - uses: actions/upload-artifact@v4
         if: always()
