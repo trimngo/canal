@@ -595,8 +595,8 @@ final class TimeLedgerUITests: XCTestCase {
             // Toolbar controls sit outside the scrollable content bounds.
             // Scrolling the page cannot reveal them any further.
             if target.exists, !frame.isEmpty, target.isHittable,
-               navigation?.intersects(frame) == true || tabs?.intersects(frame) == true { return }
-            if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
+               navigation?.contains(frame) == true || tabs?.contains(frame) == true { return }
+            if target.exists, !frame.isEmpty, target.isHittable, frame.minY >= top, frame.maxY <= bottom - 8 { return }
             // Short drags keep lazy Form rows from being skipped by momentum.
             let height = max(100, bottom - top)
             let origin = app.coordinate(withNormalizedOffset: .zero)
@@ -1625,10 +1625,12 @@ final class TimeLedgerUITests: XCTestCase {
         element(app, "settings.notification-timing").tap(); app.buttons["Randomized"].tap()
         let allDay = app.switches["settings.notifications-all-day"]
         reveal(allDay, in: app)
-        allDay.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        allDay.switches.firstMatch.tap()
+        XCTAssertEqual(allDay.value as? String, "1")
         let enabled = app.switches["settings.notifications-enabled"]
         reveal(enabled, in: app)
-        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        enabled.switches.firstMatch.tap()
+        XCTAssertEqual(enabled.value as? String, "1")
         let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
         let allow = app.alerts.buttons["Allow"]
         if allow.waitForExistence(timeout: 3) { allow.tap() }
@@ -1660,7 +1662,8 @@ final class TimeLedgerUITests: XCTestCase {
         let repeating = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Repeats automatically"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [repeating], timeout: 10), .completed)
         let off = app.switches["settings.notifications-enabled"]; reveal(off, in: app)
-        off.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        off.switches.firstMatch.tap()
+        XCTAssertEqual(off.value as? String, "0")
         reveal(save, in: app); save.tap(); waitForSave()
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
@@ -3157,6 +3160,78 @@ final class TimeLedgerUITests: XCTestCase {
         let sdes = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare SDES lecture")).firstMatch
         XCTAssertTrue(sdes.waitForExistence(timeout: 10))
         XCTAssertFalse(sdes.label.contains("0m /"))
+    }
+
+    func testCalendarPlanSeparatesRecordedAndPlannedCategories() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        let work = app.buttons["dashboard.group.work"]
+        let matched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "1h 0m planned"), object: work)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 20), .completed)
+        XCTAssertTrue(summary.label.contains("2h 0m planned"), summary.label)
+        XCTAssertTrue(work.label.contains("66.7%"), work.label)
+        XCTAssertTrue(work.label.contains("1h 0m recorded"), work.label)
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        let expand = app.buttons["dashboard.children.music"]; reveal(expand, in: app); expand.tap()
+        let guitar = app.buttons["dashboard.group.guitar"]
+        XCTAssertTrue(guitar.waitForExistence(timeout: 10))
+        XCTAssertTrue(guitar.label.contains("30m planned"), guitar.label)
+        XCTAssertFalse(app.buttons["dashboard.direct.music"].exists)
+        recordScreen("RecordedAndPlannedBreakdown", in: app)
+        reveal(summary, in: app); summary.tap()
+        let rehearsal = element(app, "forecast.event.rehearsal")
+        XCTAssertTrue(rehearsal.waitForExistence(timeout: 10))
+        XCTAssertTrue(rehearsal.label.contains("Guitar"), rehearsal.label)
+        XCTAssertTrue(element(app, "forecast.event.unknown").label.contains("Uncategorized"))
+        XCTAssertFalse(app.buttons["log-review.save-next"].exists)
+        recordScreen("RemainingCalendarPlan", in: app)
+        app.navigationBars.buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
+    }
+
+    func testCalendarPlanPieIsTentativeAndHistoryRemainsRecordedAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        let pie = app.buttons["Show pie chart"]; reveal(pie, in: app); pie.tap()
+        let work = app.buttons["report.pie.group.work"]; reveal(work, in: app)
+        let matched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "1h 0m planned"), object: work)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 20), .completed)
+        work.tap()
+        XCTAssertTrue(element(app, "report.pie.selection").label.contains("1h 0m planned"))
+        recordScreen("PlannedPieSlices", in: app)
+        let range = element(app, "report.range"); reveal(range, in: app); range.tap(); app.buttons["Past 7 days"].tap()
+        XCTAssertTrue(summary.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        let recorded = app.buttons["report.pie.group.work"]; reveal(recorded, in: app)
+        XCTAssertTrue(recorded.label.contains("100.0%"), recorded.label)
+        XCTAssertFalse(recorded.label.contains("planned"))
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-source"]; app.launch()
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        let tracked = element(app, "report.tracked").label
+        XCTAssertTrue(tracked.hasPrefix("1h 0m tracked"), tracked)
+        XCTAssertTrue(tracked.contains("1 logs"), tracked)
+    }
+
+    func testCalendarPlanDeselectingSourceRemovesForecastWithoutChangingRecords() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        app.tabBars.buttons["Settings"].tap(); app.buttons["settings.calendars"].tap()
+        let source = app.switches["calendar.source.calendar-plan-fixture"]
+        XCTAssertTrue(source.waitForExistence(timeout: 10)); source.switches.firstMatch.tap()
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0"), object: source)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
+        app.buttons["calendar.review"].tap()
+        XCTAssertTrue(app.staticTexts["No events to confirm"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(summary.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-source"]; app.launch()
+        XCTAssertTrue(element(app, "report.tracked").waitForExistence(timeout: 20))
+        XCTAssertFalse(summary.exists)
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
     }
 
     func testCalendarReviewUsesPhraseRulesAndKeepsCategoriesAfterRelaunch() {

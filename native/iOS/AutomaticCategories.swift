@@ -45,6 +45,17 @@ actor AutomaticCategories {
         return suggest(text, model: prepareModel(ledger), examples: &examples)
     }
 
+    func suggestions(for texts: [String], in ledger: Ledger) -> [String: CategorySuggestion] {
+        guard !Task.isCancelled else { return [:] }
+        let model = prepareModel(ledger)
+        var examples: [(CategoryExample, [Double])] = [], result: [String: CategorySuggestion] = [:]
+        for text in Set(texts).sorted() {
+            if Task.isCancelled { break }
+            result[text] = suggest(text, model: model, examples: &examples)
+        }
+        return result
+    }
+
     private func prepareModel(_ ledger: Ledger) -> OfflineCategoryModel {
         // Ranking votes, goal edits and sync receipts do not retrain the model.
         // A cheap signature also lets ambiguous entries reuse an abstention

@@ -5,6 +5,7 @@ import LedgerCore
 struct HistoryPanel: View {
     @EnvironmentObject private var store: LedgerStore
     let report: HistoryReport
+    var forecast: CalendarDayForecast? = nil
     var hideZeroTime = true
     let selectDirect: (BreakdownRow) -> Void
     let select: (BreakdownRow) -> Void
@@ -13,8 +14,32 @@ struct HistoryPanel: View {
     @State private var expandedCategories = Set<String>()
     @State private var breakdownHeight: CGFloat = 150
     @State private var showingHelp = false
+    private struct PlanRequest: Identifiable {
+        let id = UUID()
+        let categoryID: String?
+        let directOnly: Bool
+    }
+    @State private var planRequest: PlanRequest?
     private let pages = ["Breakdown", "Pie chart", "Daily trend", "Heatmap", "Day comparison"]
-    private var selectedRow: BreakdownRow? { report.rows.first { $0.id == selectedGroupID } }
+    private var displayed: HistoryReport { forecast?.preview(of: report, in: store.ledger) ?? report }
+    private var selectedRow: BreakdownRow? { displayed.rows.first { $0.id == selectedGroupID } }
+    private var hasPlan: Bool { (forecast?.minutes ?? 0) > 0 }
+    private var previewMinutes: Double { max(Double.leastNormalMagnitude, displayed.trackedMinutes) }
+    private struct PieSlice: Identifiable {
+        let row: BreakdownRow
+        let minutes: Double
+        let planned: Bool
+        var id: String { row.id + (planned ? ":planned" : ":recorded") }
+    }
+    private var pieSlices: [PieSlice] {
+        displayed.rows.flatMap { row -> [PieSlice] in
+            let planned = forecast?.minutes(for: row.id, in: store.ledger) ?? 0
+            var slices: [PieSlice] = []
+            if row.minutes > planned { slices.append(PieSlice(row: row, minutes: row.minutes - planned, planned: false)) }
+            if planned > 0 { slices.append(PieSlice(row: row, minutes: planned, planned: true)) }
+            return slices
+        }
+    }
     private func color(_ id: String) -> Color {
         if id == "uncategorized" { return .orange }
         let colors: [Color] = [.teal, .blue, .purple, .pink, .indigo, .mint, .brown]
@@ -23,7 +48,7 @@ struct HistoryPanel: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Where your time went").font(.headline).accessibilityIdentifier("dashboard.breakdown-title")
+                Text(hasPlan && (page ?? 0) < 2 ? "Recorded and planned time" : "Where your time went").font(.headline).accessibilityIdentifier("dashboard.breakdown-title")
                 Button { showingHelp = true } label: { Image(systemName: "info.circle").frame(width: 32, height: 32) }
                     .buttonStyle(.plain).accessibilityLabel("About time estimates").accessibilityIdentifier("dashboard.help")
                     .popover(isPresented: $showingHelp) {
@@ -31,12 +56,16 @@ struct HistoryPanel: View {
                             Text("About time estimates").font(.headline)
                             Text("Percentages use the estimated period from half a notification interval before the first log to half an interval after the last. Random mode uses your configured average interval. Estimates stop at now and calendar-day boundaries. Days without logs are excluded.")
                             Text("Parent totals include their subcategories. Percentages use the same total throughout.")
+                            if hasPlan {
+                                Text("Pale portions are planned calendar time; stripes also mark them in the breakdown. The preview combines recorded time with the remaining timed events today. Overlaps share their time, and unscheduled time is not invented. Plans do not count toward history or goals until an ended event is confirmed. Trends, heatmap and day comparison still use recorded time.")
+                            }
                         }.font(.subheadline).padding(20).frame(idealWidth: 300, maxWidth: 340)
                             .accessibilityIdentifier("dashboard.help-content").presentationCompactAdaptation(.popover)
                     }
                 Spacer()
                 Text("\((page ?? 0) + 1) / \(pages.count)").font(.caption).foregroundStyle(.secondary)
             }.padding(.horizontal, 20)
+            if hasPlan && (page ?? 0) < 2 { calendarPlanSummary.padding(.horizontal, 20) }
             // A paging ScrollView avoids nesting UIPageViewController inside
             // the app's TabView, which can draw over the other tabs on iOS.
             GeometryReader { geometry in
@@ -82,13 +111,34 @@ struct HistoryPanel: View {
         .onPreferenceChange(BreakdownHeightKey.self) { breakdownHeight = max(150, $0) }
         .onChange(of: report.start) { _, _ in clearSelection() }
         .onChange(of: report.end) { _, _ in
-            if !report.rows.contains(where: { $0.id == selectedGroupID }) { clearSelection() }
+            if !displayed.rows.contains(where: { $0.id == selectedGroupID }) { clearSelection() }
         }
+        .sheet(item: $planRequest) { request in
+            if let forecast { CalendarForecastListView(forecast: forecast, categoryID: request.categoryID, directOnly: request.directOnly) }
+        }
+    }
+    private var calendarPlanSummary: some View {
+        Button {
+            planRequest = PlanRequest(categoryID: nil, directOnly: false)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    Label("Recorded", systemImage: "circle.fill")
+                    Label("Planned", systemImage: "circle.dashed")
+                }.font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("\(store.duration(forecast?.minutes ?? 0)) planned · \((forecast?.minutes ?? 0) / previewMinutes * 100, specifier: "%.0f")% of preview")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }.font(.subheadline)
+                Text("Tentative calendar time · confirm after events end").font(.caption).foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityIdentifier("dashboard.calendar-plan")
     }
     private var breakdown: some View {
             VStack(spacing: 14) {
-                if report.rows.isEmpty { empty }
-                ForEach(report.categoryOutline(in: store.ledger, expanded: expandedCategories, hideZeroTime: hideZeroTime)) { item in
+                if displayed.rows.isEmpty { empty }
+                ForEach(displayed.categoryOutline(in: store.ledger, expanded: expandedCategories, hideZeroTime: hideZeroTime)) { item in
                     breakdownRow(item)
                 }
             }.padding(.bottom, 8).fixedSize(horizontal: false, vertical: true)
@@ -113,10 +163,10 @@ struct HistoryPanel: View {
                     .accessibilityIdentifier("dashboard.children.\(item.row.id)")
             } else { Color.clear.frame(width: 28, height: 1).accessibilityHidden(true) }
             if item.direct {
-                Button { selectDirect(item.row) } label: { breakdownValue(item) }
+                Button { openBreakdown(item) } label: { breakdownValue(item) }
                     .buttonStyle(.plain).accessibilityIdentifier("dashboard.direct.\(item.row.id)")
             } else {
-                Button { select(item.row) } label: { breakdownValue(item) }
+                Button { openBreakdown(item) } label: { breakdownValue(item) }
                     .buttonStyle(.plain).accessibilityIdentifier("dashboard.group.\(item.row.id)")
             }
         }.padding(.leading, CGFloat(item.depth) * 16)
@@ -131,23 +181,45 @@ struct HistoryPanel: View {
                 Text("\(item.row.percent, specifier: "%.1f")% · \(store.duration(item.row.minutes))").font(.subheadline).foregroundStyle(.secondary)
                 if !item.direct { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
             }
-            ProgressView(value: min(1, item.row.percent / 100)).tint(color(item.row.id))
+            if let planned = forecast?.minutes(for: item.row.id, in: store.ledger, direct: item.direct), planned > 0 {
+                let recorded = max(0, item.row.minutes - planned)
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        Rectangle().fill(color(item.row.id)).frame(width: geometry.size.width * CGFloat(recorded / previewMinutes))
+                        Rectangle().fill(color(item.row.id).opacity(0.25)).overlay { CalendarPlanHatching(color: color(item.row.id)) }
+                            .frame(width: geometry.size.width * CGFloat(planned / previewMinutes))
+                        Spacer(minLength: 0)
+                    }.background(Color.secondary.opacity(0.12)).clipShape(Capsule())
+                }.frame(height: 6).accessibilityHidden(true)
+                Text("\(store.duration(recorded)) recorded · \(store.duration(planned)) planned")
+                    .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("dashboard.plan-share.\(item.id)")
+            } else {
+                ProgressView(value: min(1, item.row.percent / 100)).tint(color(item.row.id))
+            }
             let pending = report.unreviewed(for: item.row.id, in: store.ledger, direct: item.direct)
             if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
         }.padding(.vertical, 6).contentShape(Rectangle())
     }
+    private func openBreakdown(_ item: HistoryCategoryRow) {
+        let planned = forecast?.minutes(for: item.row.id, in: store.ledger, direct: item.direct) ?? 0
+        if planned > 0 && item.row.minutes - planned < 0.001 {
+            planRequest = PlanRequest(categoryID: item.row.id, directOnly: item.direct)
+        } else if item.direct { selectDirect(item.row) }
+        else { select(item.row) }
+    }
     private func pie(diameter: CGFloat) -> some View {
         ScrollView {
             VStack(spacing: 12) {
-                if report.rows.isEmpty { empty }
+                if displayed.rows.isEmpty { empty }
                 else {
                     ZStack {
-                        Chart(report.rows) { row in
-                            SectorMark(angle: .value("Time", row.minutes), innerRadius: .ratio(0.58), angularInset: 2)
-                                .foregroundStyle(color(row.id))
-                                .opacity(selectedGroupID == nil || selectedGroupID == row.id ? 1 : 0.4)
-                                .accessibilityLabel(row.name)
-                                .accessibilityValue("\(Int(row.percent.rounded())) percent, \(store.duration(row.minutes))")
+                        Chart(pieSlices) { slice in
+                            SectorMark(angle: .value("Time", slice.minutes), innerRadius: .ratio(0.58), angularInset: 2)
+                                .foregroundStyle(color(slice.row.id).opacity(slice.planned ? 0.3 : 1))
+                                .opacity(selectedGroupID == nil || selectedGroupID == slice.row.id ? 1 : 0.4)
+                                .accessibilityLabel(slice.row.name + (slice.planned ? ", planned" : ", recorded"))
+                                .accessibilityValue("\(Int((slice.minutes / previewMinutes * 100).rounded())) percent, \(store.duration(slice.minutes))")
                         }.chartOverlay { proxy in
                             GeometryReader { geometry in
                                 if let anchor = proxy.plotFrame {
@@ -161,7 +233,7 @@ struct HistoryPanel: View {
                         // Recreate sector geometry when categories merge or
                         // disappear. Reusing the old Charts plot can trap while
                         // interpolating a removed sector on iOS 18.
-                        .id(report.rows.map(\.id))
+                        .id(pieSlices.map(\.id))
                         .transaction { $0.animation = nil }
                         .accessibilityIdentifier("report.pie.chart")
                         // Keep the label outside Chart's generated accessibility
@@ -171,6 +243,9 @@ struct HistoryPanel: View {
                                 Text(row.name).font(.caption.bold()).lineLimit(2).minimumScaleFactor(0.7)
                                 Text("\(row.percent, specifier: "%.1f")%").font(.caption)
                                 Text(store.duration(row.minutes)).font(.caption2).foregroundStyle(.secondary)
+                                if let planned = forecast?.minutes(for: row.id, in: store.ledger), planned > 0 {
+                                    Text("\(store.duration(planned)) planned").font(.caption2).foregroundStyle(.secondary)
+                                }
                             } else {
                                 Text("Tap a slice").font(.caption).foregroundStyle(.secondary)
                             }
@@ -182,12 +257,17 @@ struct HistoryPanel: View {
                         let pending = report.unreviewed(for: row.id, in: store.ledger)
                         if pending > 0 { Text("Includes \(store.duration(pending)) awaiting category review").font(.caption2).foregroundStyle(.secondary) }
                     }
-                    ForEach(report.rows) { row in
+                    ForEach(displayed.rows) { row in
                         Button { selectedGroupID = row.id } label: {
                             HStack {
                                 Circle().fill(color(row.id)).frame(width: 8, height: 8)
                                 Text(row.name).foregroundStyle(.primary); Spacer()
-                                Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text("\(row.percent, specifier: "%.1f")% · \(store.duration(row.minutes))").foregroundStyle(.secondary)
+                                    if let planned = forecast?.minutes(for: row.id, in: store.ledger), planned > 0 {
+                                        Text("\(store.duration(planned)) planned").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
                             }.font(.subheadline).frame(minHeight: 44).contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityIdentifier("report.pie.group.\(row.id)")
                             .accessibilityAddTraits(selectedGroupID == row.id ? .isSelected : [])
@@ -207,12 +287,12 @@ struct HistoryPanel: View {
         guard distance >= radius * 0.58, distance <= radius else { return }
         var angle = atan2(dx, -dy) // Clockwise from twelve, matching SectorMark.
         if angle < 0 { angle += 2 * Double.pi }
-        let value = angle / (2 * Double.pi) * report.rows.reduce(0) { $0 + $1.minutes }
+        let value = angle / (2 * Double.pi) * pieSlices.reduce(0) { $0 + $1.minutes }
         var total = 0.0
-        selectedGroupID = report.rows.first { row in
-            total += row.minutes
+        selectedGroupID = pieSlices.first { slice in
+            total += slice.minutes
             return value < total
-        }?.id
+        }?.row.id
     }
 }
 

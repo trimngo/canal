@@ -9,6 +9,7 @@ struct DayView: View {
 struct AllocationHistoryView: View {
     @EnvironmentObject var store: LedgerStore
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var calendars = CalendarImport.shared
     @State private var now = Date()
     @State private var selectedGroup: CategoryDetailRequest?
     @State private var managingGroups = false
@@ -18,6 +19,12 @@ struct AllocationHistoryView: View {
     @State private var end = Date()
     @State private var selectedDay: Date?
     @AppStorage("dashboard.hide-zero-time") private var hideZeroTime = true
+    private var currentDate: Date {
+        #if DEBUG
+        if CalendarForecastFixture.enabled { return CalendarForecastFixture.now }
+        #endif
+        return Date()
+    }
 
     var body: some View {
         let report = store.ledger.history(range: range, start: start, end: end, now: now, anchor: selectedDay)
@@ -25,10 +32,10 @@ struct AllocationHistoryView: View {
         let pending = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.map(\.id)
         let reviewCount = unreviewed.count + pending.count
         return content(report: report)
-            .onAppear { now = Date() }
-            .onReceive(store.$ledger.dropFirst()) { _ in now = Date() }
-            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0; Task { await CalendarImport.shared.refresh() } }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
+            .onAppear { now = currentDate; calendars.refreshForecastCategories() }
+            .onReceive(store.$ledger.dropFirst()) { _ in now = currentDate; calendars.refreshForecastCategories() }
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in now = currentDate; Task { await CalendarImport.shared.refresh() } }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { now = currentDate } }
             .navigationTitle(range == .today ? periodLabel : "Your time").navigationBarTitleDisplayMode(.inline)
             .onChange(of: range) { _, _ in selectedDay = nil }
             .toolbar {
@@ -53,8 +60,8 @@ struct AllocationHistoryView: View {
                         .accessibilityValue(hideZeroTime ? "Zero-time categories hidden" : "All categories shown")
                 }
             }
-            .sheet(isPresented: $managingGroups, onDismiss: { now = Date() }) { GroupManagerView() }
-            .sheet(item: $selectedGroup, onDismiss: { now = Date() }) { group in
+            .sheet(isPresented: $managingGroups, onDismiss: { now = currentDate }) { GroupManagerView() }
+            .sheet(item: $selectedGroup, onDismiss: { now = currentDate }) { group in
                 CategoryDetailView(request: group)
             }
             .sheet(item: $reviewing, onDismiss: { now = Date() }) { request in LogReviewView(entryIDs: request.entryIDs, calendarIDs: request.calendarIDs) }
@@ -62,7 +69,9 @@ struct AllocationHistoryView: View {
     }
 
     private func content(report: HistoryReport) -> some View {
-        ScrollView {
+        let isCurrentDay = range == .today && store.ledger.reportingCalendar().isDate(report.start, inSameDayAs: now)
+        let forecast = isCurrentDay ? store.ledger.calendarForecast(calendars.plannedEvents, on: now, now: now) : nil
+        return ScrollView {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 4) {
@@ -97,7 +106,7 @@ struct AllocationHistoryView: View {
                 DaylightDashboardView()
             }.padding(.horizontal, 20).padding(.vertical, 8)
             Divider()
-            HistoryPanel(report: report, hideZeroTime: hideZeroTime, selectDirect: { row in
+            HistoryPanel(report: report, forecast: forecast, hideZeroTime: hideZeroTime, selectDirect: { row in
                 selectedGroup = CategoryDetailRequest(id: row.id, name: row.name, start: report.start, end: report.end, directOnly: true, allTime: false)
             }) { row in
                 selectedGroup = CategoryDetailRequest(id: row.id, name: row.name, start: report.start, end: report.end, allTime: false)
