@@ -5,6 +5,56 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active work: calendar categorization and release validation (2026-10-28)
+
+The user's calendar request is implemented: Review logs uses the same offline
+AutomaticCategories actor as ordinary logs and Inbox ideas, including custom
+phrase rules, multiple categories, child precedence, confirmed examples, matching
+coverage, and optional sentence embeddings. Late matches preserve manual choices,
+including Uncategorized. Confirmation and original event periods remain intact.
+Read [native/docs/calendar-categorization.md](native/docs/calendar-categorization.md).
+
+PR #8: https://github.com/trimngo/canal/pull/8. The earlier calendar source
+`45ebc04540888a726861d5960f2fcd97cde888e0` passed all focused calendar checks,
+and every calendar regression passed in full iPhone runs. Full run `40743216270`
+was delayed by cold setup/timeouts and explicit GitHub macOS ARM capacity. Its
+final attempt had three green phone shards (102 tests), one phone review-action
+failure (32 passed), and 16/18 Watch tests. Those partial results do not complete
+the final release gate. Keep every assertion and run all 493 core, 135 phone UI,
+and 18 Watch UI cases on the final candidate before merge and delivery.
+
+The candidate also fixes the phone review Mark done/Reopen label's 18-point touch
+area with a 44-point rectangular target. All five focused repetitions passed on
+`b6fd443a54b445fbb9cb9104b1930aec69fd5c7d`, run `40773007096`, job
+`123114890781`, alongside 493 core tests and both builds. The Watch test harness
+clears a prior Dash notification only after its actual contents load, waits for
+hittable controls, and preserves permission interactions. The one-tap Home timer
+flow passed twice; the revised notification-isolation sequence passed all three
+flows twice on `b24ae57f23a5da6b969fd3b8eb865892eef78759`, run `40777796685`,
+job `123131483870`.
+Six timer regressions passed on `cc49c55efbd8094c7bfa14364d8d3d9d9af4b147` in
+run `40771490706`, job `123109984950`. No Watch production code changed.
+
+Simulator validation compiles only the host architecture; archive settings stay
+separate. All 25 local packaging/CI checks passed after that change. Read
+[native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md) for the focused
+notification and review workflows and the required full release checks.
+
+Checkpoint, exact candidate identities, results, and backups:
+`/workspace/work/calendar-categories-84/state.json`. Combined worktree:
+`/workspace/canal-calendar-release`; isolated source worktrees:
+`/workspace/canal-watch-recovery` and `/workspace/canal-inbox-recovery`.
+Focused checks are green. Publish the combined candidate for the complete PR
+checks; never cancel healthy checks to iterate.
+Preserve original uncommitted files and index. Continue through processed and
+internal TestFlight delivery under the user's standing authorization; build 83
+remains latest until the new build actually completes. Planned build 84 must be
+verified from the package and Apple processing, not assumed from the plan.
+
+The separate iPhone crash remains open; the user already sent its TestFlight
+report. Friend accountability sharing remains planning only. Keep existing work
+active when discussing new ideas.
+
 ## Latest release: TestFlight 83 (2026-10-28)
 
 Release objective **COMPLETE**: TestFlight **1.0 (83)** finished Apple processing
@@ -76,8 +126,8 @@ The timer originally alerted using the Watch mechanism, not phone AlarmKit.
 Installed phone/Watch build numbers remain unverified; do not infer the cause
 from unrelated reports or assume the phone-owned AlarmKit Stop path was used.
 
-Apple diagnostics were refreshed after that confirmation in run `40614417738`,
-attempt 6, job `122910746670`, at 2026-10-28T15:22:05.6916663Z. Build 83 was independently confirmed
+Apple diagnostics were most recently refreshed in run `40721752796`,
+job `123124473273`, at 2026-10-28T21:54:37.0631636Z. Build 83 was independently confirmed
 VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple still listed three
 submitted reports: two available logs from build 9 and one unavailable log (404). No current
 matching crash was found. Read-only code review covered WatchConnectivity receive/
@@ -317,7 +367,7 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 132 iPhone UI tests run across four shards. Keep the complete test set and
+- All 135 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
   Run all 18 Watch UI tests. Repeating WatchKit haptics still require
@@ -337,7 +387,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 493 core, 132 iPhone UI, and 18 Watch UI tests must pass.
+checks: all 493 core, 135 iPhone UI, and 18 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish

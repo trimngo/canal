@@ -236,6 +236,26 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-calendar-matching") {
+                var fixture = Ledger()
+                fixture.categories = [LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "guitar", name: "Guitar"),
+                    LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "personal", name: "Personal")]
+                try fixture.moveCategory("guitar", to: "music", writer: "fixture")
+                fixture.settings.categoryMatching = .broader
+                fixture.settings.categoryMatchRules = [.init(phrase: "rehearsal", categoryID: "music"),
+                    .init(phrase: "rehearsal", categoryID: "guitar"), .init(phrase: "slides", categoryID: "work"),
+                    .init(phrase: "solo", categoryID: "personal")]
+                let now = Date(), learned = ProcessInfo.processInfo.arguments.contains("--ui-calendar-learned")
+                if learned {
+                    try fixture.saveSample(id: "ui-training", at: now.addingTimeInterval(-3600), activity: "Practicing cello",
+                        categoryIDs: ["music"], writer: "fixture", now: now)
+                }
+                let event = CalendarEventSnapshot(id: "ui-matching", calendarID: "fixture", calendarName: "Practice calendar",
+                    title: learned ? "Tuning cello" : "Rehearsal with slides",
+                    start: now.addingTimeInterval(-1860), end: now.addingTimeInterval(-60))
+                fixture.collectCalendarEvents([event], writer: "fixture", now: now)
+                try JSONEncoder().encode(fixture).write(to: file, options: [.atomic])
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-today-urgent") {
                 var fixture = Ledger()
                 fixture.categories = [LedgerCategory(id: "work", name: "Work"), LedgerCategory(id: "teaching", name: "Teaching"), LedgerCategory(id: "music", name: "Music")]
@@ -846,6 +866,7 @@ final class LedgerStore: ObservableObject {
         try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, writer: writer)
         if confirm, let entry = draft.calendarEvents?.first(where: { $0.id == id }) {
             try draft.updateLogActivity(id: entry.logID, activity: activity, writer: writer)
+            try draft.confirmCategories(for: entry.logID, categoryIDs: categoryIDs, writer: writer)
             try draft.setMood(for: entry.logID, value: mood, writer: writer)
             try draft.assignTask(goalID, to: entry.logID, writer: writer)
         }

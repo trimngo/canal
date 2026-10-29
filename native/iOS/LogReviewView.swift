@@ -25,7 +25,21 @@ struct LogReviewView: View {
     @State private var mood: Int?
     @State private var goalID: String?
     @State private var activityDraft = ""
+    @State private var calendarActivityText = ""
     @State private var error: String?
+    @State private var calendarSuggestion: CategorySuggestion?
+    @State private var matchingCalendar = false
+    @State private var categoriesWereEdited = false
+    private struct CalendarSuggestionRequest: Hashable {
+        let eventID: String
+        let text: String
+    }
+    private var categorySelection: Binding<[String]> {
+        Binding(get: { categories }, set: { categories = $0; categoriesWereEdited = true })
+    }
+    private var calendarSuggestionRequest: CalendarSuggestionRequest? {
+        event.map { CalendarSuggestionRequest(eventID: $0.id, text: OfflineGrouping.normalized(activityDraft)) }
+    }
     private var item: LogReviewItem? { index < queue.count ? queue[index] : nil }
     private var event: CalendarEventRecord? {
         guard case .calendar(let id) = item else { return nil }
@@ -47,8 +61,12 @@ struct LogReviewView: View {
         NavigationStack {
             Group {
                 if let entry = current {
-                    CategorySelectionList(selection: $categories, activity: entry.activity, timestamp: entry.end, mood: $mood,
-                        saveActivity: { if event == nil { try store.updateLogActivity(id: entry.id, activity: $0) } },
+                    CategorySelectionList(selection: categorySelection, activity: event == nil ? entry.activity : calendarActivityText, timestamp: entry.end, mood: $mood,
+                        saveActivity: {
+                            guard current?.id == entry.id else { return }
+                            if event == nil { try store.updateLogActivity(id: entry.id, activity: $0) }
+                            else { calendarActivityText = $0 }
+                        },
                         activityDraft: Binding(get: { activityDraft }, set: { if current?.id == entry.id { activityDraft = $0 } }), showsKeyboardDone: false)
                         .safeAreaInset(edge: .top, spacing: 0) {
                             VStack(alignment: .leading, spacing: 6) {
@@ -59,10 +77,14 @@ struct LogReviewView: View {
                                     Text("\(store.dayLabel(event.snapshot.start)) \(store.time(event.snapshot.start))–\(endLabel) · \(store.duration(max(0, end.timeIntervalSince(event.snapshot.start) / 60)))")
                                         .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("log-review.calendar-period")
                                     if end < event.snapshot.end { Text("Ends at your first overlapping log. That log takes over from there.").font(.caption).foregroundStyle(.secondary) }
-                                } else if let suggestion = entry.categorySuggestion {
-                                    Label("Suggested · \(suggestion.reason)", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
                                 }
-                                LogTaskPicker(goalID: $goalID, categoryIDs: $categories)
+                                if let suggestion = event == nil ? entry.categorySuggestion : calendarSuggestion {
+                                    Label("Suggested · \(suggestion.reason)", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel("Suggested · \(suggestion.reason)")
+                                        .accessibilityIdentifier("log-review.suggestion")
+                                }
+                                LogTaskPicker(goalID: $goalID, categoryIDs: categorySelection)
                             }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal).padding(.vertical, 6).background(.bar)
                         }
                         .safeAreaInset(edge: .bottom) {
@@ -82,7 +104,8 @@ struct LogReviewView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.accessibilityIdentifier("log-review.close") }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(event == nil ? "Save & next" : "Confirm & next") { saveAndAdvance() }
-                        .disabled(current == nil || !store.storageAvailable).accessibilityIdentifier("log-review.save-next")
+                        .disabled(current == nil || !store.storageAvailable || (event != nil && matchingCalendar && !categoriesWereEdited))
+                        .accessibilityIdentifier("log-review.save-next")
                 }
             }
             .onAppear {
@@ -100,14 +123,34 @@ struct LogReviewView: View {
                 }
             }
             .onChange(of: current?.id) { _, _ in loadCurrent() }
+            .task(id: calendarSuggestionRequest) {
+                guard let request = calendarSuggestionRequest else { return }
+                matchingCalendar = true; calendarSuggestion = nil
+                if !categoriesWereEdited { categories = [] }
+                do {
+                    try await Task.sleep(for: .milliseconds(150))
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--ui-calendar-matching-delay") {
+                        try await Task.sleep(for: .seconds(5))
+                    }
+                    #endif
+                } catch { return }
+                let suggestion = await AutomaticCategories.shared.suggestion(for: request.text, in: store.ledger)
+                guard !Task.isCancelled, request == calendarSuggestionRequest else { return }
+                calendarSuggestion = suggestion
+                // A late result or edited title must never replace the user's
+                // selected categories, including an explicit Uncategorized.
+                if !categoriesWereEdited { categories = suggestion?.categoryIDs ?? [] }
+                matchingCalendar = false
+            }
         }
     }
     private func loadCurrent() {
         while index < queue.count, current == nil { index += 1 }
         guard let entry = current else { if loaded { dismiss() }; return }
         categories = store.ledger.effectiveCategoryIDs(for: entry)
-        if event != nil, let suggested = store.ledger.suggestedCategory(for: entry.activity) { categories = [suggested] }
-        mood = entry.mood; goalID = entry.goalID; activityDraft = entry.activity; error = nil
+        calendarSuggestion = nil; matchingCalendar = event != nil; categoriesWereEdited = false
+        mood = entry.mood; goalID = entry.goalID; activityDraft = entry.activity; calendarActivityText = entry.activity; error = nil
     }
     private func saveAndAdvance(skip: Bool = false) {
         guard let entry = current else { return }

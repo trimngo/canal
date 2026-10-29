@@ -1,6 +1,6 @@
 # CI iteration and TestFlight delivery
 
-PRs run **Native Apple checks**: 493 core tests, all 132 iPhone UI tests across
+PRs run **Native Apple checks**: 493 core tests, all 135 iPhone UI tests across
 four shards, and all 18 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
 Native source changes must go through a PR with the full checks green. The
@@ -10,6 +10,11 @@ and queued delivery for about 32 minutes. TestFlight still validates core and
 builds both apps before its signed archive. Manual full checks remain available.
 Feature branch pushes do not duplicate the PR workflow.
 
+Simulator builds and UI test bundles use the Mac runner's architecture through
+`ARCHS` and `ONLY_ACTIVE_ARCH`. Generic simulator destinations otherwise compile
+both arm64 and x86_64 even though tests execute on one host. These arguments stay
+inside the simulator scripts; signed archives retain their own build settings.
+
 ## AlarmKit trial checks
 
 Use `ci/alarmkit-sdk` for core/packaging and both app builds. Use
@@ -18,7 +23,7 @@ API failure fallback, default Stop without task completion, permission denial,
 saved haptics-only preference, and opted-in Stop completion/automatic next.
 These use a DEBUG mock at the system API boundary; production never uses it.
 Real Watch forwarding, buttons, and repeating haptics need physical testing.
-Focused checks never replace all 132 iPhone and 18 Watch tests before release.
+Focused checks never replace all 135 iPhone and 18 Watch tests before release.
 The full Watch step has 35 minutes within its 45-minute job; a cold 17-minute
 setup plus the full UI suite exceeded the previous 30-minute step budget.
 Phone validation has 55 minutes within a 65-minute job: build 81 needed up to
@@ -93,5 +98,31 @@ release check; focused success alone never authorizes a release.
 
 Use `ci/complication-*` for all 493 core tests, packaging checks, and both app
 builds. Read [watch-complication-refresh.md](watch-complication-refresh.md).
-These checks do not replace all 132 phone and 18 Watch UI cases before release.
+These checks do not replace all 135 phone and 18 Watch UI cases before release.
 WidgetKit face refresh timing still needs a physical Watch check.
+
+## Calendar categorization checks
+
+Push `ci/calendar-*` for all 493 core tests, both app builds, and the three new
+calendar category regressions plus existing calendar period/goal accounting.
+These exercise the real shared matcher, including a DEBUG-only async delay that
+checks manual choices against late results. Read [calendar-categorization.md](calendar-categorization.md).
+Full release checks still require every one of the 135 phone and 18 Watch UI cases.
+
+## Notification and review-control recovery checks
+
+Push `ci/notification-ui-*` to repeat the Watch automatic-delivery, Cancel/no-log,
+and one-tap Home timer-input flows twice. This is separate from the six timer
+regressions, so notification-test iteration does not restart a healthy full run.
+Carousel can expose a notification before its Dash/Dismiss contents exist and
+can deliver it after the preceding test ends. The UI harness waits for that
+specific notification and clears it before input; its interruption handler also
+catches a later arrival. Permission prompts retain their explicit test actions.
+Wait for a hittable Watch control before its first tap on a cold simulator.
+
+The `ci/inbox-review-regression` branch repeats the phone category-review flow
+five times with core tests and both builds. Keep its exact next-item, notes,
+delete/undo, and persistence assertions. Review's Mark done/Reopen label has a
+44-point rectangular touch target; use a hittable semantic tap and record the
+actual review position and hierarchy if advancement fails. Focused checks never
+replace all 135 phone and 18 Watch tests on the final release candidate.

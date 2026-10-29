@@ -24,6 +24,28 @@ actor AutomaticCategories {
         let logs = ledger.activeEntries.filter { ledger.needsCategoryReview($0) && $0.categorySuggestion == nil }
         let ideas = ledger.captures.filter { $0.deletedAt == nil && $0.categoriesReviewed != true && $0.categorySuggestion == nil && ledger.categoryIDs(for: $0).isEmpty }
         guard !logs.isEmpty || !ideas.isEmpty else { return ([:], [:]) }
+        let model = prepareModel(ledger)
+        var examples: [(CategoryExample, [Double])] = []
+        var logResults: [String: CategorySuggestion] = [:], ideaResults: [String: CategorySuggestion] = [:]
+        for entry in logs {
+            if Task.isCancelled { break }
+            logResults[entry.id] = suggest(entry.activity, model: model, examples: &examples)
+        }
+        for idea in ideas {
+            if Task.isCancelled { break }
+            ideaResults[idea.id] = suggest(idea.text, model: model, examples: &examples)
+        }
+        return (logResults, ideaResults)
+    }
+
+    /// Calendar review uses the same rules, learned examples, caches, and
+    /// optional sentence embeddings as ordinary logs and Inbox ideas.
+    func suggestion(for text: String, in ledger: Ledger) -> CategorySuggestion? {
+        var examples: [(CategoryExample, [Double])] = []
+        return suggest(text, model: prepareModel(ledger), examples: &examples)
+    }
+
+    private func prepareModel(_ ledger: Ledger) -> OfflineCategoryModel {
         // Ranking votes, goal edits and sync receipts do not retrain the model.
         // A cheap signature also lets ambiguous entries reuse an abstention
         // until confirmed examples or category names actually change.
@@ -38,41 +60,40 @@ actor AutomaticCategories {
             hash.combine(idea.id); hash.combine(idea.text); hash.combine(idea.categoryIDs)
         }
         let key = hash.finalize()
-        if key != trainingKey {
-            learned = OfflineCategoryModel(ledger: ledger, matching: ledger.settings.effectiveCategoryMatching); trainingKey = key; results.removeAll(keepingCapacity: true)
+        if key == trainingKey, let learned { return learned }
+        let model = OfflineCategoryModel(ledger: ledger, matching: ledger.settings.effectiveCategoryMatching)
+        learned = model; trainingKey = key; results.removeAll(keepingCapacity: true)
+        return model
+    }
+
+    private func suggest(_ text: String, model: OfflineCategoryModel,
+                         examples: inout [(CategoryExample, [Double])]) -> CategorySuggestion? {
+        let key = OfflineGrouping.normalized(text)
+        if let cached = results[key] {
+            switch cached { case .match(let value): return value; case .ambiguous: return nil }
         }
-        guard let model = learned else { return ([:], [:]) }
-        var examples: [(CategoryExample, [Double])] = []
-        func suggest(_ text: String) -> CategorySuggestion? {
-            let key = OfflineGrouping.normalized(text)
-            if let cached = results[key] {
-                switch cached { case .match(let value): return value; case .ambiguous: return nil }
-            }
-            let result = compute(text)
-            if results.count > 2000 { results.removeAll(keepingCapacity: true) }
-            results[key] = result.map(Cached.match) ?? .ambiguous
-            return result
+        let result = compute(text, model: model, examples: &examples)
+        if results.count > 2000 { results.removeAll(keepingCapacity: true) }
+        results[key] = result.map(Cached.match) ?? .ambiguous
+        return result
+    }
+
+    private func compute(_ text: String, model: OfflineCategoryModel,
+                         examples: inout [(CategoryExample, [Double])]) -> CategorySuggestion? {
+        if let result = model.suggest(text) { return result }
+        guard let query = vector(text) else { return nil }
+        if examples.isEmpty {
+            examples = model.examples.suffix(400).compactMap { example in vector(example.text).map { (example, $0) } }
         }
-        func compute(_ text: String) -> CategorySuggestion? {
-            if let result = model.suggest(text) { return result }
-            guard let query = vector(text) else { return nil }
-            if examples.isEmpty {
-                examples = model.examples.suffix(400).compactMap { example in vector(example.text).map { (example, $0) } }
-            }
-            let queryNorm = sqrt(query.reduce(0) { $0 + $1 * $1 })
-            guard queryNorm > 0 else { return nil }
-            let matches = examples.compactMap { example, value -> SemanticCategoryMatch? in
-                guard value.count == query.count else { return nil }
-                let norm = sqrt(value.reduce(0) { $0 + $1 * $1 })
-                guard norm > 0 else { return nil }
-                let similarity = zip(query, value).reduce(0) { $0 + $1.0 * $1.1 } / (queryNorm * norm)
-                return SemanticCategoryMatch(categoryIDs: example.categoryIDs, similarity: similarity)
-            }
-            return model.suggest(text, semantic: matches)
+        let queryNorm = sqrt(query.reduce(0) { $0 + $1 * $1 })
+        guard queryNorm > 0 else { return nil }
+        let matches = examples.compactMap { example, value -> SemanticCategoryMatch? in
+            guard value.count == query.count else { return nil }
+            let norm = sqrt(value.reduce(0) { $0 + $1 * $1 })
+            guard norm > 0 else { return nil }
+            let similarity = zip(query, value).reduce(0) { $0 + $1.0 * $1.1 } / (queryNorm * norm)
+            return SemanticCategoryMatch(categoryIDs: example.categoryIDs, similarity: similarity)
         }
-        var logResults: [String: CategorySuggestion] = [:], ideaResults: [String: CategorySuggestion] = [:]
-        for entry in logs { if Task.isCancelled { break }; logResults[entry.id] = suggest(entry.activity) }
-        for idea in ideas { if Task.isCancelled { break }; ideaResults[idea.id] = suggest(idea.text) }
-        return (logResults, ideaResults)
+        return model.suggest(text, semantic: matches)
     }
 }
