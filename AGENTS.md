@@ -396,6 +396,14 @@ the resulting UI state.
 - Watch haptic picker popup choices are accessibility **Buttons**. The selected
   value in the settings form is a StaticText. Drain the test timer's own system
   notification before launching the next fixture.
+- Inbox capture focuses asynchronously. Non-capture `openInbox` setup explicitly
+  selects Inbox, focuses the capture input, waits for the keyboard, taps the stable
+  Inbox navigation bar, and waits for disappearance. Do not use a one-second
+  absence check: the keyboard can arrive afterward and move the next tab tap.
+  Reminders cleanup must verify Settings is selected before revealing Disconnect.
+- Goal-number setup waits for the keyboard, an enabled/hittable Done control, and
+  keyboard disappearance after its single tap before another edit or termination.
+  A completed XCTest gesture alone does not prove focus callbacks finished.
 - Cold simulators can show Apple’s `UIContinuousPathIntroductionView` over the
   keyboard toolbar. The iPhone suite warms up the keyboard once per runner and
   dismisses only that tutorial’s Continue button. Keep real typing/Done/persistence

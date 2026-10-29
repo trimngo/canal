@@ -172,6 +172,16 @@ backward search covers the forward travel plus rows preceding the starting
 position. A symmetric forward/back count can finish near its starting point and
 miss an earlier Settings row. Keep destination and persistence assertions.
 
+Inbox focuses its capture input asynchronously. Non-capture setup explicitly
+focuses that field and waits for its keyboard before dismissing through the stable
+Inbox navigation bar and waiting for disappearance. A one-second absence check can
+finish before the keyboard appears, moving the next Settings tap; a Reminders
+cleanup failure showed the app still in Inbox. Verify the destination tab is
+selected before looking for its lazy controls. Goal-number setup waits for the
+keyboard, an enabled/hittable Done control, and keyboard disappearance after one
+tap before starting another edit or terminating. Keep the saved-value, deletion,
+source-isolation, and relaunch assertions; these are test setup changes.
+
 The `ci/inbox-review-regression` branch repeats the phone category-review flow
 five times with core tests and both builds. Keep its exact next-item, notes,
 delete/undo, and persistence assertions. Review's Mark done/Reopen label has a

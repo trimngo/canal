@@ -975,9 +975,11 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [reloaded], timeout: 25), .completed)
         openInbox(app)
         XCTAssertFalse(app.staticTexts["Reminders bicycle idea UI fixture"].exists)
-        app.tabBars.buttons["Settings"].tap()
+        let settings = app.tabBars.buttons["Settings"]; settings.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: settings)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
-        XCTAssertFalse(importNow.exists)
+        XCTAssertTrue(importNow.waitForNonExistence(timeout: 10))
     }
 
     func testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted() {
@@ -2145,10 +2147,17 @@ final class TimeLedgerUITests: XCTestCase {
         }
         let field = app.textFields[id]; reveal(field, in: app)
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12)); field.typeText(value)
         if value.isEmpty { XCTAssertTrue(["", "—"].contains(field.value as? String ?? "")) }
         else { XCTAssertEqual(field.value as? String, value) }
-        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let done = app.buttons["keyboard.done"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true AND enabled == true"), object: done)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        done.tap()
+        // Finishing the gesture does not guarantee keyboard/focus callbacks
+        // have finished. Observe completion before another edit or relaunch.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 10))
     }
 
     func testRankedIdeasStayFirstAndNewIdeasHaveTheirOwnSectionAndShortcut() {
@@ -2458,15 +2467,18 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func openInbox(_ app: XCUIApplication, capture: Bool = false) {
-        app.tabBars.buttons["Inbox"].tap()
-        if !capture, app.keyboards.firstMatch.waitForExistence(timeout: 1) {
-            // Setup should use the explicit dismissal control. A separate
-            // keyboard test verifies tapping outside the input itself.
-            let done = app.buttons["keyboard.done"]
-            if done.waitForExistence(timeout: 5), done.isHittable { done.tap() }
-            else { app.navigationBars["Inbox"].tap() }
-            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
-            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        let inbox = app.tabBars.buttons["Inbox"]
+        inbox.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: inbox)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
+        if !capture {
+            // Inbox focuses its input asynchronously. A short absence check
+            // can miss a late keyboard that then moves the next tap's target.
+            // Establish focus explicitly, then dismiss through a stable bar.
+            let field = element(app, "inbox.text"); reveal(field, in: app); field.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+            app.navigationBars["Inbox"].tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 10))
         }
     }
 
