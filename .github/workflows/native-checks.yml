@@ -1,7 +1,6 @@
 name: Native Apple checks
 on:
   pull_request:
-    paths: ['native/**', '.github/workflows/native-*.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,11 +8,32 @@ concurrency:
   group: native-checks-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.scope.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check validation routing
+        run: python3 -m unittest discover -s .github/scripts -p 'test_native_changes.py' -v
+      - name: Select applicable checks
+        id: scope
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/native_changes.py >> "$GITHUB_OUTPUT"
   watch-ui:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     uses: ./.github/workflows/native-watch.yml
     with:
       focus: false
   build:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     runs-on: macos-15
     # Four phone shards plus Watch fit the observed five-Mac concurrency.
     # Keep every UI test; extra shards create a second simulator-boot wave.
@@ -83,3 +103,27 @@ jobs:
           name: native-validation-log-${{ matrix.shard }}
           path: native/build/validation.log
           retention-days: 7
+  native-validation:
+    name: Native validation
+    if: always()
+    needs: [changes, build, watch-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all applicable checks
+        env:
+          CHANGE_RESULT: ${{ needs.changes.result }}
+          NATIVE_CHANGED: ${{ needs.changes.outputs.native }}
+          PHONE_RESULT: ${{ needs.build.result }}
+          WATCH_RESULT: ${{ needs.watch-ui.result }}
+        run: |
+          set -euo pipefail
+          test "$CHANGE_RESULT" = success
+          if [[ "$NATIVE_CHANGED" == true ]]; then
+            test "$PHONE_RESULT" = success
+            test "$WATCH_RESULT" = success
+          else
+            test "$NATIVE_CHANGED" == false
+            test "$PHONE_RESULT" = skipped
+            test "$WATCH_RESULT" = skipped
+          fi

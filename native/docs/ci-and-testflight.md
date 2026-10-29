@@ -3,12 +3,24 @@
 PRs run **Native Apple checks**: 493 core tests, all 135 iPhone UI tests across
 four shards, and all 18 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
+Phone shards use recorded passing test durations, placing expensive cases on
+different workers while keeping their case counts within one. New tests receive
+the median known cost and still run; timing entries for removed tests are ignored.
+Refresh `native/scripts/ui-test-durations.json` from a complete passing run when
+the suite changes materially. Timings estimate work; they cannot guarantee runner
+speed. The preceding full run had 25–29 minutes of UI work on three phone workers
+and 38 minutes on the fourth, despite almost equal case counts.
 Native source changes must go through a PR with the full checks green. The
 release merge must contain the validated native source. Main does not repeat
 the full UI suite: build 80's redundant main checks occupied all five Mac slots
 and queued delivery for about 32 minutes. TestFlight still validates core and
 builds both apps before its signed archive. Manual full checks remain available.
 Feature branch pushes do not duplicate the PR workflow.
+The always-present **Native validation** gate selects the complete suite for
+native code, resources, build configuration, tests, or validation workflow changes.
+Documentation-only and root handoff edits pass through two small Ubuntu jobs;
+their Mac jobs are skipped. Routing failures fail the gate. Manual dispatch
+always runs all Apple checks. A rename/removal is checked using both paths.
 
 Simulator builds and UI test bundles use the Mac runner's architecture through
 `ARCHS` and `ONLY_ACTIVE_ARCH`. Generic simulator destinations otherwise compile
@@ -77,6 +89,10 @@ or treat its secondary export error as the original failure.
 Merging native changes to `main` starts **Native TestFlight delivery**. It
 archives and checks the signed IPA, uploads it, waits for Apple processing, and
 distributes to internal testers. An accepted upload is not the end of delivery.
+Main pushes containing only tests, documentation, or validation scripts do not
+upload another copy of the app. Application source, resources, package/build
+settings, and signing-lane changes remain eligible. Workflow-only edits can be
+checked without an upload; use manual dispatch for an intentional rebuild.
 Verify the packaged build number and both successful processing and internal
 distribution in the delivery log. Build 79's delivery took about 36 minutes;
 that is separate from the preceding CI validation.
@@ -85,6 +101,23 @@ Delivery does not cancel an in-flight upload/processing wait when another main
 commit arrives. If processing times out after upload, check the existing build
 before starting another upload. Keep the release objective active until the new
 build is actually processed and available.
+
+## Automatic handoff
+
+At the 2026-10-29 inspection, repository auto-merge was disabled and `main` was
+unprotected. CI success therefore did not merge a PR or start delivery. The
+connected GitHub tools can enable auto-merge per PR, but cannot change repository
+admin settings. An owner can require **Native validation** for `main`, require
+the branch to be current, and enable Allow auto-merge in repository settings:
+
+- https://github.com/trimngo/canal/settings/branches
+- https://github.com/trimngo/canal/settings#pull-requests
+
+Use the single gate as the required check: documentation PRs still produce it,
+and code PRs cannot pass it unless the complete phone and Watch jobs succeed.
+After those settings are configured, enable auto-merge only for a concrete PR
+whose merge/release is authorized. Keep active monitoring until then. These
+pipeline changes preserve every application release test and installed feature.
 
 ## Urgent check-in checks
 
