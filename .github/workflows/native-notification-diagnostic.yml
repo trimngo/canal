@@ -23,6 +23,7 @@ jobs:
           mkdir -p native/build
           set -o pipefail
           LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
+            -test-iterations 3 \
             -only-testing:TimeLedgerUITests/TimeLedgerUITests/testPhoneRestartRetainsWatchAlertsAndOffersExplicitPhoneTakeover \
             -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRandomNotificationsQueueAndSwitchBackToRepeating \
             2>&1 | tee native/build/validation.log
