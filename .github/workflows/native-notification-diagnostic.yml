@@ -1,0 +1,36 @@
+name: Native notification schedule diagnostic
+on:
+  push:
+    branches: ['ci/notification-diagnostic-*']
+    paths: ['native/**', '.github/workflows/native-notification-diagnostic.yml']
+permissions:
+  contents: read
+jobs:
+  notification:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Install project generator
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install xcodegen
+      - name: Reproduce first-permission scheduling with failure diagnostics
+        timeout-minutes: 30
+        run: |
+          mkdir -p native/build
+          set -o pipefail
+          LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testPhoneRestartRetainsWatchAlertsAndOffersExplicitPhoneTakeover \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRandomNotificationsQueueAndSwitchBackToRepeating \
+            2>&1 | tee native/build/validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notification-schedule-diagnostic
+          path: |
+            native/build/validation.log
+            native/build/UITests.xcresult
+          retention-days: 7

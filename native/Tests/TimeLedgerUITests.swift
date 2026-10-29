@@ -1632,7 +1632,11 @@ final class TimeLedgerUITests: XCTestCase {
         let status = element(app, "settings.notification-schedule-status")
         XCTAssertTrue(status.waitForExistence(timeout: 10))
         let scheduled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Scheduled through"), object: status)
-        XCTAssertEqual(XCTWaiter.wait(for: [scheduled], timeout: 10), .completed)
+        let result = XCTWaiter.wait(for: [scheduled], timeout: 10)
+        if result != .completed {
+            print("Random queue failure hierarchy:\n\(app.debugDescription)")
+        }
+        XCTAssertEqual(result, .completed, "Status: \(status.label); save: \(save.label); enabled: \(save.isEnabled)")
         let queued = status.label
         reveal(save, in: app); save.tap()
         XCTAssertEqual(status.label, queued) // refilling does not postpone scheduled prompts
