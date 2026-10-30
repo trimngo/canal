@@ -5,28 +5,67 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
-## Active: calendar corrections and timer statistics (target build 86)
+## Latest release: TestFlight 86 (2026-10-30)
 
-Continue both user requests through a processed/internal TestFlight release.
-Tap an upcoming event to edit its per-occurrence categories, persist the choice
-including explicit Uncategorized, offer return to automatic predictions, and
-carry the choice into Review logs after expiry. Editing a plan never records
-time. Calendar access stays read-only.
+Release objective **COMPLETE**: TestFlight **1.0 (86)** finished Apple
+processing and was distributed internally at **2026-10-30T12:58:33.4261300Z** (13:58,
+Berlin). Do not repeat this upload. Preserve the original uncommitted files and
+Git index. Keep the separate iPhone crash incident below open; friend
+accountability sharing remains planning only.
 
-Timers show a per-task restart count and accumulated running time on phone,
-Watch, and expanded iPhone/Mac Live Activity. The user explicitly chose to stop
-counting at expiry; paused time is excluded. Preserve counters/totals across
-restarts, persistence, and sync; the next queued task owns its own statistics.
+- PR #12: https://github.com/trimngo/canal/pull/12 — merged as `cab942be22e7a227c3297bf84c3b4eb24aaa802e`.
+  Validated head `45cefbbc9eae0094c8f72480329e870e10bcc45f` and merge share complete tree `e79027186227a76766fbdb136c4411f27ad80478`;
+  native subtree `72c9571ec2c3a1ecabdcf530b9f035224207d846`. This root-only handoff changes no app
+  source and does not trigger another TestFlight upload.
+- Full CI: https://github.com/trimngo/canal/actions/runs/41051932161 — **SUCCESS**:
+  **514 core, all 141 iPhone UI, and all 18 Watch UI tests**. Passed UI cases were
+  compared with source, with no missing or duplicated cases. All 35 local
+  packaging, sharding, and routing checks passed.
+- Focused phone run `41028092690`, job `123970932137`, passed 514 core tests,
+  both app builds, and nine calendar/timer UI cases. Focused Watch run
+  `41028098551`, job `123970953121`, passed its app build and seven cases,
+  including paging, full titles, queue scrolling/reorder, and restart statistics.
+  Both runs used the release's exact native subtree.
+- Delivery: https://github.com/trimngo/canal/actions/runs/41057840015 —
+  **SUCCESS**, job `124069746670`. Actual packaged build **86** was
+  checked before upload; processing and internal distribution both succeeded.
+  Upload acceptance alone was not used as release proof.
 
-Checkpoint `/workspace/work/calendar-corrections-86/state.json`, isolated source
-`/workspace/canal-calendar-corrections`. Expected checks: 514 core, all 141 phone
-UI, all 18 Watch UI cases. Run focused calendar/timer and Watch checks before the
-complete release suite. Keep every existing assertion/test and don't blindly
-repeat failing full runs. Preserve original working tree `5bc9894e875ebf615f74f1b496be61587a41117d`
-and original index SHA-256 `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
-Friend accountability remains planning only; keep the separate crash incident open.
+Implemented in this release:
 
-## Latest release: TestFlight 85 (2026-10-30)
+- Tap an upcoming event in Rest of today to change its categories for that
+  occurrence. Save supports multiple categories and explicit Uncategorized;
+  Cancel keeps the choice, and Use suggested categories restores automatic
+  matching. Choices persist through relaunch, backups, and existing calendar
+  record sync. The dashboard forecast updates; ended events carry that choice
+  into Review logs. Editing a plan never records time, and Calendar remains
+  read-only. Read [native/docs/calendar-plan-preview.md](native/docs/calendar-plan-preview.md).
+- Timers show a per-task restart count and accumulated running time on phone,
+  Watch, and the expanded iPhone/Mac Live Activity. **Time stops at expiry and
+  excludes pauses**, as explicitly requested. Restarts retain prior time; the
+  next queued task has its own statistics. Stale actions cannot double count.
+  Older saved timers recover the available current-attempt time, but historical
+  restart counts cannot be reconstructed. Read
+  [native/docs/timer-queue-and-matching.md](native/docs/timer-queue-and-matching.md).
+- Watch statistics fit between Done and Restart in the existing control row,
+  retaining the circular dial size and native page swipe. The initial added row
+  forced the scrolling fallback and broke short-page swipes; focused tests
+  caught it before the final candidate. Numeric accessibility values are
+  verbatim so localized digit grouping does not break assertions. No tests or
+  assertions were removed or weakened, and no per-case retries were added.
+
+Update both phone and Watch. Physical haptics, forwarded system-alarm controls,
+and Mac delivery timing remain device follow-ups; these simulator checks do not
+establish those hardware behaviors. This release does not claim a fix for the
+separately reported iPhone crash after restarting a Watch-owned timer.
+
+Checkpoint: `/workspace/work/calendar-corrections-86/state.json`. Isolated source:
+`/workspace/canal-calendar-corrections`. The original branch intentionally keeps
+its old HEAD with uncommitted published copies. Never reset it or use its index
+to publish. Original index SHA-256:
+`665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+
+## Previous release: TestFlight 85 (2026-10-30)
 
 Release objective **COMPLETE**: TestFlight **1.0 (85)** finished Apple
 processing and was distributed internally at **2026-10-30T06:30:02.8519430Z**. Do not repeat
