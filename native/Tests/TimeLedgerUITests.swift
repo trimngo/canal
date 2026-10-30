@@ -15,9 +15,9 @@ final class TimeLedgerUITests: XCTestCase {
         }
         let kind = element(app, "checkins.inspect.kind.0"); reveal(kind, in: app)
         XCTAssertEqual(kind.label, "CHECKIN · repeating")
-        let action = element(app, "checkins.inspect.action"); reveal(action, in: app)
+        let action = element(app, "checkins.inspect.action"); XCTAssertTrue(action.waitForExistence(timeout: 5))
         XCTAssertEqual(action.label, "QUICK_LOG")
-        let count = element(app, "checkins.inspect.count"); reveal(count, in: app)
+        let count = element(app, "checkins.inspect.count"); XCTAssertTrue(count.waitForExistence(timeout: 5))
         XCTAssertEqual(count.label, "3 check-ins")
         let date = element(app, "checkins.inspect.date.0"); reveal(date, in: app)
         let originalDate = date.label
@@ -33,7 +33,7 @@ final class TimeLedgerUITests: XCTestCase {
         let body = element(app, "checkins.inspect.body.0"); reveal(body, in: app)
         let plain = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Tap to type or dictate what you’re doing now."), object: body)
         XCTAssertEqual(XCTWaiter.wait(for: [plain], timeout: 10), .completed)
-        reveal(count, in: app); XCTAssertEqual(count.label, "3 check-ins")
+        XCTAssertEqual(count.label, "3 check-ins")
     }
 
     func testUrgentCheckInRandomQueueKeepsItsTimesAndContentAfterRelaunch() {
@@ -1405,6 +1405,16 @@ final class TimeLedgerUITests: XCTestCase {
         openGoalEditor(in: app)
         let arrow = app.buttons["plan.children.work"]; reveal(arrow, in: app)
         if arrow.label.hasPrefix("Expand ") { arrow.tap() }
+        let child = element(app, "plan.name.teaching")
+        XCTAssertTrue(child.waitForExistence(timeout: 10)); reveal(child, in: app)
+        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Collapse Work"), object: arrow)
+        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 10), .completed)
+        // Finish revealing the child before targeting the current editor's bar.
+        let navigation = app.navigationBars["Edit goals"]
+        let select = navigation.buttons["plan.select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 10)); XCTAssertTrue(select.isHittable)
+        select.tap()
+        XCTAssertTrue(navigation.buttons["plan.selection-done"].waitForExistence(timeout: 10))
         selectPlanCategory("teaching", in: app)
         XCTAssertEqual(app.buttons["plan.favorite"].label, "Unfavorite")
         app.buttons["plan.favorite"].tap()
