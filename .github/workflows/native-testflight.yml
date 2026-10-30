@@ -3,7 +3,17 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['native/**', '.github/workflows/native-testflight.yml']
+    # Test/CI/documentation changes do not change the installed application.
+    # workflow_dispatch remains available for an intentional signing rebuild.
+    paths:
+      - 'native/**'
+      - '!native/docs/**'
+      - '!native/README.md'
+      - '!native/Tests/**'
+      - '!native/WatchTests/**'
+      - '!native/TestsPython/**'
+      - '!native/Core/Tests/**'
+      - '!native/scripts/**'
 permissions:
   contents: read
 concurrency:

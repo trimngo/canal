@@ -236,6 +236,12 @@ final class LedgerStore: ObservableObject {
             if ProcessInfo.processInfo.arguments.contains("--ui-empty-ledger") {
                 try JSONEncoder().encode(Ledger()).write(to: file, options: [.atomic])
             }
+            #if os(iOS)
+            if ProcessInfo.processInfo.arguments.contains("--ui-calendar-plan") {
+                try JSONEncoder().encode(CalendarForecastFixture.ledger()).write(to: file, options: [.atomic])
+                defaults.set([CalendarForecastFixture.sourceID], forKey: CalendarForecastFixture.selectionKey)
+            }
+            #endif
             if ProcessInfo.processInfo.arguments.contains("--ui-calendar-matching") {
                 var fixture = Ledger()
                 fixture.categories = [LedgerCategory(id: "music", name: "Music"), LedgerCategory(id: "guitar", name: "Guitar"),

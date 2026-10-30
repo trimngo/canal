@@ -1,7 +1,6 @@
 name: Native Apple checks
 on:
   pull_request:
-    paths: ['native/**', '.github/workflows/native-*.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -9,15 +8,36 @@ concurrency:
   group: native-checks-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.scope.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check validation routing
+        run: python3 -m unittest discover -s .github/scripts -p 'test_native_changes.py' -v
+      - name: Select applicable checks
+        id: scope
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/native_changes.py >> "$GITHUB_OUTPUT"
   watch-ui:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     uses: ./.github/workflows/native-watch.yml
     with:
       focus: false
   build:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     runs-on: macos-15
     # Four phone shards plus Watch fit the observed five-Mac concurrency.
     # Keep every UI test; extra shards create a second simulator-boot wave.
-    timeout-minutes: 65
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -37,8 +57,9 @@ jobs:
           ruby -c native/fastlane/Fastfile
           python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("native/scripts/create-signing-certificate.py").read_text())'
       - name: Test core and build iPhone and Watch apps
-        # Cold simulator startup has taken 11 minutes before tests begin.
-        timeout-minutes: 55
+        # Cold setup plus a progressing 35-case shard exceeded 55 minutes.
+        # Leave headroom for hosted-runner variance without retrying tests.
+        timeout-minutes: 70
         env:
           LEDGER_UI_TESTS: '1'
           LEDGER_UI_TEST_SHARD: ${{ matrix.shard }}
@@ -83,3 +104,27 @@ jobs:
           name: native-validation-log-${{ matrix.shard }}
           path: native/build/validation.log
           retention-days: 7
+  native-validation:
+    name: Native validation
+    if: always()
+    needs: [changes, build, watch-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all applicable checks
+        env:
+          CHANGE_RESULT: ${{ needs.changes.result }}
+          NATIVE_CHANGED: ${{ needs.changes.outputs.native }}
+          PHONE_RESULT: ${{ needs.build.result }}
+          WATCH_RESULT: ${{ needs.watch-ui.result }}
+        run: |
+          set -euo pipefail
+          test "$CHANGE_RESULT" = success
+          if [[ "$NATIVE_CHANGED" == true ]]; then
+            test "$PHONE_RESULT" = success
+            test "$WATCH_RESULT" = success
+          else
+            test "$NATIVE_CHANGED" == false
+            test "$PHONE_RESULT" = skipped
+            test "$WATCH_RESULT" = skipped
+          fi

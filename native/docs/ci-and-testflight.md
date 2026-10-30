@@ -1,14 +1,26 @@
 # CI iteration and TestFlight delivery
 
-PRs run **Native Apple checks**: 493 core tests, all 135 iPhone UI tests across
+PRs run **Native Apple checks**: 501 core tests, all 138 iPhone UI tests across
 four shards, and all 18 Watch UI tests. The sharding unit test reads the actual
 workflow matrix and checks that every iPhone case appears exactly once.
+Phone shards use recorded passing test durations, placing expensive cases on
+different workers while keeping their case counts within one. New tests receive
+the median known cost and still run; timing entries for removed tests are ignored.
+Refresh `native/scripts/ui-test-durations.json` from a complete passing run when
+the suite changes materially. Timings estimate work; they cannot guarantee runner
+speed. The preceding full run had 25–29 minutes of UI work on three phone workers
+and 38 minutes on the fourth, despite almost equal case counts.
 Native source changes must go through a PR with the full checks green. The
 release merge must contain the validated native source. Main does not repeat
 the full UI suite: build 80's redundant main checks occupied all five Mac slots
 and queued delivery for about 32 minutes. TestFlight still validates core and
 builds both apps before its signed archive. Manual full checks remain available.
 Feature branch pushes do not duplicate the PR workflow.
+The always-present **Native validation** gate selects the complete suite for
+native code, resources, build configuration, tests, or validation workflow changes.
+Documentation-only and root handoff edits pass through two small Ubuntu jobs;
+their Mac jobs are skipped. Routing failures fail the gate. Manual dispatch
+always runs all Apple checks. A rename/removal is checked using both paths.
 
 Simulator builds and UI test bundles use the Mac runner's architecture through
 `ARCHS` and `ONLY_ACTIVE_ARCH`. Generic simulator destinations otherwise compile
@@ -23,12 +35,15 @@ API failure fallback, default Stop without task completion, permission denial,
 saved haptics-only preference, and opted-in Stop completion/automatic next.
 These use a DEBUG mock at the system API boundary; production never uses it.
 Real Watch forwarding, buttons, and repeating haptics need physical testing.
-Focused checks never replace all 135 iPhone and 18 Watch tests before release.
+Focused checks never replace all 138 iPhone and 18 Watch tests before release.
 The full Watch step has 35 minutes within its 45-minute job; a cold 17-minute
 setup plus the full UI suite exceeded the previous 30-minute step budget.
-Phone validation has 55 minutes within a 65-minute job: build 81 needed up to
-about 49 minutes including cold setup and 32 UI cases; retain margin for the
-additional preference/Stop regressions. Every case is still required.
+Phone validation has 70 minutes within an 80-minute job. In run `40947104076`,
+retry job `123738191088` passed 33 cases, including the earlier review failure,
+but reached the 55-minute limit during case 34. Cold setup used about 12 minutes;
+UI execution continued making progress without an assertion failure. The larger
+budget accommodates hosted-runner variance; it does not make builds faster.
+Keep every case and assertion; there are no automatic per-test retries.
 
 ## Iterate on Watch without restarting phone validation
 
@@ -77,6 +92,10 @@ or treat its secondary export error as the original failure.
 Merging native changes to `main` starts **Native TestFlight delivery**. It
 archives and checks the signed IPA, uploads it, waits for Apple processing, and
 distributes to internal testers. An accepted upload is not the end of delivery.
+Main pushes containing only tests, documentation, or validation scripts do not
+upload another copy of the app. Application source, resources, package/build
+settings, and signing-lane changes remain eligible. Workflow-only edits can be
+checked without an upload; use manual dispatch for an intentional rebuild.
 Verify the packaged build number and both successful processing and internal
 distribution in the delivery log. Build 79's delivery took about 36 minutes;
 that is separate from the preceding CI validation.
@@ -85,6 +104,26 @@ Delivery does not cancel an in-flight upload/processing wait when another main
 commit arrives. If processing times out after upload, check the existing build
 before starting another upload. Keep the release objective active until the new
 build is actually processed and available.
+
+## Automatic handoff
+
+Read [build-platform-options.md](build-platform-options.md) for the dedicated Mac
+and managed-service benchmark options; no provider migration is configured.
+
+At the 2026-10-29 inspection, repository auto-merge was disabled and `main` was
+unprotected. CI success therefore did not merge a PR or start delivery. The
+connected GitHub tools can enable auto-merge per PR, but cannot change repository
+admin settings. An owner can require **Native validation** for `main`, require
+the branch to be current, and enable Allow auto-merge in repository settings:
+
+- https://github.com/trimngo/canal/settings/branches
+- https://github.com/trimngo/canal/settings#pull-requests
+
+Use the single gate as the required check: documentation PRs still produce it,
+and code PRs cannot pass it unless the complete phone and Watch jobs succeed.
+After those settings are configured, enable auto-merge only for a concrete PR
+whose merge/release is authorized. Keep active monitoring until then. These
+pipeline changes preserve every application release test and installed feature.
 
 ## Urgent check-in checks
 
@@ -96,18 +135,20 @@ release check; focused success alone never authorizes a release.
 
 ## Complication refresh checks
 
-Use `ci/complication-*` for all 493 core tests, packaging checks, and both app
+Use `ci/complication-*` for all 501 core tests, packaging checks, and both app
 builds. Read [watch-complication-refresh.md](watch-complication-refresh.md).
-These checks do not replace all 135 phone and 18 Watch UI cases before release.
+These checks do not replace all 138 phone and 18 Watch UI cases before release.
 WidgetKit face refresh timing still needs a physical Watch check.
 
 ## Calendar categorization checks
 
-Push `ci/calendar-*` for all 493 core tests, both app builds, and the three new
-calendar category regressions plus existing calendar period/goal accounting.
-These exercise the real shared matcher, including a DEBUG-only async delay that
-checks manual choices against late results. Read [calendar-categorization.md](calendar-categorization.md).
-Full release checks still require every one of the 135 phone and 18 Watch UI cases.
+Push `ci/calendar-*` for all 501 core tests, both app builds, three calendar-plan
+regressions, the existing calendar category/period/goal cases, and the notification
+queue case. These exercise the real shared matcher and forecast accounting;
+calendar review includes a DEBUG-only async delay that checks manual choices
+against late results. Read [calendar-plan-preview.md](calendar-plan-preview.md)
+and [calendar-categorization.md](calendar-categorization.md).
+Full release checks still require every one of the 138 phone and 18 Watch UI cases.
 
 ## Notification and review-control recovery checks
 
@@ -120,9 +161,33 @@ specific notification and clears it before input; its interruption handler also
 catches a later arrival. Permission prompts retain their explicit test actions.
 Wait for a hittable Watch control before its first tap on a cold simulator.
 
+On iPhone, notification permission dismissal does not finish the asynchronous
+Save operation. Wait until Save is enabled again before inspecting the resulting
+schedule, and reveal the status row in the lazy Form before reading it. Keep the
+queued/repeating/off assertions and the unchanged-queue refill assertion. A status
+timeout alone cannot establish an app scheduling fault; capture the actual status
+and save state on failure.
+
+The phone reveal helper recognizes hittable navigation/tab-bar controls without
+scrolling the page beneath them. Such controls sit outside the body viewport;
+body scrolling cannot improve their visibility. When a lazy row is absent, the
+backward search covers the forward travel plus rows preceding the starting
+position. A symmetric forward/back count can finish near its starting point and
+miss an earlier Settings row. Keep destination and persistence assertions.
+
+Inbox focuses its capture input asynchronously. Non-capture setup explicitly
+focuses that field and waits for its keyboard before dismissing through the stable
+Inbox navigation bar and waiting for disappearance. A one-second absence check can
+finish before the keyboard appears, moving the next Settings tap; a Reminders
+cleanup failure showed the app still in Inbox. Verify the destination tab is
+selected before looking for its lazy controls. Goal-number setup waits for the
+keyboard, an enabled/hittable Done control, and keyboard disappearance after one
+tap before starting another edit or terminating. Keep the saved-value, deletion,
+source-isolation, and relaunch assertions; these are test setup changes.
+
 The `ci/inbox-review-regression` branch repeats the phone category-review flow
 five times with core tests and both builds. Keep its exact next-item, notes,
 delete/undo, and persistence assertions. Review's Mark done/Reopen label has a
 44-point rectangular touch target; use a hittable semantic tap and record the
 actual review position and hierarchy if advancement fails. Focused checks never
-replace all 135 phone and 18 Watch tests on the final release candidate.
+replace all 138 phone and 18 Watch tests on the final release candidate.

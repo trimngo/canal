@@ -5,6 +5,28 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active: remaining-day calendar plan preview (target build 85)
+
+The user asked to continue existing work and add a tentative category forecast
+from the rest of today's selected calendar events. Breakdown and Pie must clearly
+separate recorded/planned portions. Keep actual history/goals untouched; ended
+events still need explicit confirmation. Read
+[native/docs/calendar-plan-preview.md](native/docs/calendar-plan-preview.md).
+Implementation/checkpoint: `/workspace/work/calendar-plan-85/state.json`, isolated
+worktree `/workspace/canal-calendar-plan`. Expected checks: 501 core, all 138 phone
+UI, and all 18 Watch UI tests. Focused checks do not replace the full release run.
+Continue through a processed/internal TestFlight release under standing user
+authorization. Build number 85 is provisional; verify the packaged number.
+
+Carry the pending pipeline improvements from PR #9 into this same release
+candidate; do not discard them or merge a red PR. Its latest run found a missed
+notification-switch tap (the hierarchy showed value 0), plus a Watch simulator
+launch denial. The isolated harness branch targets the actual switch and asserts
+its state; all prior meaningful assertions remain. The provider comparison is
+prepared at `/workspace/work/ci-speedup/build-platform-options.md`; no account,
+billing, provider, or runner migration has happened. Keep the separate crash
+incident open and preserve original files/index. Friend sharing stays planning.
+
 ## Latest release: TestFlight 84 (2026-10-29)
 
 Release objective **COMPLETE**: TestFlight **1.0 (84)** finished Apple processing
@@ -57,12 +79,13 @@ target, and test-isolation problems. An introduced duplicate XCTest setup overri
 also cost a diagnostic iteration and was corrected before the final candidate.
 No API rate-limit or billing failure was observed. Delivery itself took 12 minutes.
 
-The user asked on 2026-10-29 to simplify the process. Pipeline-only work is prepared
+The user asked on 2026-10-29 to simplify the process. Pipeline preparation began
 in `/workspace/canal-ci-speed`, checkpoint `/workspace/work/ci-speedup/state.json`:
 balance the complete phone suite using passing timings, and avoid automatic
 TestFlight uploads for commits that change only test/docs/validation paths.
-All 28 local checks pass; full PR validation and merge are still pending.
-This work changes no application runtime source and should not upload build 85.
+That work is now included in the active calendar-plan candidate above. Its
+standalone PR #9 remains unmerged pending the replacement feature PR. Pipeline-only
+changes require no app upload; the new calendar feature does require a release.
 Do not start a broad app rewrite or remove tests/features to chase build time.
 
 Release checkpoint and backups: `/workspace/work/calendar-categories-84/state.json`.
@@ -145,10 +168,10 @@ The timer originally alerted using the Watch mechanism, not phone AlarmKit.
 Installed phone/Watch build numbers remain unverified; do not infer the cause
 from unrelated reports or assume the phone-owned AlarmKit Stop path was used.
 
-Apple diagnostics were most recently refreshed in run `40721752796`,
-job `123124473273`, at 2026-10-28T21:54:37.0631636Z. Build 83 was independently confirmed
-VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple still listed three
-submitted reports: two available logs from build 9 and one unavailable log (404). No current
+Apple diagnostics were most recently refreshed in run `40797102750`,
+job `123641218756`, at 2026-10-29T18:13:44.9551247Z. Build 84 was independently confirmed
+VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple listed four
+submitted reports: two available logs from build 9 and two unavailable logs. No current
 matching crash was found. Read-only code review covered WatchConnectivity receive/
 merge and reply paths, serialized ActivityKit refresh/background time, timer
 notification scheduling, and optional alarm takeover; no reproducible fault or
@@ -373,6 +396,14 @@ the resulting UI state.
 - Watch haptic picker popup choices are accessibility **Buttons**. The selected
   value in the settings form is a StaticText. Drain the test timer's own system
   notification before launching the next fixture.
+- Inbox capture focuses asynchronously. Non-capture `openInbox` setup explicitly
+  selects Inbox, focuses the capture input, waits for the keyboard, taps the stable
+  Inbox navigation bar, and waits for disappearance. Do not use a one-second
+  absence check: the keyboard can arrive afterward and move the next tab tap.
+  Reminders cleanup must verify Settings is selected before revealing Disconnect.
+- Goal-number setup waits for the keyboard, an enabled/hittable Done control, and
+  keyboard disappearance after its single tap before another edit or termination.
+  A completed XCTest gesture alone does not prove focus callbacks finished.
 - Cold simulators can show Apple’s `UIContinuousPathIntroductionView` over the
   keyboard toolbar. The iPhone suite warms up the keyboard once per runner and
   dismisses only that tutorial’s Continue button. Keep real typing/Done/persistence
@@ -386,7 +417,7 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 135 iPhone UI tests run across four shards. Keep the complete test set and
+- All 138 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
   Run all 18 Watch UI tests. Repeating WatchKit haptics still require
@@ -406,7 +437,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 493 core, 135 iPhone UI, and 18 Watch UI tests must pass.
+checks: all 501 core, 138 iPhone UI, and 18 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish

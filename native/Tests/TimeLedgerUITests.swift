@@ -15,9 +15,9 @@ final class TimeLedgerUITests: XCTestCase {
         }
         let kind = element(app, "checkins.inspect.kind.0"); reveal(kind, in: app)
         XCTAssertEqual(kind.label, "CHECKIN · repeating")
-        let action = element(app, "checkins.inspect.action"); reveal(action, in: app)
+        let action = element(app, "checkins.inspect.action"); XCTAssertTrue(action.waitForExistence(timeout: 5))
         XCTAssertEqual(action.label, "QUICK_LOG")
-        let count = element(app, "checkins.inspect.count"); reveal(count, in: app)
+        let count = element(app, "checkins.inspect.count"); XCTAssertTrue(count.waitForExistence(timeout: 5))
         XCTAssertEqual(count.label, "3 check-ins")
         let date = element(app, "checkins.inspect.date.0"); reveal(date, in: app)
         let originalDate = date.label
@@ -33,7 +33,7 @@ final class TimeLedgerUITests: XCTestCase {
         let body = element(app, "checkins.inspect.body.0"); reveal(body, in: app)
         let plain = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Tap to type or dictate what you’re doing now."), object: body)
         XCTAssertEqual(XCTWaiter.wait(for: [plain], timeout: 10), .completed)
-        reveal(count, in: app); XCTAssertEqual(count.label, "3 check-ins")
+        XCTAssertEqual(count.label, "3 check-ins")
     }
 
     func testUrgentCheckInRandomQueueKeepsItsTimesAndContentAfterRelaunch() {
@@ -570,9 +570,10 @@ final class TimeLedgerUITests: XCTestCase {
             let frame = bar.frame
             return usable(frame) && frame.intersects(bounds) ? frame : nil
         }
-        // Lazy lists omit offscreen rows from accessibility. Search later rows
-        // first, then earlier rows if the target has not been materialized.
-        for attempt in 0..<20 {
+        // Lazy lists omit offscreen rows from accessibility. After searching
+        // forward, search twice as far back to cover rows before the start.
+        let forwardAttempts = 10
+        for attempt in 0..<(forwardAttempts * 3) {
             let bounds = app.frame
             guard usable(bounds) else { XCTFail("App has no visible bounds"); return }
             // Dismissed sheets can leave offscreen bars with CGRect.null frames.
@@ -591,17 +592,21 @@ final class TimeLedgerUITests: XCTestCase {
             }
             let proposed = target.exists ? target.frame : .zero
             let frame = usable(proposed) ? proposed : .zero
-            if target.exists, !frame.isEmpty, frame.minY >= top, frame.maxY <= bottom - 8 { return }
+            // Toolbar controls sit outside the scrollable content bounds.
+            // Scrolling the page cannot reveal them any further.
+            if target.exists, !frame.isEmpty, target.isHittable,
+               navigation?.contains(frame) == true || tabs?.contains(frame) == true { return }
+            if target.exists, !frame.isEmpty, target.isHittable, frame.minY >= top, frame.maxY <= bottom - 8 { return }
             // Short drags keep lazy Form rows from being skipped by momentum.
             let height = max(100, bottom - top)
             let origin = app.coordinate(withNormalizedOffset: .zero)
             let high = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.3))
             let low = origin.withOffset(CGVector(dx: app.frame.midX, dy: top + height * 0.75))
-            if (!frame.isEmpty && frame.maxY < top) || (frame.isEmpty && attempt >= 10) { high.press(forDuration: 0.01, thenDragTo: low) }
+            if (!frame.isEmpty && frame.maxY < top) || (frame.isEmpty && attempt >= forwardAttempts) { high.press(forDuration: 0.01, thenDragTo: low) }
             else { low.press(forDuration: 0.01, thenDragTo: high) }
 
         }
-        XCTAssertTrue(target.waitForExistence(timeout: 5))
+        XCTAssertTrue(target.waitForExistence(timeout: 5), "Could not reveal the target.\n\(app.debugDescription)")
     }
 
     private func log(_ text: String, in app: XCUIApplication, confirmSuggestion: Bool = false) {
@@ -970,9 +975,11 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [reloaded], timeout: 25), .completed)
         openInbox(app)
         XCTAssertFalse(app.staticTexts["Reminders bicycle idea UI fixture"].exists)
-        app.tabBars.buttons["Settings"].tap()
+        let settings = app.tabBars.buttons["Settings"]; settings.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: settings)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
         let disconnect = app.buttons["reminders.disconnect"]; reveal(disconnect, in: app); disconnect.tap()
-        XCTAssertFalse(importNow.exists)
+        XCTAssertTrue(importNow.waitForNonExistence(timeout: 10))
     }
 
     func testCopyAllIdeasPastesFullInboxIncludingCompletedButNotDeleted() {
@@ -1398,6 +1405,16 @@ final class TimeLedgerUITests: XCTestCase {
         openGoalEditor(in: app)
         let arrow = app.buttons["plan.children.work"]; reveal(arrow, in: app)
         if arrow.label.hasPrefix("Expand ") { arrow.tap() }
+        let child = element(app, "plan.name.teaching")
+        XCTAssertTrue(child.waitForExistence(timeout: 10)); reveal(child, in: app)
+        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Collapse Work"), object: arrow)
+        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 10), .completed)
+        // Finish revealing the child before targeting the current editor's bar.
+        let navigation = app.navigationBars["Edit goals"]
+        let select = navigation.buttons["plan.select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 10)); XCTAssertTrue(select.isHittable)
+        select.tap()
+        XCTAssertTrue(navigation.buttons["plan.selection-done"].waitForExistence(timeout: 10))
         selectPlanCategory("teaching", in: app)
         XCTAssertEqual(app.buttons["plan.favorite"].label, "Unfavorite")
         app.buttons["plan.favorite"].tap()
@@ -1620,31 +1637,46 @@ final class TimeLedgerUITests: XCTestCase {
         element(app, "settings.notification-timing").tap(); app.buttons["Randomized"].tap()
         let allDay = app.switches["settings.notifications-all-day"]
         reveal(allDay, in: app)
-        allDay.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        allDay.switches.firstMatch.tap()
+        XCTAssertEqual(allDay.value as? String, "1")
         let enabled = app.switches["settings.notifications-enabled"]
         reveal(enabled, in: app)
-        enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        enabled.switches.firstMatch.tap()
+        XCTAssertEqual(enabled.value as? String, "1")
         let save = app.buttons["settings.save-notifications"]; reveal(save, in: app); save.tap()
         let allow = app.alerts.buttons["Allow"]
         if allow.waitForExistence(timeout: 3) { allow.tap() }
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         if springboard.alerts.buttons["Allow"].waitForExistence(timeout: 2) { springboard.alerts.buttons["Allow"].tap() }
+        func waitForSave() {
+            // Permission dismissal and scheduling are asynchronous. Wait for
+            // the save transaction before inspecting its resulting schedule.
+            let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
+            XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 15), .completed, "Notification save did not finish: \(save.label)")
+        }
+        waitForSave()
         let status = element(app, "settings.notification-schedule-status")
+        reveal(status, in: app)
         XCTAssertTrue(status.waitForExistence(timeout: 10))
         let scheduled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Scheduled through"), object: status)
-        XCTAssertEqual(XCTWaiter.wait(for: [scheduled], timeout: 10), .completed)
+        let result = XCTWaiter.wait(for: [scheduled], timeout: 10)
+        if result != .completed {
+            print("Random queue failure hierarchy:\n\(app.debugDescription)")
+        }
+        XCTAssertEqual(result, .completed, "Status: \(status.label); save: \(save.label); enabled: \(save.isEnabled)")
         let queued = status.label
-        reveal(save, in: app); save.tap()
+        reveal(save, in: app); save.tap(); waitForSave()
         XCTAssertEqual(status.label, queued) // refilling does not postpone scheduled prompts
         recordScreen("RandomNotificationQueue", in: app)
         let timing = element(app, "settings.notification-timing"); reveal(timing, in: app); timing.tap()
-        app.buttons["Regular"].tap(); reveal(save, in: app); save.tap()
+        app.buttons["Regular"].tap(); reveal(save, in: app); save.tap(); waitForSave()
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         let repeating = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Repeats automatically"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [repeating], timeout: 10), .completed)
         let off = app.switches["settings.notifications-enabled"]; reveal(off, in: app)
-        off.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
-        reveal(save, in: app); save.tap()
+        off.switches.firstMatch.tap()
+        XCTAssertEqual(off.value as? String, "0")
+        reveal(save, in: app); save.tap(); waitForSave()
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Check-ins are off"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
     }
@@ -2125,10 +2157,17 @@ final class TimeLedgerUITests: XCTestCase {
         }
         let field = app.textFields[id]; reveal(field, in: app)
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12)); field.typeText(value)
         if value.isEmpty { XCTAssertTrue(["", "—"].contains(field.value as? String ?? "")) }
         else { XCTAssertEqual(field.value as? String, value) }
-        if app.buttons["keyboard.done"].isHittable { app.buttons["keyboard.done"].tap() }
+        let done = app.buttons["keyboard.done"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true AND enabled == true"), object: done)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        done.tap()
+        // Finishing the gesture does not guarantee keyboard/focus callbacks
+        // have finished. Observe completion before another edit or relaunch.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 10))
     }
 
     func testRankedIdeasStayFirstAndNewIdeasHaveTheirOwnSectionAndShortcut() {
@@ -2438,15 +2477,18 @@ final class TimeLedgerUITests: XCTestCase {
     }
 
     private func openInbox(_ app: XCUIApplication, capture: Bool = false) {
-        app.tabBars.buttons["Inbox"].tap()
-        if !capture, app.keyboards.firstMatch.waitForExistence(timeout: 1) {
-            // Setup should use the explicit dismissal control. A separate
-            // keyboard test verifies tapping outside the input itself.
-            let done = app.buttons["keyboard.done"]
-            if done.waitForExistence(timeout: 5), done.isHittable { done.tap() }
-            else { app.navigationBars["Inbox"].tap() }
-            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
-            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        let inbox = app.tabBars.buttons["Inbox"]
+        inbox.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: inbox)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
+        if !capture {
+            // Inbox focuses its input asynchronously. A short absence check
+            // can miss a late keyboard that then moves the next tap's target.
+            // Establish focus explicitly, then dismiss through a stable bar.
+            let field = element(app, "inbox.text"); reveal(field, in: app); field.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+            app.navigationBars["Inbox"].tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 10))
         }
     }
 
@@ -3140,6 +3182,78 @@ final class TimeLedgerUITests: XCTestCase {
         let sdes = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Prepare SDES lecture")).firstMatch
         XCTAssertTrue(sdes.waitForExistence(timeout: 10))
         XCTAssertFalse(sdes.label.contains("0m /"))
+    }
+
+    func testCalendarPlanSeparatesRecordedAndPlannedCategories() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        let work = app.buttons["dashboard.group.work"]
+        let matched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "1h 0m planned"), object: work)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 20), .completed)
+        XCTAssertTrue(summary.label.contains("2h 0m planned"), summary.label)
+        XCTAssertTrue(work.label.contains("66.7%"), work.label)
+        XCTAssertTrue(work.label.contains("1h 0m recorded"), work.label)
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        let expand = app.buttons["dashboard.children.music"]; reveal(expand, in: app); expand.tap()
+        let guitar = app.buttons["dashboard.group.guitar"]
+        XCTAssertTrue(guitar.waitForExistence(timeout: 10))
+        XCTAssertTrue(guitar.label.contains("30m planned"), guitar.label)
+        XCTAssertFalse(app.buttons["dashboard.direct.music"].exists)
+        recordScreen("RecordedAndPlannedBreakdown", in: app)
+        reveal(summary, in: app); summary.tap()
+        let rehearsal = element(app, "forecast.event.rehearsal")
+        XCTAssertTrue(rehearsal.waitForExistence(timeout: 10))
+        XCTAssertTrue(rehearsal.label.contains("Guitar"), rehearsal.label)
+        XCTAssertTrue(element(app, "forecast.event.unknown").label.contains("Uncategorized"))
+        XCTAssertFalse(app.buttons["log-review.save-next"].exists)
+        recordScreen("RemainingCalendarPlan", in: app)
+        app.navigationBars.buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
+    }
+
+    func testCalendarPlanPieIsTentativeAndHistoryRemainsRecordedAfterRelaunch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        let pie = app.buttons["Show pie chart"]; reveal(pie, in: app); pie.tap()
+        let work = app.buttons["report.pie.group.work"]; reveal(work, in: app)
+        let matched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "1h 0m planned"), object: work)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 20), .completed)
+        work.tap()
+        XCTAssertTrue(element(app, "report.pie.selection").label.contains("1h 0m planned"))
+        recordScreen("PlannedPieSlices", in: app)
+        let range = element(app, "report.range"); reveal(range, in: app); range.tap(); app.buttons["Past 7 days"].tap()
+        XCTAssertTrue(summary.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        let recorded = app.buttons["report.pie.group.work"]; reveal(recorded, in: app)
+        XCTAssertTrue(recorded.label.contains("100.0%"), recorded.label)
+        XCTAssertFalse(recorded.label.contains("planned"))
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-source"]; app.launch()
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        let tracked = element(app, "report.tracked").label
+        XCTAssertTrue(tracked.hasPrefix("1h 0m tracked"), tracked)
+        XCTAssertTrue(tracked.contains("1 logs"), tracked)
+    }
+
+    func testCalendarPlanDeselectingSourceRemovesForecastWithoutChangingRecords() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        app.tabBars.buttons["Settings"].tap(); app.buttons["settings.calendars"].tap()
+        let source = app.switches["calendar.source.calendar-plan-fixture"]
+        XCTAssertTrue(source.waitForExistence(timeout: 10)); source.switches.firstMatch.tap()
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0"), object: source)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed)
+        app.buttons["calendar.review"].tap()
+        XCTAssertTrue(app.staticTexts["No events to confirm"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(summary.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-source"]; app.launch()
+        XCTAssertTrue(element(app, "report.tracked").waitForExistence(timeout: 20))
+        XCTAssertFalse(summary.exists)
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
     }
 
     func testCalendarReviewUsesPhraseRulesAndKeepsCategoriesAfterRelaunch() {
