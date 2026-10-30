@@ -5,29 +5,87 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
-## Active: remaining-day calendar plan preview (target build 85)
+## Latest release: TestFlight 85 (2026-10-30)
 
-The user asked to continue existing work and add a tentative category forecast
-from the rest of today's selected calendar events. Breakdown and Pie must clearly
-separate recorded/planned portions. Keep actual history/goals untouched; ended
-events still need explicit confirmation. Read
-[native/docs/calendar-plan-preview.md](native/docs/calendar-plan-preview.md).
-Implementation/checkpoint: `/workspace/work/calendar-plan-85/state.json`, isolated
-worktree `/workspace/canal-calendar-plan`. Expected checks: 501 core, all 138 phone
-UI, and all 18 Watch UI tests. Focused checks do not replace the full release run.
-Continue through a processed/internal TestFlight release under standing user
-authorization. Build number 85 is provisional; verify the packaged number.
+Release objective **COMPLETE**: TestFlight **1.0 (85)** finished Apple
+processing and was distributed internally at **2026-10-30T06:30:02.8519430Z**. Do not repeat
+this upload. Preserve the original uncommitted working files and index. Keep the
+separate iPhone crash incident below open; friend accountability sharing stays
+planning only.
 
-Carry the pending pipeline improvements from PR #9 into this same release
-candidate; do not discard them or merge a red PR. Its latest run found a missed
-notification-switch tap (the hierarchy showed value 0), plus a Watch simulator
-launch denial. The isolated harness branch targets the actual switch and asserts
-its state; all prior meaningful assertions remain. The provider comparison is
-prepared at `/workspace/work/ci-speedup/build-platform-options.md`; no account,
-billing, provider, or runner migration has happened. Keep the separate crash
-incident open and preserve original files/index. Friend sharing stays planning.
+- PR #10: https://github.com/trimngo/canal/pull/10 — merged as `f69708d182110004f1334c90ec3c24cbd9b20e2a`.
+  Validated head `9a150289e43a4f825f73d798a9f20a9a540cf2cf` and merge share complete tree `aeda10b9c52be932173c12509d2d1f49683350fe`;
+  native subtree `92ef8399d10251c83bb98a6da7165145f995c9e7`. This root-only handoff leaves native
+  source unchanged and does not trigger another app upload.
+- Full CI: https://github.com/trimngo/canal/actions/runs/41010001150 — **SUCCESS**:
+  **501 core, all 138 iPhone UI, and all 18 Watch UI tests**. Passed UI cases were
+  compared with source, with no missing or duplicated cases. All 35 local
+  packaging, sharding, and routing checks passed after the final setup correction.
+  Focused run `41008253101`, job `123907988896`, passed 501 core, both builds,
+  and three repetitions each of the corrected Favorites and pinned-header cases.
+- Delivery: https://github.com/trimngo/canal/actions/runs/41013439606 —
+  **SUCCESS**, job `123924265046`. Actual packaged build **85** was
+  checked before upload; Apple processing and internal distribution both succeeded.
+  Accepted upload alone was not used as release proof.
 
-## Latest release: TestFlight 84 (2026-10-29)
+Implemented in this release:
+
+- Today's Breakdown and Pie preview remaining timed events from selected calendars
+  with the same offline category rules as logs and calendar review. Solid portions
+  are recorded; pale portions are planned, with stripes in the breakdown. The
+  summary shows the planned amount/share and opens its contributing events.
+  Select calendars in Settings → Calendars. Read
+  [native/docs/calendar-plan-preview.md](native/docs/calendar-plan-preview.md).
+- Plans are transient and clipped to the remaining reporting day, sharing overlaps
+  rather than counting concurrent events twice. Unmatched events are Uncategorized.
+  Actual history, trends, goals, and stored logs retain recorded accounting. Ended
+  events still require explicit confirmation; selecting calendars or previewing
+  events does not create time logs.
+- CI distributes every phone case across four shards using recorded timings, provides the
+  always-present Native validation gate, and avoids automatic TestFlight uploads
+  for test/docs-only commits. PR #9 was closed as covered; it was not merged red.
+  UI setup verifies switches and navigation, handles lazy rows/toolbars, and waits
+  for keyboard/focus completion before further actions or relaunch. Read
+  [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
+
+Earlier iterations exposed UI interaction/setup failures. The harness now waits
+for actual Inbox focus/keyboard dismissal and goal Done completion before further
+actions. On run `40947104076`, the two initially failing interactions passed three
+unchanged isolated repetitions each and then passed on the full failed-only retry.
+One retry worker reached the 55-minute step limit after 33 passing cases, with no
+assertion failures. The final workflow allows 70 minutes within an 80-minute phone
+job for cold setup and hosted-runner variance. This adds completion margin; it is
+not a measured performance improvement. The final full run above is the release
+proof. No cases/assertions were skipped or per-case retries added.
+
+Run `41003359205` then passed all calendar cases and the earlier review/filter
+interactions, but found two other automation problems: scrolling a pinned check-in
+header until XCTest's per-case deadline, and using Select before the child goal
+row/active editor toolbar was established. The corrected tests read pinned header
+values directly and wait for the child/current toolbar before a single Select tap.
+Every category, count, cadence, completion, and persistence assertion remains.
+
+Optional focused run `40946529865` was superseded to free a Mac for the complete
+suite, which contains all five of its cases; no pass is claimed for that cancelled
+run. Existing diagnostic branches have specialized workflows: create a fresh
+`ci/calendar-*` branch from current main for ordinary focused checks.
+
+Build-hosting options are recorded in
+[native/docs/build-platform-options.md](native/docs/build-platform-options.md).
+Dedicated Apple Silicon Mac workers with GitHub control are the first benchmark
+recommendation; Codemagic is a managed alternative. No provider/account/billing
+or runner migration was performed. Preserve five-worker parallelism and measure
+the same complete source before promising a speedup. Owner setup is still needed
+to protect main and enable repository auto-merge; the agent can continue manual
+authorized merges after verified checks.
+
+Checkpoint: `/workspace/work/calendar-plan-85/state.json`. Isolated source:
+`/workspace/canal-calendar-plan`. The original branch intentionally retains its
+old HEAD with uncommitted published copies; never reset it or use its index to
+publish. Index SHA-256 remains
+`665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+
+## Previous release: TestFlight 84 (2026-10-29)
 
 Release objective **COMPLETE**: TestFlight **1.0 (84)** finished Apple processing
 and was distributed internally at **2026-10-29 06:58:14 UTC** (07:58 Berlin).
@@ -79,14 +137,10 @@ target, and test-isolation problems. An introduced duplicate XCTest setup overri
 also cost a diagnostic iteration and was corrected before the final candidate.
 No API rate-limit or billing failure was observed. Delivery itself took 12 minutes.
 
-The user asked on 2026-10-29 to simplify the process. Pipeline preparation began
-in `/workspace/canal-ci-speed`, checkpoint `/workspace/work/ci-speedup/state.json`:
-balance the complete phone suite using passing timings, and avoid automatic
-TestFlight uploads for commits that change only test/docs/validation paths.
-That work is now included in the active calendar-plan candidate above. Its
-standalone PR #9 remains unmerged pending the replacement feature PR. Pipeline-only
-changes require no app upload; the new calendar feature does require a release.
-Do not start a broad app rewrite or remove tests/features to chase build time.
+The CI simplification requested on 2026-10-29 is included in PR #10 and the
+latest release above. Standalone PR #9 was closed as covered, not merged.
+Pipeline-only changes need no app upload. Keep every full release test and avoid
+a broad app rewrite to chase build time.
 
 Release checkpoint and backups: `/workspace/work/calendar-categories-84/state.json`.
 Combined source worktree: `/workspace/canal-calendar-release`. Original copies
@@ -169,7 +223,7 @@ Installed phone/Watch build numbers remain unverified; do not infer the cause
 from unrelated reports or assume the phone-owned AlarmKit Stop path was used.
 
 Apple diagnostics were most recently refreshed in run `40797102750`,
-job `123641218756`, at 2026-10-29T18:13:44.9551247Z. Build 84 was independently confirmed
+job `123927810642`, at 2026-10-30T06:31:29.2920930Z. Build 85 was independently confirmed
 VALID and IN_BETA_TESTING; its upload was COMPLETE. Apple listed four
 submitted reports: two available logs from build 9 and two unavailable logs. No current
 matching crash was found. Read-only code review covered WatchConnectivity receive/
@@ -385,6 +439,12 @@ the resulting UI state.
 
 ## UI automation details
 
+- Check-in inspection count/reply headers are pinned above the ScrollView. Read
+  their values directly; scrolling cannot reveal them any further. Preserve
+  request content/count/cadence/rotation/completion assertions.
+- After expanding a child goal for Favorites, wait for its row and expansion
+  state, then scope Select/Done to the current Edit goals navigation bar. Use
+  one Select tap and assert entry into selection before tapping the child.
 - Seed the Today urgent-task fixture **after** the generic `--ui-empty-ledger`
   reset. Otherwise the reset erases the fixture before the screen launches.
 - DEBUG `--ui-*` fixtures do not exchange their synthetic ledger with the paired
