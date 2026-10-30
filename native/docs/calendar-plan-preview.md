@@ -20,8 +20,9 @@ one occurrence are counted once. Concurrent events share their overlap, and
 multiple categories share their event's time. Parent/child conflicts prefer the
 child. Unscheduled hours are not invented.
 
-Forecasts remain transient. They are not stored in the ledger, backups, samples,
-goal progress or actual history. Trends, heatmap, day comparison and historical
+Forecast amounts remain transient and never create samples or goal progress.
+Manual category corrections are saved in pending calendar records and included
+in backups and existing sync. Trends, heatmap, day comparison and historical
 ranges continue using recorded data. After an event ends, its forecast disappears
 and the existing Review logs flow asks whether it happened; only confirmation
 creates recorded time. A calendar event that was skipped or confirmed is not
@@ -31,6 +32,19 @@ Changing selected calendars or losing access clears the corresponding preview.
 Actor results are generation-checked so an older classification cannot restore
 removed events. Opening Dash, EventKit changes and the existing minute/background
 refresh paths update events; background execution remains best effort.
+
+## Correct an upcoming event
+
+Tap an event in Rest of today, choose one or more categories, and tap Save.
+Cancel leaves its categories unchanged. The choice belongs to that occurrence,
+not every event with the same title. It updates the forecast immediately and
+survives classification, refresh, rescheduling, and relaunch. Uncategorized is an
+explicit choice; Use suggested categories returns to automatic matching.
+
+Corrections do not confirm an event or change the source calendar. Future manual
+records stay out of Review logs until they end. Review then starts with the saved
+choice; you can adjust it again before confirming. Unknown/deleted choices remain
+Uncategorized rather than silently reverting to a prediction.
 
 ## Validation
 
@@ -47,7 +61,7 @@ Its real clock and fixed reporting zone keep the fixture away from midnight.
 The signed Release application uses EventKit and the real clock.
 
 Focused checks use the `ci/calendar-*` branch workflow. Full release validation
-requires all 501 core tests, all 138 phone UI tests, and all 18 Watch UI tests.
+requires all 514 core tests, all 141 phone UI tests, and all 18 Watch UI tests.
 The native pipeline improvements remain included: balanced complete phone shards,
 the stable Native validation gate, and no automatic uploads for test/docs-only
 commits. This feature changes application code and needs a new TestFlight build.

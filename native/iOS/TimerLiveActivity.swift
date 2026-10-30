@@ -54,7 +54,9 @@ final class TimerLiveActivity {
         }
         let state = TimerLiveAttributes.ContentState(title: timer.title, dueAt: control.dueAt,
             pausedRemaining: control.pausedRemaining, duration: timer.duration, token: control.token,
-            watchRearmHint: control.isRemoteWatchRestart)
+            watchRearmHint: control.isRemoteWatchRestart, restartCount: timer.restarts,
+            elapsedSeconds: control.dueAt == nil ? ledger.timerElapsedSeconds(for: timer) : timer.accumulatedSeconds ?? 0,
+            elapsedStartedAt: control.dueAt.map { control.startedAt ?? $0.addingTimeInterval(-timer.duration) })
         let content = ActivityContent(state: state, staleDate: control.dueAt)
         // One Live Activity spans task transitions, including changes received
         // while iOS is backgrounded. Creating a new activity would require foreground.

@@ -49,7 +49,7 @@ struct TimerQueueView: View {
             NavigationStack { TimerEditorView(task: task) }
         }
         .alert("Timer queue", isPresented: $showingHelp) { Button("OK") {} } message: {
-            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Starting, resuming, completing, or changing duration uses this device for alerts. Restarting a Watch timer from iPhone keeps Watch alerts: open Dash on Watch once to rearm repeating haptics. A one-time iPhone backup alert is also scheduled. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
+            Text("Tasks use five minutes unless you include a duration. The first task starts immediately. Additional tasks wait. Done & Next completes the task and starts the next timer; Restart repeats its full duration. The restart count and total running time stay with each task. Pauses and time after expiry do not count. Timer time is not logged as activity.\n\nOn Watch, the system alarm has Stop and Open buttons. Stop silences it; Open returns to these controls. Repeating haptics are system-limited to about 30 minutes. Start or change Watch alarms while Dash is open on the Watch.\n\nBoth devices share one queue. Starting, resuming, completing, or changing duration uses this device for alerts. Restarting a Watch timer from iPhone keeps Watch alerts: open Dash on Watch once to rearm repeating haptics. A one-time iPhone backup alert is also scheduled. Opening the screen or reordering does not move alerts. Sync requires a connection; the Watch continues independently. Open Dash on iPhone once to start its Lock Screen Live Activity.")
         }
         .task {
             store.refreshTimerSupport(force: true); await notifications.refreshStatus()
@@ -64,6 +64,16 @@ struct TimerQueueView: View {
             focused = store.timerDictationRequested; store.timerDictationRequested = false
             #endif
         }
+    }
+    private func timerStatistics(_ task: QueuedTimer, at now: Date) -> some View {
+        let seconds = store.ledger.timerElapsedSeconds(for: task, at: now)
+        return HStack(spacing: 8) {
+            Text("\(task.restarts) \(task.restarts == 1 ? "restart" : "restarts")")
+                .accessibilityIdentifier("timers.restart-count")
+            Text("\(clock(seconds)) total")
+                .monospacedDigit().accessibilityIdentifier("timers.total-elapsed")
+                .accessibilityValue("\(Int(seconds))")
+        }.font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity)
     }
     #if os(watchOS)
     private func watchCurrentTimer(at now: Date) -> some View {
@@ -85,7 +95,8 @@ struct TimerQueueView: View {
         VStack(spacing: 6) {
             if let task = store.ledger.currentTimer, let control = store.ledger.timerControl {
                 watchTaskTitle(task.title, identifier: "timers.current")
-                watchDial(duration: task.duration, control: control, at: now, size: availableHeight - 72)
+                watchDial(duration: task.duration, control: control, at: now, size: availableHeight - 90)
+                timerStatistics(task, at: now)
                 HStack {
                     Button(doneTitle, systemImage: "checkmark.circle.fill") { act("done") }
                         .labelStyle(.iconOnly).font(.title2).foregroundStyle(.mint)
@@ -270,6 +281,7 @@ struct TimerQueueView: View {
                         }
                         ProgressView(value: min(1, max(0, 1 - control.remaining(at: now) / max(1, task.duration))))
                             .tint(control.isFinished(at: now) ? .orange : .mint).accessibilityIdentifier("timers.progress")
+                        timerStatistics(task, at: now)
                         HStack {
                             Button(doneTitle, systemImage: "checkmark") { act("done") }
                                 .buttonStyle(.borderedProminent).accessibilityIdentifier("timers.done")

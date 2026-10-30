@@ -43,7 +43,7 @@ struct LogReviewView: View {
     private var item: LogReviewItem? { index < queue.count ? queue[index] : nil }
     private var event: CalendarEventRecord? {
         guard case .calendar(let id) = item else { return nil }
-        return store.ledger.calendarEvents?.first { $0.id == id && $0.decision == .pending }
+        return store.ledger.calendarEvents?.first { $0.id == id && $0.decision == .pending && $0.snapshot.end <= Date() }
     }
     private var current: CheckIn? {
         switch item {
@@ -78,7 +78,10 @@ struct LogReviewView: View {
                                         .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("log-review.calendar-period")
                                     if end < event.snapshot.end { Text("Ends at your first overlapping log. That log takes over from there.").font(.caption).foregroundStyle(.secondary) }
                                 }
-                                if let suggestion = event == nil ? entry.categorySuggestion : calendarSuggestion {
+                                if event?.plannedCategoryIDs != nil {
+                                    Label("Chosen for this event", systemImage: "tag").font(.caption).foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("log-review.calendar-choice")
+                                } else if let suggestion = event == nil ? entry.categorySuggestion : calendarSuggestion {
                                     Label("Suggested · \(suggestion.reason)", systemImage: "sparkle").font(.caption).foregroundStyle(.secondary)
                                         .accessibilityElement(children: .ignore)
                                         .accessibilityLabel("Suggested · \(suggestion.reason)")
@@ -149,7 +152,9 @@ struct LogReviewView: View {
         while index < queue.count, current == nil { index += 1 }
         guard let entry = current else { if loaded { dismiss() }; return }
         categories = store.ledger.effectiveCategoryIDs(for: entry)
-        calendarSuggestion = nil; matchingCalendar = event != nil; categoriesWereEdited = false
+        let planned = event.flatMap { store.ledger.plannedCalendarCategoryIDs(for: $0.id) }
+        if let planned { categories = planned.filter { id in store.ledger.categories.contains { $0.id == id } } }
+        calendarSuggestion = nil; matchingCalendar = event != nil; categoriesWereEdited = planned != nil
         mood = entry.mood; goalID = entry.goalID; activityDraft = entry.activity; calendarActivityText = entry.activity; error = nil
     }
     private func saveAndAdvance(skip: Bool = false) {

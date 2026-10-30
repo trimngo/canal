@@ -3256,6 +3256,89 @@ final class TimeLedgerUITests: XCTestCase {
         XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
     }
 
+    func testCalendarPlanCategoryCorrectionPersistsAndCarriesIntoConfirmation() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20)); summary.tap()
+        let row = app.buttons["forecast.event.class"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        let predicted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Work"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [predicted], timeout: 20), .completed); row.tap()
+        XCTAssertTrue(app.buttons["forecast-categories.save"].waitForExistence(timeout: 10))
+        tapCategory("work", in: app); tapCategory("guitar", in: app)
+        app.buttons["forecast-categories.save"].tap()
+        XCTAssertTrue(app.buttons["forecast-categories.save"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("Guitar"), row.label)
+        app.navigationBars["Rest of today"].buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+        let music = app.buttons["dashboard.group.music"]
+        XCTAssertTrue(music.label.contains("1h 30m planned"), music.label)
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-source"]; app.launch()
+        XCTAssertTrue(summary.waitForExistence(timeout: 20)); summary.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); XCTAssertTrue(row.label.contains("Guitar"), row.label)
+        recordScreen("CorrectedCalendarPlan", in: app)
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-ended"]; app.launch()
+        let review = app.buttons["dashboard.review.uncategorized"]
+        XCTAssertTrue(review.waitForExistence(timeout: 20)); review.tap()
+        XCTAssertTrue(element(app, "log-review.calendar-choice").waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["category-tag.guitar"].exists)
+        let confirm = app.buttons["log-review.save-next"]; confirm.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("2h 0m tracked"))
+        XCTAssertTrue(element(app, "report.tracked").label.contains("2 logs"))
+    }
+
+    func testCalendarPlanUncategorizedCancelAndReturnToSuggestedCategories() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-plan"]; app.launch()
+        let summary = app.buttons["dashboard.calendar-plan"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 20)); summary.tap()
+        let row = app.buttons["forecast.event.class"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        let predicted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Work"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [predicted], timeout: 20), .completed); row.tap()
+        XCTAssertTrue(app.buttons["forecast-categories.save"].waitForExistence(timeout: 10))
+        app.buttons["Uncategorized"].tap(); app.buttons["forecast-categories.save"].tap()
+        XCTAssertTrue(app.buttons["forecast-categories.save"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("Uncategorized"), row.label)
+        app.terminate(); app.launchArguments = ["--ui-calendar-plan-source"]; app.launch()
+        XCTAssertTrue(summary.waitForExistence(timeout: 20)); summary.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); XCTAssertTrue(row.label.contains("Uncategorized"), row.label)
+        row.tap(); XCTAssertTrue(app.buttons["forecast-categories.cancel"].waitForExistence(timeout: 10))
+        tapCategory("music", in: app); app.buttons["forecast-categories.cancel"].tap()
+        XCTAssertTrue(app.buttons["forecast-categories.cancel"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("Uncategorized"), row.label)
+        row.tap()
+        let reset = app.buttons["forecast-categories.use-suggestion"]
+        XCTAssertTrue(reset.waitForExistence(timeout: 10)); reset.tap()
+        XCTAssertTrue(reset.waitForNonExistence(timeout: 10))
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Work"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 20), .completed)
+        app.navigationBars["Rest of today"].buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["dashboard.review.uncategorized"].exists)
+        XCTAssertTrue(element(app, "report.tracked").label.hasPrefix("1h 0m tracked"))
+    }
+
+    func testTimerRestartStatisticsPersistAndTheNextTimerHasItsOwnCount() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-empty-ledger", "--ui-timer-fixture", "--ui-quiet-timer-alerts"]; app.launch()
+        let restart = app.buttons["timers.restart"]
+        XCTAssertTrue(restart.waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.restart-count").label, "0 restarts")
+        XCTAssertEqual(element(app, "timers.total-elapsed").value as? String, "1200")
+        restart.tap()
+        XCTAssertEqual(element(app, "timers.restart-count").label, "1 restart")
+        XCTAssertGreaterThanOrEqual(Int(element(app, "timers.total-elapsed").value as? String ?? "") ?? -1, 1200)
+        app.terminate(); app.launchArguments = ["--ui-timer-open", "--ui-quiet-timer-alerts"]; app.launch()
+        XCTAssertTrue(restart.waitForExistence(timeout: 20))
+        XCTAssertEqual(element(app, "timers.restart-count").label, "1 restart")
+        restart.tap(); XCTAssertEqual(element(app, "timers.restart-count").label, "2 restarts")
+        recordScreen("TimerRestartCountAndAccumulatedTime", in: app)
+        app.buttons["timers.done"].tap()
+        XCTAssertEqual(element(app, "timers.current").label, "Answer email")
+        XCTAssertEqual(element(app, "timers.restart-count").label, "0 restarts")
+        XCTAssertLessThan(Int(element(app, "timers.total-elapsed").value as? String ?? "") ?? 999, 30)
+    }
+
     func testCalendarReviewUsesPhraseRulesAndKeepsCategoriesAfterRelaunch() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-empty-ledger", "--ui-calendar-matching"]; app.launch()
