@@ -38,9 +38,12 @@ Real Watch forwarding, buttons, and repeating haptics need physical testing.
 Focused checks never replace all 138 iPhone and 18 Watch tests before release.
 The full Watch step has 35 minutes within its 45-minute job; a cold 17-minute
 setup plus the full UI suite exceeded the previous 30-minute step budget.
-Phone validation has 55 minutes within a 65-minute job: build 81 needed up to
-about 49 minutes including cold setup and 32 UI cases; retain margin for the
-additional preference/Stop regressions. Every case is still required.
+Phone validation has 70 minutes within an 80-minute job. In run `40947104076`,
+retry job `123738191088` passed 33 cases, including the earlier review failure,
+but reached the 55-minute limit during case 34. Cold setup used about 12 minutes;
+UI execution continued making progress without an assertion failure. The larger
+budget accommodates hosted-runner variance; it does not make builds faster.
+Keep every case and assertion; there are no automatic per-test retries.
 
 ## Iterate on Watch without restarting phone validation
 
