@@ -48,6 +48,7 @@ jobs:
               testMainTimerRowsOpenSystemInputWithoutAQueueSheetAndUseFiveMinutes \
               testQueueCanDeleteAnyTimerAndDeletingCurrentWaitsForStart \
               testQueueShowsThreeTimersAndTouchScrollingReachesMoreWithoutChangingPages \
+              testTimerExpiryHasDirectDoneAndRestartAndKeepsQueueAfterRelaunch \
               testUpcomingRowsCanBeDraggedWithoutMovingCurrentOrNavigatingAway; do
               selection+=("-only-testing:TimeLedgerWatchUITests/WatchQuickLogUITests/$test")
             done
