@@ -29,7 +29,7 @@ struct AllocationHistoryView: View {
     var body: some View {
         let report = store.ledger.history(range: range, start: start, end: end, now: now, anchor: selectedDay)
         let unreviewed = report.samples.filter { store.ledger.needsCategoryReview($0) || store.ledger.effectiveCategoryIDs(for: $0).isEmpty || store.ledger.allocationCategoryIDs(for: $0).contains("uncategorized") }
-        let pending = (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.map(\.id)
+        let pending = store.ledger.calendarEventsToReview().map(\.id)
         let reviewCount = unreviewed.count + pending.count
         return content(report: report)
             .onAppear { now = currentDate; calendars.refreshForecastCategories() }

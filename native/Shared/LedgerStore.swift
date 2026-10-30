@@ -855,11 +855,16 @@ final class LedgerStore: ObservableObject {
         try draft.setTaskPlan(capture.id, estimatedMinutes: estimatedMinutes, startDate: startDate, writer: writer)
         try commit(draft)
     }
+    func setPlannedCalendarCategories(_ snapshot: CalendarEventSnapshot, categoryIDs: [String]?) throws {
+        var draft = ledger
+        try draft.setPlannedCalendarCategories(snapshot, categoryIDs: categoryIDs, writer: writer)
+        if draft != ledger { try commit(draft) }
+    }
     func collectCalendarEvents(_ events: [CalendarEventSnapshot]) throws {
         var draft = ledger; draft.collectCalendarEvents(events, writer: writer)
         if draft != ledger { try commit(draft) }
     }
-    func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String] = [], goalID: String? = nil) throws {
+    func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String]? = nil, goalID: String? = nil) throws {
         var draft = ledger
         try draft.decideCalendarEvent(id, confirm: confirm, categoryIDs: categoryIDs, writer: writer)
         if confirm, let record = draft.calendarEvents?.first(where: { $0.id == id }) {

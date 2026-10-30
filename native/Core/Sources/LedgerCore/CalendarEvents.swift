@@ -21,6 +21,9 @@ public struct CalendarEventRecord: Codable, Identifiable, Equatable, Sendable {
     public var snapshot: CalendarEventSnapshot
     public var decision: CalendarEventDecision
     public var revision: Revision
+    /// A manual choice for this occurrence; nil returns to automatic matching.
+    /// Empty means explicitly Uncategorized. This never confirms the event.
+    public var plannedCategoryIDs: [String]? = nil
     public var id: String { snapshot.id }
     public var logID: String { "calendar-" + id }
 }
@@ -30,14 +33,43 @@ public enum CalendarImportError: LocalizedError {
 }
 
 extension Ledger {
+    public func plannedCalendarCategoryIDs(for id: String) -> [String]? {
+        guard let ids = calendarEvents?.first(where: { $0.id == id })?.plannedCategoryIDs else { return nil }
+        let known = ids.filter { id in categories.contains { $0.id == id } }
+        return known.filter { id in !known.contains { other in other != id && descendants(of: id).contains { $0.id == other } } }
+    }
+
+    public func calendarEventsToReview(now: Date = Date()) -> [CalendarEventRecord] {
+        (calendarEvents ?? []).filter { $0.decision == .pending && $0.snapshot.end <= now }
+            .sorted { $0.snapshot.end == $1.snapshot.end ? $0.id < $1.id : $0.snapshot.end > $1.snapshot.end }
+    }
+
+    public mutating func setPlannedCalendarCategories(_ snapshot: CalendarEventSnapshot, categoryIDs: [String]?, writer: String) throws {
+        guard !snapshot.id.isEmpty, snapshot.start.timeIntervalSince1970.isFinite,
+              snapshot.end.timeIntervalSince1970.isFinite, snapshot.end > snapshot.start else { throw CalendarImportError.invalidEvent }
+        let ids = categoryIDs.map { Array(Set($0)).sorted() }
+        if let ids { try validateCategories(ids) }
+        let existing = calendarEvents?.first { $0.id == snapshot.id }
+        guard existing?.decision == nil || existing?.decision == .pending else { throw CalendarImportError.invalidEvent }
+        guard existing?.plannedCategoryIDs != ids else { return }
+        var record = existing ?? CalendarEventRecord(snapshot: snapshot, decision: .pending, revision: Revision())
+        record.plannedCategoryIDs = ids; record.revision = nextRevision(writer: writer)
+        calendarEvents = (calendarEvents ?? []).filter { $0.id != record.id } + [record]
+    }
+
     public mutating func collectCalendarEvents(_ snapshots: [CalendarEventSnapshot], writer: String, now: Date = Date()) {
-        for snapshot in snapshots where snapshot.start.timeIntervalSince1970.isFinite && snapshot.end.timeIntervalSince1970.isFinite && snapshot.end > snapshot.start && snapshot.end <= now {
-            if let existing = calendarEvents?.first(where: { $0.id == snapshot.id }), existing.decision != .pending || existing.snapshot == snapshot { continue }
-            let record = CalendarEventRecord(snapshot: snapshot, decision: .pending, revision: nextRevision(writer: writer))
+        for snapshot in snapshots where snapshot.start.timeIntervalSince1970.isFinite && snapshot.end.timeIntervalSince1970.isFinite && snapshot.end > snapshot.start {
+            let existing = calendarEvents?.first { $0.id == snapshot.id }
+            // Future events only have durable records after a manual category
+            // choice. Keep those snapshots current when an event is rescheduled.
+            guard snapshot.end <= now || existing != nil else { continue }
+            if let existing, existing.decision != .pending || existing.snapshot == snapshot { continue }
+            var record = existing ?? CalendarEventRecord(snapshot: snapshot, decision: .pending, revision: Revision())
+            record.snapshot = snapshot; record.revision = nextRevision(writer: writer)
             calendarEvents = (calendarEvents ?? []).filter { $0.id != record.id } + [record]
         }
     }
-    public mutating func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String] = [], goalID: String? = nil,
+    public mutating func decideCalendarEvent(_ id: String, confirm: Bool, categoryIDs: [String]? = nil, goalID: String? = nil,
                                              writer: String, now: Date = Date()) throws {
         guard let index = calendarEvents?.firstIndex(where: { $0.id == id }), let record = calendarEvents?[index] else { throw CalendarImportError.invalidEvent }
         let event = record.snapshot
@@ -45,7 +77,7 @@ extension Ledger {
         var draft = self
         if confirm {
             if record.decision == .confirmed { return } // Idempotent repeated callbacks.
-            try draft.saveSample(id: record.logID, at: event.end, activity: String(event.title.prefix(500)), categoryIDs: categoryIDs, writer: writer, now: now)
+            try draft.saveSample(id: record.logID, at: event.end, activity: String(event.title.prefix(500)), categoryIDs: categoryIDs ?? plannedCalendarCategoryIDs(for: id) ?? [], writer: writer, now: now)
             if let entry = draft.entries.firstIndex(where: { $0.id == record.logID }) { draft.entries[entry].intervalStart = event.start }
             try draft.assignGoal(goalID, to: record.logID, writer: writer)
         } else if record.decision == .confirmed {

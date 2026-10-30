@@ -65,7 +65,8 @@ extension Ledger {
             let start = max(lower, snapshot.start), end = min(bounds.end, snapshot.end)
             guard end > start else { continue }
             seen.insert(event.id)
-            let raw = Set(event.categoryIDs), valid = raw.filter { known.contains($0) }.sorted()
+            let chosen = calendarEvents?.first { $0.id == event.id }?.plannedCategoryIDs
+            let raw = Set(chosen ?? event.categoryIDs), valid = raw.filter { known.contains($0) }.sorted()
             // Match log accounting: prefer children, and preserve a missing
             // category's share as Uncategorized after a concurrent deletion.
             let specific = valid.filter { id in

@@ -19,8 +19,13 @@ public struct QueuedTimer: Codable, Identifiable, Equatable, Sendable {
     public var completedAt: Date?
     public var deletedAt: Date?
     public var revision: Revision
+    public var restartCount: Int?
+    /// Running seconds settled at an explicit timer action; pauses/overrun excluded.
+    public var accumulatedSeconds: TimeInterval?
+    public var restarts: Int { max(0, restartCount ?? 0) }
     public init(id: String = UUID().uuidString, title: String, duration: TimeInterval, createdAt: Date = Date(), revision: Revision = Revision()) {
         self.id = id; self.title = title; self.duration = duration; self.createdAt = createdAt; self.revision = revision
+        self.restartCount = 0; self.accumulatedSeconds = 0
     }
 }
 
@@ -38,13 +43,14 @@ public struct TimerQueueControl: Codable, Equatable, Sendable {
     public var taskID: String?
     public var dueAt: Date?
     public var pausedRemaining: TimeInterval?
+    public var startedAt: Date?
     public var owner: String
     public var onWatch: Bool
     public var revision: Revision
     public var token: String { "task-timer-\(revision.writer)-\(revision.counter)" }
-    public init(taskID: String?, dueAt: Date?, pausedRemaining: TimeInterval? = nil, owner: String, onWatch: Bool, revision: Revision) {
+    public init(taskID: String?, dueAt: Date?, pausedRemaining: TimeInterval? = nil, owner: String, onWatch: Bool, revision: Revision, startedAt: Date? = nil) {
         self.taskID = taskID; self.dueAt = dueAt; self.pausedRemaining = pausedRemaining
-        self.owner = owner; self.onWatch = onWatch; self.revision = revision
+        self.owner = owner; self.onWatch = onWatch; self.revision = revision; self.startedAt = startedAt
     }
     public func remaining(at now: Date) -> TimeInterval { max(0, pausedRemaining ?? dueAt?.timeIntervalSince(now) ?? 0) }
     public func isFinished(at now: Date) -> Bool { pausedRemaining == nil && dueAt.map { $0 <= now } == true }
@@ -154,6 +160,29 @@ public struct TimerDraft: Equatable, Sendable {
 }
 
 extension Ledger {
+    public func timerElapsedSeconds(for task: QueuedTimer, at now: Date = Date()) -> TimeInterval {
+        let ceiling = Double(Int.max / 4)
+        let saved = min(ceiling, task.accumulatedSeconds.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 0)
+        guard currentTimer?.id == task.id, let control = timerControl else { return saved }
+        if let due = control.dueAt {
+            let start = control.startedAt ?? due.addingTimeInterval(-task.duration)
+            let elapsed = min(now, due).timeIntervalSince(start)
+            return min(ceiling, saved + (elapsed.isFinite ? min(task.duration, max(0, elapsed)) : 0))
+        }
+        // Upgrade a paused timer whose earlier running time predates tracking.
+        if task.accumulatedSeconds == nil {
+            return max(0, min(task.duration, task.duration - control.remaining(at: now)))
+        }
+        return saved
+    }
+    private mutating func settleTimerElapsed(writer: String, now: Date) {
+        guard let task = currentTimer, let i = queuedTimers?.firstIndex(where: { $0.id == task.id }) else { return }
+        let total = timerElapsedSeconds(for: task, at: now)
+        guard task.accumulatedSeconds != total else { return }
+        queuedTimers?[i].accumulatedSeconds = total
+        let revision = nextRevision(writer: writer)
+        queuedTimers?[i].revision = revision
+    }
     public var currentTimer: QueuedTimer? {
         guard let id = timerControl?.taskID else { return nil }
         return queuedTimers?.first { $0.id == id && $0.completedAt == nil && $0.deletedAt == nil }
@@ -184,13 +213,15 @@ extension Ledger {
         guard let index = queuedTimers?.firstIndex(where: { $0.id == id && $0.completedAt == nil && $0.deletedAt == nil }),
               let old = queuedTimers?[index], old.title != title || old.duration != duration else { return }
         let control = currentTimer?.id == id ? timerControl : nil
+        if control != nil, old.duration != duration { settleTimerElapsed(writer: writer, now: now) }
         let revision = nextRevision(writer: writer)
         queuedTimers?[index].title = title; queuedTimers?[index].duration = duration; queuedTimers?[index].revision = revision
         if let control, old.duration != duration {
             let elapsed = max(0, old.duration - control.remaining(at: now))
             let remaining = max(0, duration - elapsed)
             timerControl = TimerQueueControl(taskID: id, dueAt: control.pausedRemaining == nil ? now.addingTimeInterval(remaining) : nil,
-                pausedRemaining: control.pausedRemaining == nil ? nil : remaining, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+                pausedRemaining: control.pausedRemaining == nil ? nil : remaining, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer),
+                startedAt: control.pausedRemaining == nil ? now : nil)
         }
     }
     public mutating func enqueueTimer(id: String = UUID().uuidString, title: String, duration: TimeInterval, writer: String, onWatch: Bool, now: Date = Date()) throws {
@@ -208,11 +239,12 @@ extension Ledger {
     public mutating func startNextTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard currentTimer == nil else { return }
         let next = waitingTimers.first
-        timerControl = TimerQueueControl(taskID: next?.id, dueAt: next.map { now.addingTimeInterval($0.duration) }, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        timerControl = TimerQueueControl(taskID: next?.id, dueAt: next.map { now.addingTimeInterval($0.duration) }, owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer), startedAt: next == nil ? nil : now)
     }
     public mutating func finishTimer(expectedToken: String? = nil, writer: String, onWatch: Bool, now: Date = Date()) {
         guard let current = currentTimer, expectedToken == nil || timerControl?.token == expectedToken,
               let i = queuedTimers?.firstIndex(where: { $0.id == current.id }) else { return }
+        settleTimerElapsed(writer: writer, now: now)
         queuedTimers?[i].completedAt = now
         let revision = nextRevision(writer: writer); queuedTimers?[i].revision = revision
         if settings.timerAutoStartNext { startNextTimer(writer: writer, onWatch: onWatch, now: now) }
@@ -230,17 +262,25 @@ extension Ledger {
     }
     public mutating func restartTimer(expectedToken: String? = nil, writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, let previous = timerControl, expectedToken == nil || previous.token == expectedToken else { return }
+        settleTimerElapsed(writer: writer, now: now)
+        if let index = queuedTimers?.firstIndex(where: { $0.id == task.id }) {
+            queuedTimers?[index].restartCount = task.restarts == Int.max ? Int.max : task.restarts + 1
+            let revision = nextRevision(writer: writer)
+            queuedTimers?[index].revision = revision
+        }
         let keepWatch = !onWatch && previous.onWatch
         timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(task.duration),
-            owner: keepWatch ? previous.owner : writer, onWatch: keepWatch || onWatch, revision: nextRevision(writer: writer))
+            owner: keepWatch ? previous.owner : writer, onWatch: keepWatch || onWatch, revision: nextRevision(writer: writer), startedAt: now)
     }
     public mutating func pauseTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, let control = timerControl, control.pausedRemaining == nil, !control.isFinished(at: now) else { return }
+        settleTimerElapsed(writer: writer, now: now)
         timerControl = TimerQueueControl(taskID: task.id, dueAt: nil, pausedRemaining: control.remaining(at: now), owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
     }
     public mutating func resumeTimer(writer: String, onWatch: Bool, now: Date = Date()) {
         guard let task = currentTimer, let remaining = timerControl?.pausedRemaining else { return }
-        timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(remaining), owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer))
+        settleTimerElapsed(writer: writer, now: now)
+        timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(remaining), owner: writer, onWatch: onWatch, revision: nextRevision(writer: writer), startedAt: now)
     }
     public mutating func moveTimerAlerts(writer: String, onWatch: Bool) {
         guard currentTimer != nil, var control = timerControl else { return }
@@ -249,6 +289,7 @@ extension Ledger {
     public mutating func deleteQueuedTimer(_ id: String, writer: String, onWatch: Bool, now: Date = Date()) {
         guard let i = queuedTimers?.firstIndex(where: { $0.id == id }), queuedTimers?[i].deletedAt == nil else { return }
         let wasCurrent = currentTimer?.id == id
+        if wasCurrent { settleTimerElapsed(writer: writer, now: now) }
         let revision = nextRevision(writer: writer)
         queuedTimers?[i].deletedAt = now; queuedTimers?[i].revision = revision
         // Deleting is not completing: cancel this alarm and leave the queue

@@ -24,6 +24,7 @@ struct DashTimerLiveWidget: Widget {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.state.title).font(.headline).lineLimit(2)
                     Countdown(state: context.state).font(.title2)
+                    TimerStatistics(state: context.state)
                     WatchRearmHint(state: context.state)
                 }
                 Spacer()
@@ -41,6 +42,7 @@ struct DashTimerLiveWidget: Widget {
                         Spacer()
                         RestartTimerButton(state: context.state)
                     }
+                    TimerStatistics(state: context.state)
                     WatchRearmHint(state: context.state)
                     }
                 }
@@ -52,6 +54,26 @@ struct DashTimerLiveWidget: Widget {
               compactTrailing: { Countdown(state: context.state).frame(maxWidth: 64) }
               minimal: { Image(systemName: "timer") }
               .widgetURL(URL(string: "canal-dash://timers"))
+        }
+    }
+}
+
+private struct TimerStatistics: View {
+    let state: TimerLiveAttributes.ContentState
+    var body: some View {
+        if let count = state.restartCount {
+            HStack(spacing: 8) {
+                Text("\(count) \(count == 1 ? "restart" : "restarts")")
+                HStack(spacing: 3) {
+                    if let start = state.elapsedStartedAt, let end = state.dueAt, end >= start {
+                        Text(timerInterval: start.addingTimeInterval(-(state.elapsedSeconds ?? 0))...end,
+                             countsDown: false, showsHours: true)
+                    } else {
+                        Text(Duration.seconds(state.elapsedSeconds ?? 0).formatted(.time(pattern: .hourMinuteSecond)))
+                    }
+                    Text("total")
+                }.monospacedDigit()
+            }.font(.caption2).foregroundStyle(.secondary)
         }
     }
 }

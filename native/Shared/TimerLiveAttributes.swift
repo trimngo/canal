@@ -10,6 +10,9 @@ struct TimerLiveAttributes: ActivityAttributes {
         var duration: Double
         var token: String? = nil
         var watchRearmHint: Bool? = nil
+        var restartCount: Int? = nil
+        var elapsedSeconds: Double? = nil
+        var elapsedStartedAt: Date? = nil
     }
     var queueID: String
 }

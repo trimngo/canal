@@ -170,3 +170,20 @@ The secondary page contains only timer rows, without settings, Watch Home, Add, 
 Dash preserves the selected timer screen, but watchOS controls how long the app remains visible when the wrist is lowered. For longer visibility, use Watch Settings → General → Return to Clock → Dash → After 1 hour. The app cannot override this setting or keep the display awake indefinitely.
 
 Timer settings offers Standard pulse, Attention pulse, and Light tap, a preview, and repeat intervals of 2, 3, 5, or 10 seconds. These existing Watch haptic choices apply to the system's repeating alarm. Sound follows system settings; Dash cannot install arbitrary alarm sounds or remap Apple's background alarm gestures.
+
+
+## Restart count and accumulated running time
+
+Each queued task owns its restart count and total running seconds. The iPhone
+and Watch timer screens and expanded iPhone/Mac Live Activity show both. A
+restart banks the elapsed part of the old countdown, increments once, and starts
+a fresh countdown. Stale Live Activity/alarm callbacks cannot increment it.
+Paused time and time after expiry are excluded. Duration edits preserve seconds
+already spent; Done/deletion settle the task's total. The next task has its own
+statistics. Totals do not create journal activity logs.
+
+Counts, settled seconds, and the active running anchor use the existing timer
+records/revisions, so backups and existing phone/Watch/iCloud sync preserve them.
+Older saved timers can recover elapsed time in their current attempt; historical
+restarts from before this feature cannot be reconstructed. Compact Live Activity
+task names remain compact; statistics appear in expanded content.

@@ -8,7 +8,8 @@ import LedgerCore
 enum CalendarForecastFixture {
     static var enabled: Bool {
         ProcessInfo.processInfo.arguments.contains("--ui-calendar-plan") ||
-            ProcessInfo.processInfo.arguments.contains("--ui-calendar-plan-source")
+            ProcessInfo.processInfo.arguments.contains("--ui-calendar-plan-source") ||
+            ProcessInfo.processInfo.arguments.contains("--ui-calendar-plan-ended")
     }
     static let sourceID = "calendar-plan-fixture"
     static let selectionKey = "ui.calendar-plan.sources"
@@ -24,8 +25,9 @@ enum CalendarForecastFixture {
          ("class", "Class preparation", 3600.0, 7200.0),
          ("unknown", "Not categorized yet", 10800.0, 12600.0)].map { value in
             let (id, title, start, end) = value
+            let ended = id == "class" && ProcessInfo.processInfo.arguments.contains("--ui-calendar-plan-ended")
             return CalendarEventSnapshot(id: id, calendarID: sourceID, calendarName: "Today plan", title: title,
-                                  start: now.addingTimeInterval(start), end: now.addingTimeInterval(end))
+                                  start: now.addingTimeInterval(ended ? -7200 : start), end: now.addingTimeInterval(ended ? -3600 : end))
         }
     }
     static func ledger() throws -> Ledger {

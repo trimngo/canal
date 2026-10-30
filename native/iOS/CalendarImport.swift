@@ -81,7 +81,10 @@ final class CalendarImport: ObservableObject {
         guard authorized, !selected.isEmpty else { return }
         #if DEBUG
         if CalendarForecastFixture.enabled {
-            upcoming = CalendarForecastFixture.snapshots.filter { selected.contains($0.calendarID) }
+            let snapshots = CalendarForecastFixture.snapshots.filter { selected.contains($0.calendarID) }
+            do { try LedgerStore.shared.collectCalendarEvents(snapshots) }
+            catch { clearForecast(); status = "Calendar review could not be saved."; return }
+            upcoming = snapshots.filter { $0.end > CalendarForecastFixture.now }
             refreshForecastCategories()
             status = "Planned time is tentative. Ended events need confirmation."
             return
@@ -105,7 +108,7 @@ final class CalendarImport: ObservableObject {
             return CalendarEventSnapshot(id: id, calendarID: event.calendar.calendarIdentifier, calendarName: event.calendar.title,
                 title: title.isEmpty ? "Calendar event" : String(title.prefix(500)), start: event.startDate, end: event.endDate)
         }
-        let snapshots = occurrences.filter { $0.endDate <= now }.map(snapshot)
+        let snapshots = occurrences.map(snapshot)
         upcoming = occurrences.filter { event in
             event.endDate > now && !event.isAllDay && event.availability != .free &&
                 !(event.attendees ?? []).contains { $0.isCurrentUser && $0.participantStatus == .declined }
@@ -191,7 +194,7 @@ struct CalendarEventReviewView: View {
     @State private var review: LogReviewRequest?
     @State private var error: String?
     private var pending: [CalendarEventRecord] {
-        (store.ledger.calendarEvents ?? []).filter { $0.decision == .pending }.sorted { $0.snapshot.end > $1.snapshot.end }
+        store.ledger.calendarEventsToReview()
     }
     var body: some View {
         List {

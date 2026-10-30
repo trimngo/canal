@@ -5,6 +5,27 @@ The native iPhone and Apple Watch app is Dash. Start with
 Preserve uncommitted changes. Keep ongoing work active when discussing new
 ideas; friend accountability sharing remains planning only.
 
+## Active: calendar corrections and timer statistics (target build 86)
+
+Continue both user requests through a processed/internal TestFlight release.
+Tap an upcoming event to edit its per-occurrence categories, persist the choice
+including explicit Uncategorized, offer return to automatic predictions, and
+carry the choice into Review logs after expiry. Editing a plan never records
+time. Calendar access stays read-only.
+
+Timers show a per-task restart count and accumulated running time on phone,
+Watch, and expanded iPhone/Mac Live Activity. The user explicitly chose to stop
+counting at expiry; paused time is excluded. Preserve counters/totals across
+restarts, persistence, and sync; the next queued task owns its own statistics.
+
+Checkpoint `/workspace/work/calendar-corrections-86/state.json`, isolated source
+`/workspace/canal-calendar-corrections`. Expected checks: 514 core, all 141 phone
+UI, all 18 Watch UI cases. Run focused calendar/timer and Watch checks before the
+complete release suite. Keep every existing assertion/test and don't blindly
+repeat failing full runs. Preserve original working tree `5bc9894e875ebf615f74f1b496be61587a41117d`
+and original index SHA-256 `665903eef15410b31774c99b1869fe0e8ed8b7c92475752beb2a42d72343c6cf`.
+Friend accountability remains planning only; keep the separate crash incident open.
+
 ## Latest release: TestFlight 85 (2026-10-30)
 
 Release objective **COMPLETE**: TestFlight **1.0 (85)** finished Apple
@@ -477,7 +498,7 @@ the resulting UI state.
 
 ## CI and release checks
 
-- All 138 iPhone UI tests run across four shards. Keep the complete test set and
+- All 141 iPhone UI tests run across four shards. Keep the complete test set and
   meaningful assertions; do not skip failures to obtain a green run.
 - Run Watch UI checks with `bash native/scripts/test-watch-ui.sh` on macOS.
   Run all 18 Watch UI tests. Repeating WatchKit haptics still require
@@ -497,7 +518,7 @@ Read [native/docs/ci-and-testflight.md](native/docs/ci-and-testflight.md).
 Use an isolated `ci/watch-*` branch for the six focused Watch paging/queue
 regressions before moving another Watch fix onto the feature PR. This keeps a
 healthy full iPhone run active. Focused checks never replace the full release
-checks: all 501 core, 138 iPhone UI, and 18 Watch UI tests must pass.
+checks: all 514 core, 141 iPhone UI, and 18 Watch UI tests must pass.
 
 Full PR checks use four phone shards plus Watch. Branch pushes do not duplicate
 PR runs. Simulator boot overlaps compilation. TestFlight delivery must finish
