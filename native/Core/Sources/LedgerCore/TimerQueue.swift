@@ -180,7 +180,8 @@ extension Ledger {
         let total = timerElapsedSeconds(for: task, at: now)
         guard task.accumulatedSeconds != total else { return }
         queuedTimers?[i].accumulatedSeconds = total
-        queuedTimers?[i].revision = nextRevision(writer: writer)
+        let revision = nextRevision(writer: writer)
+        queuedTimers?[i].revision = revision
     }
     public var currentTimer: QueuedTimer? {
         guard let id = timerControl?.taskID else { return nil }
@@ -264,7 +265,8 @@ extension Ledger {
         settleTimerElapsed(writer: writer, now: now)
         if let index = queuedTimers?.firstIndex(where: { $0.id == task.id }) {
             queuedTimers?[index].restartCount = task.restarts == Int.max ? Int.max : task.restarts + 1
-            queuedTimers?[index].revision = nextRevision(writer: writer)
+            let revision = nextRevision(writer: writer)
+            queuedTimers?[index].revision = revision
         }
         let keepWatch = !onWatch && previous.onWatch
         timerControl = TimerQueueControl(taskID: task.id, dueAt: now.addingTimeInterval(task.duration),
