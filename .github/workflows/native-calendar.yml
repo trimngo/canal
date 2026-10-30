@@ -26,14 +26,9 @@ jobs:
           mkdir -p native/build
           set -o pipefail
           LEDGER_UI_TESTS=1 bash native/scripts/validate.sh \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarPlanSeparatesRecordedAndPlannedCategories \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarPlanPieIsTentativeAndHistoryRemainsRecordedAfterRelaunch \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarPlanDeselectingSourceRemovesForecastWithoutChangingRecords \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarReviewUsesPhraseRulesAndKeepsCategoriesAfterRelaunch \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarReviewUsesLearnedMatchesFromConfirmedLogs \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarUncategorizedChoiceSurvivesLateMatchAndEditedTitle \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCalendarConfirmationRecordsFullPeriodAndUpdatesGoal \
-            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testRandomNotificationsQueueAndSwitchBackToRepeating \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testCommitmentFavoritesIncludeChildGoalsAndPersist \
+            -only-testing:TimeLedgerUITests/TimeLedgerUITests/testUrgentTasksRotateInRepeatingCheckInsAndCompletedTasksDisappear \
+            -test-iterations 3 \
             2>&1 | tee native/build/validation.log
       - uses: actions/upload-artifact@v4
         if: always()
