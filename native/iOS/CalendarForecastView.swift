@@ -94,7 +94,10 @@ private struct CalendarForecastCategoryView: View {
         }
     }
     private func save(_ ids: [String]?) {
-        do { try store.setPlannedCalendarCategories(event.snapshot, categoryIDs: ids); dismiss() }
+        do {
+            let snapshot = CalendarImport.shared.plannedEvents.first { $0.id == event.id }?.snapshot ?? event.snapshot
+            try store.setPlannedCalendarCategories(snapshot, categoryIDs: ids); dismiss()
+        }
         catch { self.error = error.localizedDescription }
     }
 }
